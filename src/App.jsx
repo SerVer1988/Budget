@@ -83,6 +83,7 @@ function cardLabel(card) {
 }
 function needPctOf(settings) { return 100 - (settings.wantPct || 0) - (settings.savePct || 0); }
 
+// Purely informational calculator used for reminders/previews — no longer applied automatically.
 function computeIncomeSplit(amount, settings) {
   const toOzon = amount * (settings.savePct / 100);
   const toAlfa = amount * (settings.wantPct / 100);
@@ -96,57 +97,58 @@ function computeBalances(transactions, settings, uptoDateInclusive) {
   let alfa = settings.openingBalance?.alfa || 0;
   let ozon = settings.openingBalance?.ozon || 0;
   const list = uptoDateInclusive ? transactions.filter((t) => t.date <= uptoDateInclusive) : transactions;
+  const add = (card, amt) => {
+    if (card === "sber") sber += amt;
+    else if (card === "alfa") alfa += amt;
+    else if (card === "ozon") ozon += amt;
+  };
   list.forEach((t) => {
-    if (t.type === "income") {
-      const s = computeIncomeSplit(t.amount, settings);
-      sber += s.toSber; alfa += s.toAlfa; ozon += s.toOzon;
-    } else if (t.type === "expense") {
-      if (t.card === "sber") sber -= t.amount;
-      else if (t.card === "alfa") alfa -= t.amount;
-      else if (t.card === "ozon") ozon -= t.amount;
-    } else if (t.type === "adjustment") {
-      if (t.card === "sber") sber += t.amount;
-      else if (t.card === "alfa") alfa += t.amount;
-      else if (t.card === "ozon") ozon += t.amount;
-    }
+    if (t.type === "income") add(t.card, t.amount);
+    else if (t.type === "expense") add(t.card, -t.amount);
+    else if (t.type === "adjustment") add(t.card, t.amount);
+    else if (t.type === "transfer") { add(t.fromCard, -t.amount); add(t.toCard, t.amount); }
   });
   return { sber, alfa, ozon };
 }
 
-// Activity within a single month (income received, spent by category, adjustments) — for
-// the monthly breakdown / analysis views. Does NOT reset the running balance, just reports
-// what happened during that month.
+// Activity within a single month, per card: what came in (income + transfers in), what left
+// (spending + transfers out), category breakdown, and the net change to the running balance.
 function aggregateMonth(mk, transactions, settings) {
   const inMonth = transactions.filter((t) => monthKeyOf(t.date) === mk);
 
-  let incomeTotal = 0, sberIn = 0, alfaIn = 0, ozonIn = 0;
-  inMonth.filter((t) => t.type === "income").forEach((t) => {
-    const s = computeIncomeSplit(t.amount, settings);
-    sberIn += s.toSber; alfaIn += s.toAlfa; ozonIn += s.toOzon;
-    incomeTotal += t.amount;
-  });
-
-  let sberSpent = 0, alfaSpent = 0, ozonSpent = 0;
+  const acc = {
+    sber: { income: 0, transferIn: 0, transferOut: 0, spent: 0, adj: 0 },
+    alfa: { income: 0, transferIn: 0, transferOut: 0, spent: 0, adj: 0 },
+    ozon: { income: 0, transferIn: 0, transferOut: 0, spent: 0, adj: 0 },
+  };
+  let incomeTotal = 0;
   const needCatTotals = {}; settings.needCats.forEach((c) => { needCatTotals[c] = 0; });
   const wantCatTotals = {}; settings.wantCats.forEach((c) => { wantCatTotals[c] = 0; });
-  inMonth.filter((t) => t.type === "expense").forEach((t) => {
-    if (t.card === "sber") {
-      sberSpent += t.amount;
-      needCatTotals[t.category] = (needCatTotals[t.category] || 0) + t.amount;
-    } else if (t.card === "alfa") {
-      alfaSpent += t.amount;
-      wantCatTotals[t.category] = (wantCatTotals[t.category] || 0) + t.amount;
-    } else if (t.card === "ozon") {
-      ozonSpent += t.amount;
+
+  inMonth.forEach((t) => {
+    if (t.type === "income") {
+      acc[t.card].income += t.amount;
+      incomeTotal += t.amount;
+    } else if (t.type === "expense") {
+      acc[t.card].spent += t.amount;
+      if (t.card === "sber") needCatTotals[t.category] = (needCatTotals[t.category] || 0) + t.amount;
+      else if (t.card === "alfa") wantCatTotals[t.category] = (wantCatTotals[t.category] || 0) + t.amount;
+    } else if (t.type === "adjustment") {
+      acc[t.card].adj += t.amount;
+    } else if (t.type === "transfer") {
+      acc[t.fromCard].transferOut += t.amount;
+      acc[t.toCard].transferIn += t.amount;
     }
   });
 
-  let sberAdj = 0, alfaAdj = 0, ozonAdj = 0;
-  inMonth.filter((t) => t.type === "adjustment").forEach((t) => {
-    if (t.card === "sber") sberAdj += t.amount;
-    else if (t.card === "alfa") alfaAdj += t.amount;
-    else if (t.card === "ozon") ozonAdj += t.amount;
-  });
+  function derive(x) {
+    const avail = x.income + x.transferIn - x.transferOut;
+    const inflow = x.income + x.transferIn;
+    const outflow = x.spent + x.transferOut;
+    const net = avail - x.spent + x.adj;
+    return { avail, inflow, outflow, net, spent: x.spent };
+  }
+  const sberD = derive(acc.sber), alfaD = derive(acc.alfa), ozonD = derive(acc.ozon);
 
   const items = inMonth.filter((t) => !t.hidden).sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? 1 : -1;
@@ -154,10 +156,12 @@ function aggregateMonth(mk, transactions, settings) {
   });
 
   return {
-    incomeTotal, sberIn, alfaIn, ozonIn, sberSpent, alfaSpent, ozonSpent, sberAdj, alfaAdj, ozonAdj,
-    sberNet: sberIn - sberSpent + sberAdj,
-    alfaNet: alfaIn - alfaSpent + alfaAdj,
-    ozonNet: ozonIn - ozonSpent + ozonAdj,
+    incomeTotal,
+    sberAvail: sberD.avail, alfaAvail: alfaD.avail, ozonAvail: ozonD.avail,
+    sberInflow: sberD.inflow, alfaInflow: alfaD.inflow, ozonInflow: ozonD.inflow,
+    sberOutflow: sberD.outflow, alfaOutflow: alfaD.outflow, ozonOutflow: ozonD.outflow,
+    sberSpent: sberD.spent, alfaSpent: alfaD.spent, ozonSpent: ozonD.spent,
+    sberNet: sberD.net, alfaNet: alfaD.net, ozonNet: ozonD.net,
     needCatTotals, wantCatTotals, items,
   };
 }
@@ -198,8 +202,34 @@ function migrateSettings(raw) {
     includeInTotal: { ...DEFAULT_SETTINGS.includeInTotal, ...(raw.includeInTotal || {}) },
   };
 }
-function migrateTransactions(list) {
-  return (list || []).map((t) => (t.type === "saving" ? { ...t, type: "adjustment", card: "ozon" } : t));
+
+// Old app versions applied the 50/30/20 split automatically inside a single "income" entry
+// (no `card` field). To preserve exactly the same resulting balances under the new
+// manual-transfer model, each such entry becomes: the full amount landing on Sber, plus two
+// explicit transfer records reproducing what used to happen invisibly.
+function migrateTransactions(list, settings) {
+  const out = [];
+  (list || []).forEach((t) => {
+    if (t.type === "saving") {
+      out.push({ ...t, type: "adjustment", card: "ozon" });
+      return;
+    }
+    if (t.type === "income" && !t.card) {
+      const s = computeIncomeSplit(t.amount, settings);
+      out.push({ ...t, card: "sber" });
+      const alfaAmt = Math.round(s.toAlfa);
+      const ozonAmt = Math.round(s.toOzon);
+      if (alfaAmt > 0) {
+        out.push({ id: uid(), type: "transfer", date: t.date, amount: alfaAmt, fromCard: "sber", toCard: "alfa", note: "Авто-перенос при обновлении приложения" });
+      }
+      if (ozonAmt > 0) {
+        out.push({ id: uid(), type: "transfer", date: t.date, amount: ozonAmt, fromCard: "sber", toCard: "ozon", note: "Авто-перенос при обновлении приложения" });
+      }
+      return;
+    }
+    out.push(t);
+  });
+  return out;
 }
 
 /* ============================================================ small UI parts */
@@ -227,15 +257,30 @@ function PaydayReminder({ settings, transactions }) {
   const today = todayStr();
   const day = dayOfMonth(today);
   if (!settings.reminderDays.includes(day)) return null;
-  const loggedToday = transactions.some((t) => t.type === "income" && t.date === today);
-  if (loggedToday) return null;
+  const todayIncome = transactions
+    .filter((t) => t.type === "income" && t.date === today)
+    .reduce((sum, t) => sum + t.amount, 0);
   const needPct = needPctOf(settings);
+
+  if (todayIncome <= 0) {
+    return (
+      <div className="rounded-lg border p-3 mb-4 text-xs" style={{ borderColor: C.amber, background: C.amberSoft }}>
+        <div className="font-medium mb-1" style={{ color: "#8A5A15" }}>Сегодня день выплаты</div>
+        <div style={{ color: "#8A5A15" }}>
+          Не забудьте занести доход на вкладке «Добавить» — после этого приложение подскажет, сколько перевести в Альфа и Озон.
+        </div>
+      </div>
+    );
+  }
+
+  const split = computeIncomeSplit(todayIncome, settings);
   return (
     <div className="rounded-lg border p-3 mb-4 text-xs" style={{ borderColor: C.amber, background: C.amberSoft }}>
-      <div className="font-medium mb-1" style={{ color: "#8A5A15" }}>Сегодня день выплаты</div>
+      <div className="font-medium mb-1" style={{ color: "#8A5A15" }}>Не забудьте сделать переводы</div>
       <div style={{ color: "#8A5A15" }}>
-        Добавьте доход на вкладке «Добавить» — приложение само посчитает: {settings.savePct}% в Озон,
-        {" "}{settings.wantPct}% в Альфа, {needPct}% останется на Сбере.
+        Из сегодняшнего дохода ({formatMoney(todayIncome)}): {formatMoney(split.toAlfa)} в Альфа,
+        {" "}{formatMoney(split.toOzon)} в Озон. Остальное ({needPct}%) остаётся на карте зачисления.
+        Сделайте перевод на вкладке «Добавить».
       </div>
     </div>
   );
@@ -309,10 +354,14 @@ function MiniCatList({ title, color, items }) {
 function TxRow({ tx, onDelete }) {
   const color = tx.type === "income" ? C.sber
     : tx.type === "expense" ? (tx.card === "sber" ? C.sber : C.alfa)
+    : tx.type === "transfer" ? C.amber
     : (tx.card === "sber" ? C.sber : tx.card === "alfa" ? C.alfa : (tx.amount < 0 ? C.danger : C.ozon));
-  const sign = tx.type === "expense" ? "−" : (tx.type === "adjustment" && tx.amount < 0) ? "−" : "+";
-  const label = tx.type === "income" ? (tx.note || "Доход")
+  const sign = tx.type === "expense" ? "−"
+    : tx.type === "transfer" ? ""
+    : (tx.type === "adjustment" && tx.amount < 0) ? "−" : "+";
+  const label = tx.type === "income" ? (tx.note || `Доход (${cardLabel(tx.card)})`)
     : tx.type === "expense" ? (tx.note || tx.category)
+    : tx.type === "transfer" ? (tx.note || `${cardLabel(tx.fromCard)} → ${cardLabel(tx.toCard)}`)
     : (tx.note || `Корректировка (${cardLabel(tx.card)})`);
   const day = tx.date.slice(8, 10);
   return (
@@ -379,8 +428,8 @@ function DashboardView({ settings, transactions, selectedMonth, setSelectedMonth
     (settings.includeInTotal.alfa ? bal.alfa : 0) +
     (settings.includeInTotal.ozon ? bal.ozon : 0);
 
-  const sberUtil = agg.sberIn > 0 ? agg.sberSpent / agg.sberIn : 0;
-  const alfaUtil = agg.alfaIn > 0 ? agg.alfaSpent / agg.alfaIn : 0;
+  const sberUtil = agg.sberAvail > 0 ? agg.sberSpent / agg.sberAvail : 0;
+  const alfaUtil = agg.alfaAvail > 0 ? agg.alfaSpent / agg.alfaAvail : 0;
   const ozonPct = settings.goal > 0 ? bal.ozon / settings.goal : 0;
 
   const topNeedCats = Object.entries(agg.needCatTotals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
@@ -399,10 +448,10 @@ function DashboardView({ settings, transactions, selectedMonth, setSelectedMonth
 
           <BankCard stripe={C.sber} soft={C.sberSoft} name="Сбербанк" role="Обязательные нужды"
             bigLabel="баланс" bigValue={bal.sber} pct={sberUtil}
-            sub={`Доход +${formatMoney(agg.sberIn)} · Траты −${formatMoney(agg.sberSpent)}`} />
+            sub={`Пришло +${formatMoney(agg.sberInflow)} · Ушло −${formatMoney(agg.sberOutflow)}`} />
           <BankCard stripe={C.alfa} soft={C.alfaSoft} name="Альфа-Банк" role="Развлечения"
             bigLabel="баланс" bigValue={bal.alfa} pct={alfaUtil}
-            sub={`Доход +${formatMoney(agg.alfaIn)} · Траты −${formatMoney(agg.alfaSpent)}`} />
+            sub={`Пришло +${formatMoney(agg.alfaInflow)} · Ушло −${formatMoney(agg.alfaOutflow)}`} />
           <BankCard stripe={C.ozon} soft={C.ozonSoft} name="Озон Банк" role="Подушка безопасности"
             bigLabel="баланс" bigValue={bal.ozon} pct={ozonPct}
             sub={`Цель ${formatMoney(settings.goal)}`}
@@ -434,7 +483,7 @@ const EXPENSE_CARDS = [
   { id: "sber", label: "Сбербанк", sub: "нужды", icon: "🟢", color: C.sber, soft: C.sberSoft },
   { id: "alfa", label: "Альфа-Банк", sub: "развлечения", icon: "🔴", color: C.alfa, soft: C.alfaSoft },
 ];
-const ADJUST_CARDS = [
+const ALL_CARDS = [
   { id: "sber", label: "Сбер", icon: "🟢", color: C.sber, soft: C.sberSoft },
   { id: "alfa", label: "Альфа", icon: "🔴", color: C.alfa, soft: C.alfaSoft },
   { id: "ozon", label: "Озон", icon: "🔵", color: C.ozon, soft: C.ozonSoft },
@@ -455,11 +504,21 @@ function CardPicker({ options, value, onChange }) {
   );
 }
 
+const TYPE_OPTIONS = [
+  { id: "expense", label: "Трата" },
+  { id: "income", label: "Доход" },
+  { id: "transfer", label: "Перевод" },
+  { id: "adjustment", label: "Коррекция" },
+];
+
 function AddView({ settings, transactions, onAdd }) {
   const [type, setType] = useState("expense");
   const [date, setDate] = useState(todayStr());
   const [amount, setAmount] = useState("");
-  const [card, setCard] = useState("sber");
+  const [card, setCard] = useState("sber"); // expense + adjustment
+  const [incomeCard, setIncomeCard] = useState("sber");
+  const [fromCard, setFromCard] = useState("sber");
+  const [toCard, setToCard] = useState("ozon");
   const [category, setCategory] = useState(settings.needCats[0] || "");
   const [note, setNote] = useState("");
   const [adjMode, setAdjMode] = useState("delta");
@@ -471,6 +530,10 @@ function AddView({ settings, transactions, onAdd }) {
     const list = card === "sber" ? settings.needCats : settings.wantCats;
     setCategory(list[0] || "");
   }, [type, card, settings.needCats, settings.wantCats]);
+
+  useEffect(() => {
+    if (type === "expense" && card === "ozon") setCard("sber");
+  }, [type, card]);
 
   const numAmount = parseFloat(amount) || 0;
   const incomePreview = type === "income" && numAmount > 0 ? computeIncomeSplit(numAmount, settings) : null;
@@ -495,7 +558,10 @@ function AddView({ settings, transactions, onAdd }) {
       onAdd({ type: "expense", date, amount: numAmount, card, category, note });
     } else if (type === "income") {
       if (numAmount <= 0) return;
-      onAdd({ type: "income", date, amount: numAmount, note });
+      onAdd({ type: "income", date, amount: numAmount, card: incomeCard, note });
+    } else if (type === "transfer") {
+      if (numAmount <= 0 || fromCard === toCard) return;
+      onAdd({ type: "transfer", date, amount: numAmount, fromCard, toCard, note });
     } else {
       if (adjMode === "delta" && numAmount <= 0) return;
       if (adjMode === "target" && amount === "") return;
@@ -508,13 +574,14 @@ function AddView({ settings, transactions, onAdd }) {
   const canSubmit = !!date && (
     type === "expense" ? numAmount > 0
     : type === "income" ? numAmount > 0
+    : type === "transfer" ? (numAmount > 0 && fromCard !== toCard)
     : adjMode === "delta" ? numAmount > 0 : amount !== ""
   );
 
   return (
     <div>
       <div className="flex rounded-lg overflow-hidden border mb-5" style={{ borderColor: C.border }}>
-        {[{ id: "expense", label: "Трата" }, { id: "income", label: "Доход" }, { id: "adjustment", label: "Корректировка" }].map((opt) => (
+        {TYPE_OPTIONS.map((opt) => (
           <button key={opt.id} onClick={() => setType(opt.id)}
             className="flex-1 py-2.5 text-xs font-medium"
             style={{ background: type === opt.id ? C.ink : C.surface, color: type === opt.id ? C.surface : C.inkMuted }}>
@@ -523,11 +590,38 @@ function AddView({ settings, transactions, onAdd }) {
         ))}
       </div>
 
+      {type === "income" && (
+        <div className="mb-4">
+          <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Куда пришли деньги</label>
+          <CardPicker options={ALL_CARDS} value={incomeCard} onChange={setIncomeCard} />
+        </div>
+      )}
+
+      {type === "transfer" && (
+        <>
+          <div className="mb-3">
+            <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Откуда</label>
+            <CardPicker options={ALL_CARDS} value={fromCard} onChange={setFromCard} />
+          </div>
+          <div className="mb-2">
+            <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Куда</label>
+            <CardPicker options={ALL_CARDS} value={toCard} onChange={setToCard} />
+          </div>
+          {fromCard === toCard && (
+            <div className="text-xs mb-3" style={{ color: C.danger }}>Карты должны отличаться</div>
+          )}
+          <div className="text-xs mb-4" style={{ color: C.inkMuted }}>
+            Баланс «Откуда»: <span className="font-mono">{formatMoney(currentBalances[fromCard] || 0)}</span>
+            {" · "}Баланс «Куда»: <span className="font-mono">{formatMoney(currentBalances[toCard] || 0)}</span>
+          </div>
+        </>
+      )}
+
       {type === "adjustment" && (
         <>
           <div className="mb-3">
             <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Карта</label>
-            <CardPicker options={ADJUST_CARDS} value={card} onChange={setCard} />
+            <CardPicker options={ALL_CARDS} value={card} onChange={setCard} />
             <div className="text-xs mt-2" style={{ color: C.inkMuted }}>
               Текущий баланс: <span className="font-mono">{formatMoney(currentCardBalance)}</span>
             </div>
@@ -544,6 +638,11 @@ function AddView({ settings, transactions, onAdd }) {
                 style={{ borderColor: adjMode === "target" ? C.ink : C.border, background: adjMode === "target" ? C.bg : C.surface, color: adjMode === "target" ? C.ink : C.inkMuted }}>
                 Задать итог
               </button>
+            </div>
+            <div className="text-xs mt-2" style={{ color: C.inkMuted }}>
+              {adjMode === "delta"
+                ? "Прибавит или вычтет указанную сумму."
+                : "Например: было 1000 ₽, по факту 600 ₽ — впишите 600, разница в 400 ₽ учтётся сама."}
             </div>
           </div>
 
@@ -623,24 +722,23 @@ function AddView({ settings, transactions, onAdd }) {
           {type === "expense" ? "Описание (необязательно)" : "Комментарий (необязательно)"}
         </label>
         <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
-          placeholder={type === "expense" ? "Пятёрочка, продукты" : type === "income" ? "Зарплата" : "Например, кэшбэк"}
+          placeholder={type === "expense" ? "Пятёрочка, продукты" : type === "income" ? "Зарплата" : type === "transfer" ? "Перевод по СБП" : "Например, кэшбэк"}
           className="w-full border rounded-lg px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.ink }} />
       </div>
 
       {type === "income" && incomePreview && (
         <div className="mb-5 rounded-lg border p-3 text-xs" style={{ borderColor: C.border, background: C.bg }}>
-          <div className="mb-2" style={{ color: C.inkMuted }}>Как распределится:</div>
+          <div className="mb-2" style={{ color: C.inkMuted }}>Не забудьте перевести после зачисления:</div>
           <div className="flex justify-between mb-1">
-            <span style={{ color: C.sber }}>🟢 На Сбер ({needPctOf(settings)}%)</span>
-            <span className="font-mono font-medium">{formatMoney(incomePreview.toSber)}</span>
-          </div>
-          <div className="flex justify-between mb-1">
-            <span style={{ color: C.alfa }}>🔴 На Альфа ({settings.wantPct}%)</span>
+            <span style={{ color: C.alfa }}>🔴 В Альфа ({settings.wantPct}%)</span>
             <span className="font-mono font-medium">{formatMoney(incomePreview.toAlfa)}</span>
           </div>
           <div className="flex justify-between">
-            <span style={{ color: C.ozon }}>🔵 На Озон ({settings.savePct}%)</span>
+            <span style={{ color: C.ozon }}>🔵 В Озон ({settings.savePct}%)</span>
             <span className="font-mono font-medium">{formatMoney(incomePreview.toOzon)}</span>
+          </div>
+          <div className="pt-2 mt-2 border-t text-xs" style={{ borderColor: C.border, color: C.inkMuted }}>
+            Остальное ({needPctOf(settings)}%) остаётся на карте зачисления — переводы делайте через тип «Перевод».
           </div>
         </div>
       )}
@@ -664,10 +762,13 @@ function SavingsView({ settings, transactions }) {
   const monthsLeft = left <= 0 ? 0 : (rate > 0 ? Math.ceil(left / rate) : null);
   const thisMonth = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
 
-  const ozonEntries = useMemo(() =>
-    transactions.filter((t) => t.type === "adjustment" && t.card === "ozon")
-      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
-  , [transactions]);
+  const ozonEntries = useMemo(() => {
+    const list = transactions.filter((t) =>
+      (t.type === "adjustment" && t.card === "ozon") ||
+      (t.type === "transfer" && (t.fromCard === "ozon" || t.toCard === "ozon"))
+    );
+    return list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  }, [transactions]);
 
   return (
     <div>
@@ -694,24 +795,32 @@ function SavingsView({ settings, transactions }) {
         С 3-го месяца стоит подключить Ozon Premium (199 ₽/мес): ставка поднимется примерно до 12% годовых.
       </div>
 
-      <div className="text-xs font-medium mb-2" style={{ color: C.inkMuted }}>Корректировки Озон</div>
+      <div className="text-xs font-medium mb-2" style={{ color: C.inkMuted }}>История по Озон</div>
       {ozonEntries.length === 0 ? (
         <div className="text-xs py-4 text-center" style={{ color: C.inkMuted }}>
-          Автоматические переводы с зарплаты видны на вкладке «Обзор». Здесь — только ручные корректировки (проценты банка, форс-мажор и т.п.).
+          Переводы и корректировки, которые касаются Озон, появятся здесь.
         </div>
       ) : (
         <div>
-          {ozonEntries.map((t) => (
-            <div key={t.id} className="flex items-center justify-between text-xs py-2 border-b" style={{ borderColor: C.border }}>
-              <div>
-                <div>{t.note || (t.amount < 0 ? "Списание" : "Пополнение")} {t.hidden ? "(скрыто)" : ""}</div>
-                <div className="text-xs" style={{ color: C.inkMuted }}>{t.date}</div>
+          {ozonEntries.map((t) => {
+            const isTransferOut = t.type === "transfer" && t.fromCard === "ozon";
+            const signedAmt = isTransferOut ? -t.amount : t.amount;
+            const label = t.type === "adjustment"
+              ? (t.note || (t.amount < 0 ? "Списание" : "Пополнение"))
+              : isTransferOut ? (t.note || `Перевод в ${cardLabel(t.toCard)}`)
+              : (t.note || `Перевод из ${cardLabel(t.fromCard)}`);
+            return (
+              <div key={t.id} className="flex items-center justify-between text-xs py-2 border-b" style={{ borderColor: C.border }}>
+                <div>
+                  <div>{label} {t.hidden ? "(скрыто)" : ""}</div>
+                  <div className="text-xs" style={{ color: C.inkMuted }}>{t.date}</div>
+                </div>
+                <div className="font-mono font-medium" style={{ color: signedAmt < 0 ? C.danger : C.ozon }}>
+                  {signedAmt < 0 ? "−" : "+"}{formatMoney(Math.abs(signedAmt))}
+                </div>
               </div>
-              <div className="font-mono font-medium" style={{ color: t.amount < 0 ? C.danger : C.ozon }}>
-                {t.amount < 0 ? "−" : "+"}{formatMoney(Math.abs(t.amount))}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -786,7 +895,7 @@ function AnalysisView({ settings, transactions, selectedMonth, setSelectedMonth 
       ) : (
         <div className="space-y-2.5">
           {allCats.map(({ cat, val, type }) => {
-            const budget = type === "need" ? agg.sberIn : agg.alfaIn;
+            const budget = type === "need" ? agg.sberAvail : agg.alfaAvail;
             const color = type === "need" ? C.sber : C.alfa;
             const pct = budget > 0 ? val / budget : 0;
             return (
@@ -912,11 +1021,12 @@ function SettingsView({ settings, onSave, onWipeAll }) {
 
   return (
     <div className="pb-8">
-      <SectionTitle>Как делится каждое поступление</SectionTitle>
+      <SectionTitle>Проценты для напоминаний о переводах</SectionTitle>
       <NumField label="В Озон (накопления), %" value={local.savePct} onChange={(v) => field("savePct", v)} onBlur={commit} />
       <NumField label="В Альфа (развлечения), %" value={local.wantPct} onChange={(v) => field("wantPct", v)} onBlur={commit} />
       <div className="text-xs mb-5 -mt-1" style={{ color: C.inkMuted }}>
-        На Сбер (нужды) останется: {needPctOf({ wantPct: Number(local.wantPct) || 0, savePct: Number(local.savePct) || 0 })}%
+        На карте зачисления (нужды) останется: {needPctOf({ wantPct: Number(local.wantPct) || 0, savePct: Number(local.savePct) || 0 })}%.
+        Эти проценты используются только для подсказок — переводы между картами вы всегда делаете вручную.
       </div>
 
       <SectionTitle>Напоминание о переводах</SectionTitle>
@@ -1025,7 +1135,7 @@ export default function App() {
       } catch (e) { /* first run, use defaults */ }
       try {
         const r = await storage.get("transactions");
-        if (r && r.value) t = migrateTransactions(JSON.parse(r.value));
+        if (r && r.value) t = migrateTransactions(JSON.parse(r.value), s);
       } catch (e) { /* first run, empty list */ }
       if (alive) { setSettings(s); setTransactions(t); setLoaded(true); }
     })();
