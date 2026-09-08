@@ -2,6 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Home, Plus, PiggyBank, BarChart3, Settings as SettingsIcon,
   ChevronLeft, ChevronRight, Trash2, Check, AlertTriangle, Wallet, X,
+  ShoppingCart, ShoppingBag, UtensilsCrossed, Coffee, Zap, Droplet, Wifi, Phone,
+  Car, Bus, Fuel, Plane, Train, HeartPulse, Pill, Stethoscope, Dumbbell, GraduationCap,
+  Baby, PawPrint, Gift, Film, Tv, Music, Gamepad2, Book, Shirt, Smartphone, Laptop,
+  Wrench, Scissors, Coins, Users, User, HelpCircle, MoreHorizontal, Sparkles, Umbrella, Wine,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -30,6 +34,36 @@ const C = {
 const MONTHS_RU = ["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
 const MONTHS_SHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
 
+/* ============================================================ category icons & colors */
+const ICON_MAP = {
+  ShoppingCart, ShoppingBag, UtensilsCrossed, Coffee, Home, Zap, Droplet, Wifi, Phone,
+  Car, Bus, Fuel, Plane, Train, HeartPulse, Pill, Stethoscope, Dumbbell, GraduationCap,
+  Baby, PawPrint, Gift, Film, Tv, Music, Gamepad2, Book, Shirt, Smartphone, Laptop,
+  Wrench, Scissors, Coins, Users, User, HelpCircle, MoreHorizontal, Sparkles, Umbrella, Wine,
+};
+const ICON_KEYS = Object.keys(ICON_MAP);
+function getIcon(key) { return ICON_MAP[key] || HelpCircle; }
+
+const CATEGORY_COLORS = ["#E8935C", "#2D8C6F", "#D46A93", "#D4A537", "#7C6FC4", "#3B82C4", "#C4573B", "#4F7CAC", "#8A6D4F", "#6B7280"];
+
+const DEFAULT_NEED_CATS = [
+  { name: "Аренда/ипотека", icon: "Home", color: "#7C6FC4" },
+  { name: "ЖКХ", icon: "Zap", color: "#D4A537" },
+  { name: "Продукты", icon: "ShoppingCart", color: "#E8935C" },
+  { name: "Транспорт", icon: "Bus", color: "#3B82C4" },
+  { name: "Связь", icon: "Wifi", color: "#2D8C6F" },
+  { name: "Лекарства/здоровье", icon: "HeartPulse", color: "#D46A93" },
+  { name: "Прочее", icon: "MoreHorizontal", color: "#6B7280" },
+];
+const DEFAULT_WANT_CATS = [
+  { name: "Кафе/рестораны", icon: "UtensilsCrossed", color: "#C4573B" },
+  { name: "Кино/развлечения", icon: "Film", color: "#7C6FC4" },
+  { name: "Шоппинг", icon: "ShoppingBag", color: "#D46A93" },
+  { name: "Подписки", icon: "Tv", color: "#3B82C4" },
+  { name: "Подарки", icon: "Gift", color: "#2D8C6F" },
+  { name: "Прочее", icon: "MoreHorizontal", color: "#6B7280" },
+];
+
 const DEFAULT_SETTINGS = {
   wantPct: 30,
   savePct: 20,
@@ -37,8 +71,8 @@ const DEFAULT_SETTINGS = {
   goal: 540000,
   openingBalance: { sber: 0, alfa: 0, ozon: 0 },
   includeInTotal: { sber: true, alfa: true, ozon: true },
-  needCats: ["Аренда/ипотека", "ЖКХ", "Продукты", "Транспорт", "Связь", "Лекарства/здоровье", "Прочее"],
-  wantCats: ["Кафе/рестораны", "Кино/развлечения", "Шоппинг", "Подписки", "Подарки", "Прочее"],
+  needCats: DEFAULT_NEED_CATS,
+  wantCats: DEFAULT_WANT_CATS,
 };
 
 /* ============================================================ helpers */
@@ -83,7 +117,6 @@ function cardLabel(card) {
 }
 function needPctOf(settings) { return 100 - (settings.wantPct || 0) - (settings.savePct || 0); }
 
-// Purely informational calculator used for reminders/previews — no longer applied automatically.
 function computeIncomeSplit(amount, settings) {
   const toOzon = amount * (settings.savePct / 100);
   const toAlfa = amount * (settings.wantPct / 100);
@@ -91,7 +124,6 @@ function computeIncomeSplit(amount, settings) {
   return { toSber, toAlfa, toOzon };
 }
 
-// Running balance per card as of a given date (inclusive). Pass null for "all time".
 function computeBalances(transactions, settings, uptoDateInclusive) {
   let sber = settings.openingBalance?.sber || 0;
   let alfa = settings.openingBalance?.alfa || 0;
@@ -111,8 +143,6 @@ function computeBalances(transactions, settings, uptoDateInclusive) {
   return { sber, alfa, ozon };
 }
 
-// Activity within a single month, per card: what came in (income + transfers in), what left
-// (spending + transfers out), category breakdown, and the net change to the running balance.
 function aggregateMonth(mk, transactions, settings) {
   const inMonth = transactions.filter((t) => monthKeyOf(t.date) === mk);
 
@@ -122,8 +152,8 @@ function aggregateMonth(mk, transactions, settings) {
     ozon: { income: 0, transferIn: 0, transferOut: 0, spent: 0, adj: 0 },
   };
   let incomeTotal = 0;
-  const needCatTotals = {}; settings.needCats.forEach((c) => { needCatTotals[c] = 0; });
-  const wantCatTotals = {}; settings.wantCats.forEach((c) => { wantCatTotals[c] = 0; });
+  const needCatTotals = {}; settings.needCats.forEach((c) => { needCatTotals[c.name] = 0; });
+  const wantCatTotals = {}; settings.wantCats.forEach((c) => { wantCatTotals[c.name] = 0; });
 
   inMonth.forEach((t) => {
     if (t.type === "income") {
@@ -166,6 +196,51 @@ function aggregateMonth(mk, transactions, settings) {
   };
 }
 
+// Per-category usage count and "modal" (most frequently used) amount, for a given card's
+// expense history — powers both the quick-add tile ordering and the pre-filled amount.
+function categoryStats(transactions, card) {
+  const byName = {};
+  transactions.filter((t) => t.type === "expense" && t.card === card).forEach((t) => {
+    if (!byName[t.category]) byName[t.category] = {};
+    byName[t.category][t.amount] = (byName[t.category][t.amount] || 0) + 1;
+  });
+  const stats = {};
+  Object.entries(byName).forEach(([name, amounts]) => {
+    let count = 0, modalAmount = null, modalCount = 0;
+    Object.entries(amounts).forEach(([amtStr, c]) => {
+      count += c;
+      if (c > modalCount) { modalCount = c; modalAmount = Number(amtStr); }
+    });
+    stats[name] = { count, modalAmount };
+  });
+  return stats;
+}
+
+// Same idea for the Ozon quick-add panel, grouped by day-of-month rather than category —
+// looks at transfers into Ozon and positive Ozon adjustments.
+function ozonDayStats(transactions) {
+  const byDay = {};
+  transactions.forEach((t) => {
+    let amt = null;
+    if (t.type === "transfer" && t.toCard === "ozon") amt = t.amount;
+    else if (t.type === "adjustment" && t.card === "ozon" && t.amount > 0) amt = t.amount;
+    if (amt == null) return;
+    const day = dayOfMonth(t.date);
+    if (!byDay[day]) byDay[day] = {};
+    byDay[day][amt] = (byDay[day][amt] || 0) + 1;
+  });
+  const result = {};
+  Object.entries(byDay).forEach(([day, amounts]) => {
+    let count = 0, modalAmount = null, modalCount = 0;
+    Object.entries(amounts).forEach(([amtStr, c]) => {
+      count += c;
+      if (c > modalCount) { modalCount = c; modalAmount = Number(amtStr); }
+    });
+    result[day] = { count, modalAmount };
+  });
+  return result;
+}
+
 function estimateMonthlyRate(transactions, settings, fromMonthKey) {
   let mk = fromMonthKey, sum = 0, count = 0;
   for (let i = 0; i < 3; i++) {
@@ -183,6 +258,17 @@ function getAllMonthKeys(transactions) {
 }
 
 /* ============================================================ migration (old data shapes) */
+function migrateCategoryList(list, defaults) {
+  if (!Array.isArray(list) || list.length === 0) return defaults;
+  return list.map((item, i) => {
+    if (typeof item === "string") {
+      const found = defaults.find((d) => d.name === item);
+      return found || { name: item, icon: "HelpCircle", color: CATEGORY_COLORS[i % CATEGORY_COLORS.length] };
+    }
+    return item;
+  });
+}
+
 function migrateSettings(raw) {
   if (!raw) return DEFAULT_SETTINGS;
   const looksOld = "salary" in raw || !("savePct" in raw);
@@ -191,22 +277,20 @@ function migrateSettings(raw) {
       ...DEFAULT_SETTINGS,
       goal: raw.goal ?? DEFAULT_SETTINGS.goal,
       openingBalance: { sber: 0, alfa: 0, ozon: raw.savedBefore || 0 },
-      needCats: raw.needCats || DEFAULT_SETTINGS.needCats,
-      wantCats: raw.wantCats || DEFAULT_SETTINGS.wantCats,
+      needCats: migrateCategoryList(raw.needCats, DEFAULT_NEED_CATS),
+      wantCats: migrateCategoryList(raw.wantCats, DEFAULT_WANT_CATS),
     };
   }
   return {
     ...DEFAULT_SETTINGS,
     ...raw,
+    needCats: migrateCategoryList(raw.needCats, DEFAULT_NEED_CATS),
+    wantCats: migrateCategoryList(raw.wantCats, DEFAULT_WANT_CATS),
     openingBalance: { ...DEFAULT_SETTINGS.openingBalance, ...(raw.openingBalance || {}) },
     includeInTotal: { ...DEFAULT_SETTINGS.includeInTotal, ...(raw.includeInTotal || {}) },
   };
 }
 
-// Old app versions applied the 50/30/20 split automatically inside a single "income" entry
-// (no `card` field). To preserve exactly the same resulting balances under the new
-// manual-transfer model, each such entry becomes: the full amount landing on Sber, plus two
-// explicit transfer records reproducing what used to happen invisibly.
 function migrateTransactions(list, settings) {
   const out = [];
   (list || []).forEach((t) => {
@@ -478,6 +562,94 @@ function DashboardView({ settings, transactions, selectedMonth, setSelectedMonth
   );
 }
 
+/* ============================================================ Quick-add carousel */
+function QuickTile({ icon: Icon, color, name, amount, onClick, isAddNew }) {
+  if (isAddNew) {
+    return (
+      <button onClick={onClick}
+        className="rounded-xl border-2 flex flex-col items-center justify-center gap-1 py-4"
+        style={{ borderColor: C.border, borderStyle: "dashed", color: C.inkMuted, background: "transparent" }}>
+        <Plus size={20} />
+        <span className="text-xs">Новое</span>
+      </button>
+    );
+  }
+  return (
+    <button onClick={onClick}
+      className="rounded-xl border flex flex-col items-center gap-1.5 py-3 px-2 relative"
+      style={{ borderColor: C.border, background: C.surface }}>
+      {amount != null && (
+        <span className="absolute top-1.5 right-1.5 font-mono px-1.5 py-0.5 rounded-full"
+          style={{ fontSize: 10, background: C.bg, color: C.inkMuted }}>
+          {formatMoney(amount)}
+        </span>
+      )}
+      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: color + "22" }}>
+        <Icon size={19} style={{ color }} />
+      </div>
+      <span className="text-xs font-medium text-center leading-tight">{name}</span>
+    </button>
+  );
+}
+
+function CategoryPanel({ title, accentColor, card, categories, transactions, onQuickAdd, onOpenFull }) {
+  const stats = useMemo(() => categoryStats(transactions, card), [transactions, card]);
+  const ordered = useMemo(
+    () => [...categories].sort((a, b) => (stats[b.name]?.count || 0) - (stats[a.name]?.count || 0)),
+    [categories, stats]
+  );
+
+  return (
+    <div>
+      <div className="text-sm font-semibold mb-3 text-center" style={{ color: accentColor }}>{title}</div>
+      <div className="grid grid-cols-2 gap-2.5">
+        <QuickTile isAddNew onClick={() => onOpenFull({ type: "expense", card })} />
+        {ordered.map((cat) => {
+          const s = stats[cat.name];
+          const Icon = getIcon(cat.icon);
+          return (
+            <QuickTile key={cat.name} icon={Icon} color={cat.color} name={cat.name} amount={s?.modalAmount ?? null}
+              onClick={() => {
+                if (s?.modalAmount != null) {
+                  onQuickAdd({ type: "expense", date: todayStr(), amount: s.modalAmount, card, category: cat.name, note: "" });
+                } else {
+                  onOpenFull({ type: "expense", card, category: cat.name });
+                }
+              }} />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function OzonPanel({ settings, transactions, onQuickAdd, onOpenFull }) {
+  const dayStats = useMemo(() => ozonDayStats(transactions), [transactions]);
+  const days = settings.reminderDays.length ? settings.reminderDays : [5, 15, 30];
+
+  return (
+    <div>
+      <div className="text-sm font-semibold mb-3 text-center" style={{ color: C.ozon }}>Подушка</div>
+      <div className="grid grid-cols-2 gap-2.5">
+        <QuickTile isAddNew onClick={() => onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon" })} />
+        {days.map((d) => {
+          const s = dayStats[d];
+          return (
+            <QuickTile key={d} icon={PiggyBank} color={C.ozon} name={`${d} числа`} amount={s?.modalAmount ?? null}
+              onClick={() => {
+                if (s?.modalAmount != null) {
+                  onQuickAdd({ type: "transfer", date: todayStr(), amount: s.modalAmount, fromCard: "sber", toCard: "ozon", note: `Быстрый перевод (${d} число)` });
+                } else {
+                  onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon" });
+                }
+              }} />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ============================================================ Add */
 const EXPENSE_CARDS = [
   { id: "sber", label: "Сбербанк", sub: "нужды", icon: "🟢", color: C.sber, soft: C.sberSoft },
@@ -511,15 +683,15 @@ const TYPE_OPTIONS = [
   { id: "adjustment", label: "Коррекция" },
 ];
 
-function AddView({ settings, transactions, onAdd }) {
-  const [type, setType] = useState("expense");
+function FullAddForm({ settings, transactions, onAdd, initial }) {
+  const [type, setType] = useState(initial?.type || "expense");
   const [date, setDate] = useState(todayStr());
   const [amount, setAmount] = useState("");
-  const [card, setCard] = useState("sber"); // expense + adjustment
+  const [card, setCard] = useState(initial?.card || "sber");
   const [incomeCard, setIncomeCard] = useState("sber");
-  const [fromCard, setFromCard] = useState("sber");
-  const [toCard, setToCard] = useState("ozon");
-  const [category, setCategory] = useState(settings.needCats[0] || "");
+  const [fromCard, setFromCard] = useState(initial?.fromCard || "sber");
+  const [toCard, setToCard] = useState(initial?.toCard || "ozon");
+  const [category, setCategory] = useState(initial?.category || settings.needCats[0]?.name || "");
   const [note, setNote] = useState("");
   const [adjMode, setAdjMode] = useState("delta");
   const [direction, setDirection] = useState("add");
@@ -528,7 +700,7 @@ function AddView({ settings, transactions, onAdd }) {
   useEffect(() => {
     if (type !== "expense") return;
     const list = card === "sber" ? settings.needCats : settings.wantCats;
-    setCategory(list[0] || "");
+    setCategory((prev) => (list.some((c) => c.name === prev) ? prev : (list[0]?.name || "")));
   }, [type, card, settings.needCats, settings.wantCats]);
 
   useEffect(() => {
@@ -697,7 +869,7 @@ function AddView({ settings, transactions, onAdd }) {
             <select value={category} onChange={(e) => setCategory(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.ink }}>
               {(card === "sber" ? settings.needCats : settings.wantCats).map((c) => (
-                <option key={c} value={c}>{c}</option>
+                <option key={c.name} value={c.name}>{c.name}</option>
               ))}
             </select>
           </div>
@@ -748,6 +920,64 @@ function AddView({ settings, transactions, onAdd }) {
         style={{ background: canSubmit ? C.ink : C.border, color: canSubmit ? C.surface : C.inkMuted }}>
         Добавить
       </button>
+    </div>
+  );
+}
+
+function AddView({ settings, transactions, onAdd }) {
+  const [activePanel, setActivePanel] = useState(0);
+  const [showFull, setShowFull] = useState(false);
+  const [prefill, setPrefill] = useState(null);
+  const [prefillSeq, setPrefillSeq] = useState(0);
+  const scrollRef = useRef(null);
+
+  function openFull(partial) {
+    setPrefill(partial);
+    setPrefillSeq((s) => s + 1);
+    setShowFull(true);
+  }
+
+  function goToPanel(i) {
+    setActivePanel(i);
+    const el = scrollRef.current;
+    if (el && el.children[i]) el.children[i].scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+  }
+
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el || el.clientWidth === 0) return;
+    const idx = Math.round(el.scrollLeft / el.clientWidth);
+    if (idx !== activePanel) setActivePanel(idx);
+  }
+
+  const panelDefs = [
+    { key: "need", render: () => <CategoryPanel title="Нужды" accentColor={C.sber} card="sber" categories={settings.needCats} transactions={transactions} onQuickAdd={onAdd} onOpenFull={openFull} /> },
+    { key: "want", render: () => <CategoryPanel title="Развлечения" accentColor={C.alfa} card="alfa" categories={settings.wantCats} transactions={transactions} onQuickAdd={onAdd} onOpenFull={openFull} /> },
+    { key: "ozon", render: () => <OzonPanel settings={settings} transactions={transactions} onQuickAdd={onAdd} onOpenFull={openFull} /> },
+  ];
+
+  return (
+    <div>
+      <div ref={scrollRef} onScroll={handleScroll}
+        style={{ display: "flex", overflowX: "auto", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}
+        className="mb-1">
+        {panelDefs.map((p) => (
+          <div key={p.key} style={{ minWidth: "100%", scrollSnapAlign: "start", flexShrink: 0 }}>{p.render()}</div>
+        ))}
+      </div>
+      <div className="flex justify-center gap-1.5 mb-5">
+        {panelDefs.map((p, i) => (
+          <button key={p.key} onClick={() => goToPanel(i)} aria-label={`Панель ${i + 1}`}
+            style={{ width: 6, height: 6, borderRadius: 999, background: i === activePanel ? C.ink : C.border, border: "none", padding: 0 }} />
+        ))}
+      </div>
+
+      <button onClick={() => setShowFull((s) => !s)}
+        className="w-full text-center mb-4" style={{ color: C.inkMuted, textDecoration: "underline", fontSize: 12, background: "none", border: "none" }}>
+        {showFull ? "Скрыть остальное" : "Доход, перевод, коррекция…"}
+      </button>
+
+      {showFull && <FullAddForm key={prefillSeq} settings={settings} transactions={transactions} onAdd={onAdd} initial={prefill} />}
     </div>
   );
 }
@@ -930,25 +1160,97 @@ function NumField({ label, value, onChange, onBlur, hint }) {
   );
 }
 
-function CatEditor({ items, onRemove, color, newVal, setNewVal, onAdd }) {
+function IconGrid({ value, onChange }) {
+  return (
+    <div className="flex flex-wrap gap-1.5 mb-2">
+      {ICON_KEYS.map((key) => {
+        const Icon = getIcon(key);
+        const active = value === key;
+        return (
+          <button key={key} onClick={() => onChange(key)} type="button"
+            className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ background: active ? C.ink : C.bg, color: active ? C.surface : C.inkMuted }}>
+            <Icon size={15} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ColorGrid({ value, onChange }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {CATEGORY_COLORS.map((c) => (
+        <button key={c} onClick={() => onChange(c)} type="button"
+          className="w-7 h-7 rounded-full"
+          style={{ background: c, outline: value === c ? `2px solid ${C.ink}` : "none", outlineOffset: 2, border: "none" }} />
+      ))}
+    </div>
+  );
+}
+
+function CategoryEditor({ categories, onChange }) {
+  const [editing, setEditing] = useState(null);
+  const [newName, setNewName] = useState("");
+  const [newIcon, setNewIcon] = useState(ICON_KEYS[0]);
+  const [newColor, setNewColor] = useState(CATEGORY_COLORS[0]);
+
+  function updateCategory(name, patch) {
+    onChange(categories.map((c) => (c.name === name ? { ...c, ...patch } : c)));
+  }
+  function removeCategory(name) {
+    onChange(categories.filter((c) => c.name !== name));
+    if (editing === name) setEditing(null);
+  }
+  function addCategory() {
+    const name = newName.trim();
+    if (!name || categories.some((c) => c.name === name)) return;
+    onChange([...categories, { name, icon: newIcon, color: newColor }]);
+    setNewName("");
+    setNewIcon(ICON_KEYS[0]);
+    setNewColor(CATEGORY_COLORS[0]);
+  }
+
   return (
     <div className="mb-2">
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        {items.map((name) => (
-          <span key={name} className="inline-flex items-center gap-1 rounded-full pl-2.5 pr-1.5 py-1 text-xs"
-            style={{ background: C.bg, color: C.ink }}>
-            {name}
-            <button onClick={() => onRemove(name)} style={{ color: C.inkMuted }}><X size={12} /></button>
-          </span>
-        ))}
+      <div className="space-y-2 mb-3">
+        {categories.map((cat) => {
+          const Icon = getIcon(cat.icon);
+          const isEditing = editing === cat.name;
+          return (
+            <div key={cat.name} className="rounded-lg border" style={{ borderColor: C.border }}>
+              <div className="flex items-center gap-2.5 p-2">
+                <button onClick={() => setEditing(isEditing ? null : cat.name)} type="button"
+                  className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                  style={{ background: cat.color + "22" }}>
+                  <Icon size={17} style={{ color: cat.color }} />
+                </button>
+                <span className="text-xs flex-1">{cat.name}</span>
+                <button onClick={() => removeCategory(cat.name)} type="button" style={{ color: C.inkMuted }}>
+                  <X size={14} />
+                </button>
+              </div>
+              {isEditing && (
+                <div className="p-2 pt-0">
+                  <IconGrid value={cat.icon} onChange={(icon) => updateCategory(cat.name, { icon })} />
+                  <ColorGrid value={cat.color} onChange={(color) => updateCategory(cat.name, { color })} />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-      <div className="flex gap-2">
-        <input type="text" value={newVal} onChange={(e) => setNewVal(e.target.value)}
+
+      <div className="rounded-lg border p-2.5" style={{ borderColor: C.border }}>
+        <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
           placeholder="Новая категория"
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onAdd(); } }}
-          className="flex-1 border rounded-lg px-3 py-1.5 text-xs" style={{ borderColor: C.border, color: C.ink }} />
-        <button onClick={onAdd} className="rounded-lg px-3 text-xs font-medium" style={{ background: color, color: "#fff" }}>
-          Добавить
+          className="w-full border rounded-lg px-3 py-1.5 text-xs mb-2" style={{ borderColor: C.border, color: C.ink }} />
+        <IconGrid value={newIcon} onChange={setNewIcon} />
+        <ColorGrid value={newColor} onChange={setNewColor} />
+        <button onClick={addCategory} type="button"
+          className="w-full rounded-lg py-2 text-xs font-medium mt-2" style={{ background: C.ink, color: C.surface }}>
+          Добавить категорию
         </button>
       </div>
     </div>
@@ -957,8 +1259,6 @@ function CatEditor({ items, onRemove, color, newVal, setNewVal, onAdd }) {
 
 function SettingsView({ settings, onSave, onWipeAll }) {
   const [local, setLocal] = useState(settings);
-  const [newNeedCat, setNewNeedCat] = useState("");
-  const [newWantCat, setNewWantCat] = useState("");
   const [armed, setArmed] = useState(false);
   const armTimer = useRef(null);
 
@@ -987,25 +1287,13 @@ function SettingsView({ settings, onSave, onWipeAll }) {
     setLocal(nextSettings); onSave(nextSettings);
   }
 
-  function addNeedCat() {
-    const name = newNeedCat.trim();
-    if (!name || local.needCats.includes(name)) return;
-    const next = { ...local, needCats: [...local.needCats, name] };
-    setLocal(next); onSave(next); setNewNeedCat("");
+  function saveNeedCats(next) {
+    const s = { ...local, needCats: next };
+    setLocal(s); onSave(s);
   }
-  function removeNeedCat(name) {
-    const next = { ...local, needCats: local.needCats.filter((c) => c !== name) };
-    setLocal(next); onSave(next);
-  }
-  function addWantCat() {
-    const name = newWantCat.trim();
-    if (!name || local.wantCats.includes(name)) return;
-    const next = { ...local, wantCats: [...local.wantCats, name] };
-    setLocal(next); onSave(next); setNewWantCat("");
-  }
-  function removeWantCat(name) {
-    const next = { ...local, wantCats: local.wantCats.filter((c) => c !== name) };
-    setLocal(next); onSave(next);
+  function saveWantCats(next) {
+    const s = { ...local, wantCats: next };
+    setLocal(s); onSave(s);
   }
 
   function handleDangerClick() {
@@ -1042,7 +1330,7 @@ function SettingsView({ settings, onSave, onWipeAll }) {
           );
         })}
       </div>
-      <div className="text-xs mb-5" style={{ color: C.inkMuted }}>В эти дни на «Обзоре» будет появляться напоминание сделать переводы.</div>
+      <div className="text-xs mb-5" style={{ color: C.inkMuted }}>В эти дни на «Обзоре» будет появляться напоминание сделать переводы, и они появятся плитками на вкладке «Добавить».</div>
 
       <SectionTitle>Начальный баланс</SectionTitle>
       <NumField label="Сбербанк, ₽" value={local.openingBalance.sber}
@@ -1059,12 +1347,10 @@ function SettingsView({ settings, onSave, onWipeAll }) {
       <NumField label="Цель, ₽" value={local.goal} onChange={(v) => field("goal", v)} onBlur={commit} />
 
       <SectionTitle>Категории — Нужды (Сбер)</SectionTitle>
-      <CatEditor items={local.needCats} onRemove={removeNeedCat} color={C.sber}
-        newVal={newNeedCat} setNewVal={setNewNeedCat} onAdd={addNeedCat} />
+      <CategoryEditor categories={local.needCats} onChange={saveNeedCats} />
 
       <SectionTitle>Категории — Развлечения (Альфа)</SectionTitle>
-      <CatEditor items={local.wantCats} onRemove={removeWantCat} color={C.alfa}
-        newVal={newWantCat} setNewVal={setNewWantCat} onAdd={addWantCat} />
+      <CategoryEditor categories={local.wantCats} onChange={saveWantCats} />
 
       <SectionTitle>Подписки</SectionTitle>
       <div className="text-xs rounded-lg border p-3 mb-5" style={{ borderColor: C.border, color: C.inkMuted }}>
