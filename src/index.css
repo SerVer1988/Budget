@@ -1,42 +1,54 @@
-
-.font-display { font-family: "Space Grotesk", system-ui, sans-serif; }
-.font-mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
-
-button { -webkit-tap-highlight-color: transparent; }
-
-.expense-screen {
-  --expense-green: #123c0d;
-  --expense-lime: #35dc22;
-  position: relative;
-  min-height: calc(100vh - 7.5rem);
-  color: var(--expense-green);
-  isolation: isolate;
-}
-
-.expense-screen::before,
-.expense-screen::after {
-  content: "";
+ 
+.app-tab-bar {
   position: fixed;
-  z-index: -1;
-  width: 180px;
-  height: 320px;
-  opacity: .17;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 42px 18px at 30% 18%, #28a744 0 55%, transparent 58%),
-    radial-gradient(ellipse 46px 19px at 63% 34%, #28a744 0 55%, transparent 58%),
-    radial-gradient(ellipse 48px 20px at 25% 52%, #28a744 0 55%, transparent 58%),
-    radial-gradient(ellipse 43px 18px at 65% 69%, #28a744 0 55%, transparent 58%),
-    linear-gradient(74deg, transparent 48%, #258a3a 49% 51%, transparent 52%);
+  right: 14px;
+  bottom: 12px;
+  left: 14px;
+  z-index: 40;
+  max-width: 452px;
+  margin: 0 auto;
+  padding: 5px 7px;
+  border: 1px solid #cad6c6;
+  border-radius: 22px;
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 3px 12px rgba(29, 66, 25, .14);
+  backdrop-filter: blur(8px);
 }
-
-.expense-screen::before { left: -75px; top: 160px; transform: rotate(-20deg); }
-.expense-screen::after { right: -88px; bottom: 25px; transform: rotate(18deg) scaleX(-1); }
-
-.operation-switch {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  margin: 0 auto 34px;
-  overflow: hidden;
-  border: 1px solid #b5c7ae;
-  border-radius: 17px;
+ 
+.app-tab-button {
+  display: flex;
+  min-width: 52px;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: #5b6b62;
+}
+ 
+.app-tab-button.active {
+  background: #e5f7dc;
+  color: #143f0d;
+}
+ 
+.app-tab-button.active svg {
+  padding: 3px;
+  border-radius: 50%;
+  background: #123c0d;
+  color: #fff;
+  box-sizing: content-box;
+}
+ 
+.app-tab-button span { font-size: 10px; }
+ 
+@media (max-width: 390px) {
+  .operation-switch button { font-size: 12px; }
+  .expense-summary { margin-inline: 5px; }
+  .expense-summary strong { font-size: 17px; }
+  .expense-category-card { grid-template-columns: 54px minmax(0, 1fr); gap: 7px; padding: 10px 8px; }
+  .expense-category-icon { width: 52px; height: 52px; }
+  .app-tab-button { min-width: 45px; padding-inline: 4px; }
+}
+ 
