@@ -1,3 +1,4 @@
+ 
   function addTransaction(tx) {
     const next = [...transactions, { ...tx, id: uid() }];
     persistTransactions(next);
