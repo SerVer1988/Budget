@@ -415,26 +415,6 @@ function BankCard({ stripe, soft, name, role, bigLabel, bigValue, pct, sub, foot
   );
 }
 
-function MiniCatList({ title, color, items }) {
-  return (
-    <div className="rounded-lg border p-3" style={{ borderColor: C.border, background: C.surface }}>
-      <div className="text-xs font-medium mb-2" style={{ color }}>{title}</div>
-      {items.length === 0 ? (
-        <div className="text-xs" style={{ color: C.inkMuted }}>Нет трат</div>
-      ) : (
-        <div className="space-y-1">
-          {items.map(([cat, val]) => (
-            <div key={cat} className="flex justify-between text-xs gap-2">
-              <span style={{ color: C.inkMuted }} className="truncate">{cat}</span>
-              <span className="font-mono shrink-0">{formatMoney(val)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function TxRow({ tx, onDelete }) {
   const color = tx.type === "income" ? C.sber
     : tx.type === "expense" ? (tx.card === "sber" ? C.sber : C.alfa)
@@ -501,67 +481,6 @@ function Toast({ text }) {
 }
 
 /* ============================================================ Dashboard */
-function DashboardView({ settings, transactions, selectedMonth, setSelectedMonth, onDelete, onToggleInclude, goToAdd }) {
-  const cutoff = endOfMonthStr(selectedMonth);
-  const bal = useMemo(() => computeBalances(transactions, settings, cutoff), [transactions, settings, cutoff]);
-  const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
-  const hasAnyTx = transactions.length > 0;
-
-  const totalBalance =
-    (settings.includeInTotal.sber ? bal.sber : 0) +
-    (settings.includeInTotal.alfa ? bal.alfa : 0) +
-    (settings.includeInTotal.ozon ? bal.ozon : 0);
-
-  const sberUtil = agg.sberAvail > 0 ? agg.sberSpent / agg.sberAvail : 0;
-  const alfaUtil = agg.alfaAvail > 0 ? agg.alfaSpent / agg.alfaAvail : 0;
-  const ozonPct = settings.goal > 0 ? bal.ozon / settings.goal : 0;
-
-  const topNeedCats = Object.entries(agg.needCatTotals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  const topWantCats = Object.entries(agg.wantCatTotals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
-
-  return (
-    <div>
-      <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
-      <PaydayReminder settings={settings} transactions={transactions} />
-
-      {!hasAnyTx ? (
-        <EmptyState onAdd={goToAdd} />
-      ) : (
-        <>
-          <TotalBalanceCard total={totalBalance} settings={settings} onToggle={onToggleInclude} />
-
-          <BankCard stripe={C.sber} soft={C.sberSoft} name="Сбербанк" role="Обязательные нужды"
-            bigLabel="баланс" bigValue={bal.sber} pct={sberUtil}
-            sub={`Пришло +${formatMoney(agg.sberInflow)} · Ушло −${formatMoney(agg.sberOutflow)}`} />
-          <BankCard stripe={C.alfa} soft={C.alfaSoft} name="Альфа-Банк" role="Развлечения"
-            bigLabel="баланс" bigValue={bal.alfa} pct={alfaUtil}
-            sub={`Пришло +${formatMoney(agg.alfaInflow)} · Ушло −${formatMoney(agg.alfaOutflow)}`} />
-          <BankCard stripe={C.ozon} soft={C.ozonSoft} name="Озон Банк" role="Подушка безопасности"
-            bigLabel="баланс" bigValue={bal.ozon} pct={ozonPct}
-            sub={`Цель ${formatMoney(settings.goal)}`}
-            footnote={`За этот месяц: ${agg.ozonNet >= 0 ? "+" : ""}${formatMoney(agg.ozonNet)}`} />
-
-          {(topNeedCats.length > 0 || topWantCats.length > 0) && (
-            <div className="grid grid-cols-2 gap-3 mt-2 mb-2">
-              <MiniCatList title="Нужды" color={C.sber} items={topNeedCats} />
-              <MiniCatList title="Развлечения" color={C.alfa} items={topWantCats} />
-            </div>
-          )}
-
-          <div className="mt-5">
-            <div className="text-xs font-medium mb-2" style={{ color: C.inkMuted }}>Операции за месяц</div>
-            {agg.items.length === 0 ? (
-              <div className="text-xs py-4 text-center" style={{ color: C.inkMuted }}>Пока нет операций в этом месяце</div>
-            ) : (
-              <div>{agg.items.slice(0, 10).map((t) => <TxRow key={t.id} tx={t} onDelete={onDelete} />)}</div>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 /* ============================================================ Quick-add carousel */
 function QuickTile({ icon: Icon, color, name, amount, onClick, isAddNew }) {
   if (isAddNew) {
@@ -592,7 +511,7 @@ function QuickTile({ icon: Icon, color, name, amount, onClick, isAddNew }) {
   );
 }
 
-function CategoryPanel({ title, accentColor, card, categories, transactions, onQuickAdd, onOpenFull }) {
+function CategoryPanel({ title, accentColor, card, categories, transactions, onOpenFull }) {
   const stats = useMemo(() => categoryStats(transactions, card), [transactions, card]);
   const ordered = useMemo(
     () => [...categories].sort((a, b) => (stats[b.name]?.count || 0) - (stats[a.name]?.count || 0)),
@@ -611,9 +530,9 @@ function CategoryPanel({ title, accentColor, card, categories, transactions, onQ
             <QuickTile key={cat.name} icon={Icon} color={cat.color} name={cat.name} amount={s?.modalAmount ?? null}
               onClick={() => {
                 if (s?.modalAmount != null) {
-                  onQuickAdd({ type: "expense", date: todayStr(), amount: s.modalAmount, card, category: cat.name, note: "" });
+                  onOpenFull({ type: "expense", card, category: cat.name, amount: s.modalAmount });
                 } else {
-                  onOpenFull({ type: "expense", card, category: cat.name });
+                  onOpenFull({ type: "expense", card });
                 }
               }} />
           );
@@ -623,14 +542,30 @@ function CategoryPanel({ title, accentColor, card, categories, transactions, onQ
   );
 }
 
-function OzonPanel({ settings, transactions, onQuickAdd, onOpenFull }) {
+function OzonPanel({ settings, transactions, onOpenFull }) {
   const dayStats = useMemo(() => ozonDayStats(transactions), [transactions]);
   const days = settings.reminderDays.length ? settings.reminderDays : [5, 15, 30];
+
+  // detailed savings info (previously a separate "Подушка" tab, now folded into this panel)
+  const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
+  const totalSaved = balances.ozon;
+  const pct = settings.goal > 0 ? totalSaved / settings.goal : 0;
+  const left = settings.goal - totalSaved;
+  const rate = useMemo(() => estimateMonthlyRate(transactions, settings, todayMonthKey()), [transactions, settings]);
+  const monthsLeft = left <= 0 ? 0 : (rate > 0 ? Math.ceil(left / rate) : null);
+  const thisMonth = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
+  const ozonEntries = useMemo(() => {
+    const list = transactions.filter((t) =>
+      (t.type === "adjustment" && t.card === "ozon") ||
+      (t.type === "transfer" && (t.fromCard === "ozon" || t.toCard === "ozon"))
+    );
+    return list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  }, [transactions]);
 
   return (
     <div>
       <div className="text-sm font-semibold mb-3 text-center" style={{ color: C.ozon }}>Подушка</div>
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 gap-2.5 mb-5">
         <QuickTile isAddNew onClick={() => onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon" })} />
         {days.map((d) => {
           const s = dayStats[d];
@@ -638,7 +573,7 @@ function OzonPanel({ settings, transactions, onQuickAdd, onOpenFull }) {
             <QuickTile key={d} icon={PiggyBank} color={C.ozon} name={`${d} числа`} amount={s?.modalAmount ?? null}
               onClick={() => {
                 if (s?.modalAmount != null) {
-                  onQuickAdd({ type: "transfer", date: todayStr(), amount: s.modalAmount, fromCard: "sber", toCard: "ozon", note: `Быстрый перевод (${d} число)` });
+                  onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon", amount: s.modalAmount });
                 } else {
                   onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon" });
                 }
@@ -646,6 +581,58 @@ function OzonPanel({ settings, transactions, onQuickAdd, onOpenFull }) {
           );
         })}
       </div>
+
+      <div className="rounded-lg border p-5 mb-4 text-center" style={{ borderColor: C.border, background: C.surface }}>
+        <div className="text-xs mb-1" style={{ color: C.inkMuted }}>Баланс на Озон</div>
+        <div className="font-mono text-3xl font-semibold mb-1" style={{ color: C.ozon }}>{formatMoney(totalSaved)}</div>
+        <div className="text-xs mb-3" style={{ color: C.inkMuted }}>из цели {formatMoney(settings.goal)}</div>
+        <div className="h-2 rounded-full overflow-hidden mb-3" style={{ background: C.ozonSoft }}>
+          <div className="h-full rounded-full" style={{ width: `${clampPct(pct) * 100}%`, background: C.ozon }} />
+        </div>
+        <div className="flex justify-between text-xs font-mono">
+          <span style={{ color: C.inkMuted }}>{Math.round(pct * 100)}%</span>
+          <span style={{ color: C.inkMuted }}>{left > 0 ? `осталось ${formatMoney(left)}` : "цель достигнута 🎉"}</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <StatBox label="В этом месяце" value={`${thisMonth.ozonNet >= 0 ? "+" : ""}${formatMoney(thisMonth.ozonNet)}`} color={C.ozon} />
+        <StatBox label="Прогноз до цели" value={monthsLeft === 0 ? "готово" : monthsLeft ? `~${monthsLeft} мес.` : "—"} color={C.ozon} />
+      </div>
+
+      <div className="rounded-lg p-3 text-xs mb-5" style={{ background: C.amberSoft, color: "#8A5A15" }}>
+        Деньги из подушки не трогаем ни при каких условиях, кроме реального форс-мажора — потери работы или проблем со здоровьем.
+        С 3-го месяца стоит подключить Ozon Premium (199 ₽/мес): ставка поднимется примерно до 12% годовых.
+      </div>
+
+      <div className="text-xs font-medium mb-2" style={{ color: C.inkMuted }}>История по Озон</div>
+      {ozonEntries.length === 0 ? (
+        <div className="text-xs py-4 text-center" style={{ color: C.inkMuted }}>
+          Переводы и корректировки, которые касаются Озон, появятся здесь.
+        </div>
+      ) : (
+        <div>
+          {ozonEntries.map((t) => {
+            const isTransferOut = t.type === "transfer" && t.fromCard === "ozon";
+            const signedAmt = isTransferOut ? -t.amount : t.amount;
+            const label = t.type === "adjustment"
+              ? (t.note || (t.amount < 0 ? "Списание" : "Пополнение"))
+              : isTransferOut ? (t.note || `Перевод в ${cardLabel(t.toCard)}`)
+              : (t.note || `Перевод из ${cardLabel(t.fromCard)}`);
+            return (
+              <div key={t.id} className="flex items-center justify-between text-xs py-2 border-b" style={{ borderColor: C.border }}>
+                <div>
+                  <div>{label} {t.hidden ? "(скрыто)" : ""}</div>
+                  <div className="text-xs" style={{ color: C.inkMuted }}>{t.date}</div>
+                </div>
+                <div className="font-mono font-medium" style={{ color: signedAmt < 0 ? C.danger : C.ozon }}>
+                  {signedAmt < 0 ? "−" : "+"}{formatMoney(Math.abs(signedAmt))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -686,7 +673,7 @@ const TYPE_OPTIONS = [
 function FullAddForm({ settings, transactions, onAdd, initial }) {
   const [type, setType] = useState(initial?.type || "expense");
   const [date, setDate] = useState(todayStr());
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(initial?.amount != null ? String(initial.amount) : "");
   const [card, setCard] = useState(initial?.card || "sber");
   const [incomeCard, setIncomeCard] = useState("sber");
   const [fromCard, setFromCard] = useState(initial?.fromCard || "sber");
@@ -771,16 +758,20 @@ function FullAddForm({ settings, transactions, onAdd, initial }) {
 
       {type === "transfer" && (
         <>
-          <div className="mb-3">
-            <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Откуда</label>
-            <CardPicker options={ALL_CARDS} value={fromCard} onChange={setFromCard} />
-          </div>
-          <div className="mb-2">
-            <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Куда</label>
-            <CardPicker options={ALL_CARDS} value={toCard} onChange={setToCard} />
-          </div>
-          {fromCard === toCard && (
-            <div className="text-xs mb-3" style={{ color: C.danger }}>Карты должны отличаться</div>
+          {!(initial?.fromCard && initial?.toCard) && (
+            <>
+              <div className="mb-3">
+                <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Откуда</label>
+                <CardPicker options={ALL_CARDS} value={fromCard} onChange={setFromCard} />
+              </div>
+              <div className="mb-2">
+                <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Куда</label>
+                <CardPicker options={ALL_CARDS} value={toCard} onChange={setToCard} />
+              </div>
+              {fromCard === toCard && (
+                <div className="text-xs mb-3" style={{ color: C.danger }}>Карты должны отличаться</div>
+              )}
+            </>
           )}
           <div className="text-xs mb-4" style={{ color: C.inkMuted }}>
             Баланс «Откуда»: <span className="font-mono">{formatMoney(currentBalances[fromCard] || 0)}</span>
@@ -860,10 +851,12 @@ function FullAddForm({ settings, transactions, onAdd, initial }) {
 
       {type === "expense" && (
         <>
-          <div className="mb-4">
-            <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Карта</label>
-            <CardPicker options={EXPENSE_CARDS} value={card} onChange={setCard} />
-          </div>
+          {!initial?.card && (
+            <div className="mb-4">
+              <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Карта</label>
+              <CardPicker options={EXPENSE_CARDS} value={card} onChange={setCard} />
+            </div>
+          )}
           <div className="mb-4">
             <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Категория</label>
             <select value={category} onChange={(e) => setCategory(e.target.value)}
@@ -925,8 +918,8 @@ function FullAddForm({ settings, transactions, onAdd, initial }) {
 }
 
 function AddView({ settings, transactions, onAdd }) {
+  const [view, setView] = useState("carousel"); // "carousel" | "form"
   const [activePanel, setActivePanel] = useState(0);
-  const [showFull, setShowFull] = useState(false);
   const [prefill, setPrefill] = useState(null);
   const [prefillSeq, setPrefillSeq] = useState(0);
   const scrollRef = useRef(null);
@@ -934,7 +927,12 @@ function AddView({ settings, transactions, onAdd }) {
   function openFull(partial) {
     setPrefill(partial);
     setPrefillSeq((s) => s + 1);
-    setShowFull(true);
+    setView("form");
+  }
+
+  function handleAdd(tx) {
+    onAdd(tx);
+    setView("carousel");
   }
 
   function goToPanel(i) {
@@ -950,10 +948,23 @@ function AddView({ settings, transactions, onAdd }) {
     if (idx !== activePanel) setActivePanel(idx);
   }
 
+  if (view === "form") {
+    return (
+      <div>
+        <button onClick={() => setView("carousel")}
+          className="flex items-center gap-1 mb-4"
+          style={{ color: C.inkMuted, background: "none", border: "none", fontSize: 13, padding: 0 }}>
+          <ChevronLeft size={16} /> Назад
+        </button>
+        <FullAddForm key={prefillSeq} settings={settings} transactions={transactions} onAdd={handleAdd} initial={prefill} />
+      </div>
+    );
+  }
+
   const panelDefs = [
-    { key: "need", render: () => <CategoryPanel title="Нужды" accentColor={C.sber} card="sber" categories={settings.needCats} transactions={transactions} onQuickAdd={onAdd} onOpenFull={openFull} /> },
-    { key: "want", render: () => <CategoryPanel title="Развлечения" accentColor={C.alfa} card="alfa" categories={settings.wantCats} transactions={transactions} onQuickAdd={onAdd} onOpenFull={openFull} /> },
-    { key: "ozon", render: () => <OzonPanel settings={settings} transactions={transactions} onQuickAdd={onAdd} onOpenFull={openFull} /> },
+    { key: "need", render: () => <CategoryPanel title="Нужды" accentColor={C.sber} card="sber" categories={settings.needCats} transactions={transactions} onOpenFull={openFull} /> },
+    { key: "want", render: () => <CategoryPanel title="Развлечения" accentColor={C.alfa} card="alfa" categories={settings.wantCats} transactions={transactions} onOpenFull={openFull} /> },
+    { key: "ozon", render: () => <OzonPanel settings={settings} transactions={transactions} onOpenFull={openFull} /> },
   ];
 
   return (
@@ -971,107 +982,37 @@ function AddView({ settings, transactions, onAdd }) {
             style={{ width: 6, height: 6, borderRadius: 999, background: i === activePanel ? C.ink : C.border, border: "none", padding: 0 }} />
         ))}
       </div>
-
-      <button onClick={() => setShowFull((s) => !s)}
-        className="w-full text-center mb-4" style={{ color: C.inkMuted, textDecoration: "underline", fontSize: 12, background: "none", border: "none" }}>
-        {showFull ? "Скрыть остальное" : "Доход, перевод, коррекция…"}
-      </button>
-
-      {showFull && <FullAddForm key={prefillSeq} settings={settings} transactions={transactions} onAdd={onAdd} initial={prefill} />}
-    </div>
-  );
-}
-
-/* ============================================================ Savings */
-function SavingsView({ settings, transactions }) {
-  const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
-  const totalSaved = balances.ozon;
-  const pct = settings.goal > 0 ? totalSaved / settings.goal : 0;
-  const left = settings.goal - totalSaved;
-  const rate = useMemo(() => estimateMonthlyRate(transactions, settings, todayMonthKey()), [transactions, settings]);
-  const monthsLeft = left <= 0 ? 0 : (rate > 0 ? Math.ceil(left / rate) : null);
-  const thisMonth = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
-
-  const ozonEntries = useMemo(() => {
-    const list = transactions.filter((t) =>
-      (t.type === "adjustment" && t.card === "ozon") ||
-      (t.type === "transfer" && (t.fromCard === "ozon" || t.toCard === "ozon"))
-    );
-    return list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  }, [transactions]);
-
-  return (
-    <div>
-      <div className="rounded-lg border p-5 mb-4 text-center" style={{ borderColor: C.border, background: C.surface }}>
-        <div className="text-xs mb-1" style={{ color: C.inkMuted }}>Баланс на Озон</div>
-        <div className="font-mono text-3xl font-semibold mb-1" style={{ color: C.ozon }}>{formatMoney(totalSaved)}</div>
-        <div className="text-xs mb-3" style={{ color: C.inkMuted }}>из цели {formatMoney(settings.goal)}</div>
-        <div className="h-2 rounded-full overflow-hidden mb-3" style={{ background: C.ozonSoft }}>
-          <div className="h-full rounded-full" style={{ width: `${clampPct(pct) * 100}%`, background: C.ozon }} />
-        </div>
-        <div className="flex justify-between text-xs font-mono">
-          <span style={{ color: C.inkMuted }}>{Math.round(pct * 100)}%</span>
-          <span style={{ color: C.inkMuted }}>{left > 0 ? `осталось ${formatMoney(left)}` : "цель достигнута 🎉"}</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <StatBox label="В этом месяце" value={`${thisMonth.ozonNet >= 0 ? "+" : ""}${formatMoney(thisMonth.ozonNet)}`} color={C.ozon} />
-        <StatBox label="Прогноз до цели" value={monthsLeft === 0 ? "готово" : monthsLeft ? `~${monthsLeft} мес.` : "—"} color={C.ozon} />
-      </div>
-
-      <div className="rounded-lg p-3 text-xs mb-5" style={{ background: C.amberSoft, color: "#8A5A15" }}>
-        Деньги из подушки не трогаем ни при каких условиях, кроме реального форс-мажора — потери работы или проблем со здоровьем.
-        С 3-го месяца стоит подключить Ozon Premium (199 ₽/мес): ставка поднимется примерно до 12% годовых.
-      </div>
-
-      <div className="text-xs font-medium mb-2" style={{ color: C.inkMuted }}>История по Озон</div>
-      {ozonEntries.length === 0 ? (
-        <div className="text-xs py-4 text-center" style={{ color: C.inkMuted }}>
-          Переводы и корректировки, которые касаются Озон, появятся здесь.
-        </div>
-      ) : (
-        <div>
-          {ozonEntries.map((t) => {
-            const isTransferOut = t.type === "transfer" && t.fromCard === "ozon";
-            const signedAmt = isTransferOut ? -t.amount : t.amount;
-            const label = t.type === "adjustment"
-              ? (t.note || (t.amount < 0 ? "Списание" : "Пополнение"))
-              : isTransferOut ? (t.note || `Перевод в ${cardLabel(t.toCard)}`)
-              : (t.note || `Перевод из ${cardLabel(t.fromCard)}`);
-            return (
-              <div key={t.id} className="flex items-center justify-between text-xs py-2 border-b" style={{ borderColor: C.border }}>
-                <div>
-                  <div>{label} {t.hidden ? "(скрыто)" : ""}</div>
-                  <div className="text-xs" style={{ color: C.inkMuted }}>{t.date}</div>
-                </div>
-                <div className="font-mono font-medium" style={{ color: signedAmt < 0 ? C.danger : C.ozon }}>
-                  {signedAmt < 0 ? "−" : "+"}{formatMoney(Math.abs(signedAmt))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
 
 /* ============================================================ Analysis */
-function AnalysisView({ settings, transactions, selectedMonth, setSelectedMonth }) {
+function AnalysisView({ settings, transactions, selectedMonth, setSelectedMonth, onDelete, onToggleInclude, goToAdd }) {
+  const cutoff = endOfMonthStr(selectedMonth);
+  const bal = useMemo(() => computeBalances(transactions, settings, cutoff), [transactions, settings, cutoff]);
+  const hasAnyTx = transactions.length > 0;
+
+  const totalBalance =
+    (settings.includeInTotal.sber ? bal.sber : 0) +
+    (settings.includeInTotal.alfa ? bal.alfa : 0) +
+    (settings.includeInTotal.ozon ? bal.ozon : 0);
+  const ozonPct = settings.goal > 0 ? bal.ozon / settings.goal : 0;
+
   const months = useMemo(() => getAllMonthKeys(transactions).slice(-6), [transactions]);
 
   const chartData = useMemo(() => months.map((mk) => {
-    const agg = aggregateMonth(mk, transactions, settings);
+    const a = aggregateMonth(mk, transactions, settings);
     return {
       month: monthLabelShort(mk),
-      "Нужды": Math.round(agg.sberSpent),
-      "Развлечения": Math.round(agg.alfaSpent),
-      "Накопления": Math.round(agg.ozonNet),
+      "Нужды": Math.round(a.sberSpent),
+      "Развлечения": Math.round(a.alfaSpent),
+      "Накопления": Math.round(a.ozonNet),
     };
   }), [months, transactions, settings]);
 
   const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
+  const sberUtil = agg.sberAvail > 0 ? agg.sberSpent / agg.sberAvail : 0;
+  const alfaUtil = agg.alfaAvail > 0 ? agg.alfaSpent / agg.alfaAvail : 0;
 
   const allCats = useMemo(() => {
     const need = Object.entries(agg.needCatTotals).map(([cat, val]) => ({ cat, val, type: "need" }));
@@ -1084,63 +1025,90 @@ function AnalysisView({ settings, transactions, selectedMonth, setSelectedMonth 
   return (
     <div>
       <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
+      <PaydayReminder settings={settings} transactions={transactions} />
 
-      {months.length < 2 ? (
-        <div className="text-xs rounded-lg border p-4 mb-4" style={{ borderColor: C.border, color: C.inkMuted }}>
-          Тренд по месяцам появится, когда наберётся история за 2 и более месяцев.
-        </div>
+      {!hasAnyTx ? (
+        <EmptyState onAdd={goToAdd} />
       ) : (
-        <div className="rounded-lg border p-3 mb-5" style={{ borderColor: C.border, background: C.surface }}>
-          <div className="text-xs font-medium mb-3" style={{ color: C.inkMuted }}>Тренд по месяцам</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: C.inkMuted }} axisLine={{ stroke: C.border }} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} axisLine={false} tickLine={false} width={40} />
-              <Tooltip formatter={(v) => formatMoney(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${C.border}` }} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="Нужды" fill={C.sber} radius={[3, 3, 0, 0]} />
-              <Bar dataKey="Развлечения" fill={C.alfa} radius={[3, 3, 0, 0]} />
-              <Bar dataKey="Накопления" fill={C.ozon} radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+        <>
+          <TotalBalanceCard total={totalBalance} settings={settings} onToggle={onToggleInclude} />
 
-      <div className="grid grid-cols-3 gap-2 mb-5">
-        <StatBox label="Доход" value={formatMoney(agg.incomeTotal)} color={C.ink} />
-        <StatBox label="Траты" value={formatMoney(agg.sberSpent + agg.alfaSpent)} color={C.ink} />
-        <StatBox label="В подушку" value={`${agg.ozonNet >= 0 ? "+" : ""}${formatMoney(agg.ozonNet)}`} color={C.ozon} />
-      </div>
+          <BankCard stripe={C.sber} soft={C.sberSoft} name="Сбербанк" role="Обязательные нужды"
+            bigLabel="баланс" bigValue={bal.sber} pct={sberUtil}
+            sub={`Пришло +${formatMoney(agg.sberInflow)} · Ушло −${formatMoney(agg.sberOutflow)}`} />
+          <BankCard stripe={C.alfa} soft={C.alfaSoft} name="Альфа-Банк" role="Развлечения"
+            bigLabel="баланс" bigValue={bal.alfa} pct={alfaUtil}
+            sub={`Пришло +${formatMoney(agg.alfaInflow)} · Ушло −${formatMoney(agg.alfaOutflow)}`} />
+          <BankCard stripe={C.ozon} soft={C.ozonSoft} name="Озон Банк" role="Подушка безопасности"
+            bigLabel="баланс" bigValue={bal.ozon} pct={ozonPct}
+            sub={`Цель ${formatMoney(settings.goal)}`}
+            footnote={`За этот месяц: ${agg.ozonNet >= 0 ? "+" : ""}${formatMoney(agg.ozonNet)}`} />
 
-      {topCat && (
-        <div className="text-xs mb-4" style={{ color: C.inkMuted }}>
-          Больше всего потрачено на «{topCat.cat}» — {formatMoney(topCat.val)}
-        </div>
-      )}
+          {months.length < 2 ? (
+            <div className="text-xs rounded-lg border p-4 mt-4 mb-4" style={{ borderColor: C.border, color: C.inkMuted }}>
+              Тренд по месяцам появится, когда наберётся история за 2 и более месяцев.
+            </div>
+          ) : (
+            <div className="rounded-lg border p-3 mt-4 mb-5" style={{ borderColor: C.border, background: C.surface }}>
+              <div className="text-xs font-medium mb-3" style={{ color: C.inkMuted }}>Тренд по месяцам</div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: C.inkMuted }} axisLine={{ stroke: C.border }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} axisLine={false} tickLine={false} width={40} />
+                  <Tooltip formatter={(v) => formatMoney(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${C.border}` }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="Нужды" fill={C.sber} radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="Развлечения" fill={C.alfa} radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="Накопления" fill={C.ozon} radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
-      <div className="text-xs font-medium mb-2" style={{ color: C.inkMuted }}>Расходы по категориям</div>
-      {allCats.length === 0 ? (
-        <div className="text-xs py-4 text-center" style={{ color: C.inkMuted }}>Трат в этом месяце пока нет</div>
-      ) : (
-        <div className="space-y-2.5">
-          {allCats.map(({ cat, val, type }) => {
-            const budget = type === "need" ? agg.sberAvail : agg.alfaAvail;
-            const color = type === "need" ? C.sber : C.alfa;
-            const pct = budget > 0 ? val / budget : 0;
-            return (
-              <div key={type + cat}>
-                <div className="flex justify-between text-xs mb-1">
-                  <span>{cat}</span>
-                  <span className="font-mono">{formatMoney(val)}</span>
-                </div>
-                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: type === "need" ? C.sberSoft : C.alfaSoft }}>
-                  <div className="h-full rounded-full" style={{ width: `${clampPct(pct) * 100}%`, background: color }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+          <div className="grid grid-cols-3 gap-2 mb-5">
+            <StatBox label="Доход" value={formatMoney(agg.incomeTotal)} color={C.ink} />
+            <StatBox label="Траты" value={formatMoney(agg.sberSpent + agg.alfaSpent)} color={C.ink} />
+            <StatBox label="В подушку" value={`${agg.ozonNet >= 0 ? "+" : ""}${formatMoney(agg.ozonNet)}`} color={C.ozon} />
+          </div>
+
+          {topCat && (
+            <div className="text-xs mb-4" style={{ color: C.inkMuted }}>
+              Больше всего потрачено на «{topCat.cat}» — {formatMoney(topCat.val)}
+            </div>
+          )}
+
+          <div className="text-xs font-medium mb-2" style={{ color: C.inkMuted }}>Расходы по категориям</div>
+          {allCats.length === 0 ? (
+            <div className="text-xs py-4 text-center" style={{ color: C.inkMuted }}>Трат в этом месяце пока нет</div>
+          ) : (
+            <div className="space-y-2.5 mb-5">
+              {allCats.map(({ cat, val, type }) => {
+                const budget = type === "need" ? agg.sberAvail : agg.alfaAvail;
+                const color = type === "need" ? C.sber : C.alfa;
+                const pct = budget > 0 ? val / budget : 0;
+                return (
+                  <div key={type + cat}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span>{cat}</span>
+                      <span className="font-mono">{formatMoney(val)}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: type === "need" ? C.sberSoft : C.alfaSoft }}>
+                      <div className="h-full rounded-full" style={{ width: `${clampPct(pct) * 100}%`, background: color }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="text-xs font-medium mb-2" style={{ color: C.inkMuted }}>Операции за месяц</div>
+          {agg.items.length === 0 ? (
+            <div className="text-xs py-4 text-center" style={{ color: C.inkMuted }}>Пока нет операций в этом месяце</div>
+          ) : (
+            <div>{agg.items.slice(0, 10).map((t) => <TxRow key={t.id} tx={t} onDelete={onDelete} />)}</div>
+          )}
+        </>
       )}
     </div>
   );
@@ -1374,9 +1342,7 @@ function SettingsView({ settings, onSave, onWipeAll }) {
 
 /* ============================================================ Tab bar */
 const TABS = [
-  { id: "dashboard", label: "Обзор", icon: Home },
   { id: "add", label: "Добавить", icon: Plus },
-  { id: "savings", label: "Подушка", icon: PiggyBank },
   { id: "analysis", label: "Анализ", icon: BarChart3 },
   { id: "settings", label: "Настройки", icon: SettingsIcon },
 ];
@@ -1407,7 +1373,7 @@ export default function App() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [transactions, setTransactions] = useState([]);
   const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState("add");
   const [selectedMonth, setSelectedMonth] = useState(todayMonthKey());
   const [toast, setToast] = useState(null);
 
@@ -1466,16 +1432,11 @@ export default function App() {
       </header>
 
       <main className="max-w-md mx-auto px-4 pb-24 pt-3">
-        {tab === "dashboard" && (
-          <DashboardView settings={settings} transactions={transactions}
-            selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth}
-            onDelete={deleteTransaction} onToggleInclude={toggleIncludeInTotal} goToAdd={() => setTab("add")} />
-        )}
         {tab === "add" && <AddView settings={settings} transactions={transactions} onAdd={addTransaction} />}
-        {tab === "savings" && <SavingsView settings={settings} transactions={transactions} />}
         {tab === "analysis" && (
           <AnalysisView settings={settings} transactions={transactions}
-            selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth} />
+            selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth}
+            onDelete={deleteTransaction} onToggleInclude={toggleIncludeInTotal} goToAdd={() => setTab("add")} />
         )}
         {tab === "settings" && (
           <SettingsView settings={settings} onSave={persistSettings}
