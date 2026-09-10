@@ -1,55 +1,17 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
 }
- 
-.app-tab-bar {
-  position: fixed;
-  right: 14px;
-  bottom: 12px;
-  left: 14px;
-  z-index: 40;
-  max-width: 452px;
-  margin: 0 auto;
-  padding: 5px 7px;
-  border: 1px solid #cad6c6;
-  border-radius: 22px;
-  background: rgba(255,255,255,.94);
-  box-shadow: 0 3px 12px rgba(29, 66, 25, .14);
-  backdrop-filter: blur(8px);
+
+body {
+  margin: 0;
+  font-family: "Space Grotesk", system-ui, sans-serif;
 }
- 
-.app-tab-button {
-  display: flex;
-  min-width: 52px;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 5px 7px;
-  border: 0;
-  border-radius: 14px;
-  background: transparent;
-  color: #5b6b62;
-}
- 
-.app-tab-button.active {
-  background: #e5f7dc;
-  color: #143f0d;
-}
- 
-.app-tab-button.active svg {
-  padding: 3px;
-  border-radius: 50%;
-  background: #123c0d;
-  color: #fff;
-  box-sizing: content-box;
-}
- 
-.app-tab-button span { font-size: 10px; }
- 
-@media (max-width: 390px) {
-  .operation-switch button { font-size: 12px; }
-  .expense-summary { margin-inline: 5px; }
-  .expense-summary strong { font-size: 17px; }
-  .expense-category-card { grid-template-columns: 54px minmax(0, 1fr); gap: 7px; padding: 10px 8px; }
-  .expense-category-icon { width: 52px; height: 52px; }
-  .app-tab-button { min-width: 45px; padding-inline: 4px; }
-}
- 
+
+.font-display { font-family: "Space Grotesk", system-ui, sans-serif; }
+.font-mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
