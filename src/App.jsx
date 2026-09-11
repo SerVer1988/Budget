@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Home, Plus, PiggyBank, BarChart3, Settings as SettingsIcon,
   ChevronLeft, ChevronRight, Trash2, Check, AlertTriangle, Wallet, X, ArrowUp, ArrowDown,
@@ -16,6 +16,7 @@ import { storage } from "./storage.js";
 const C = {
   bg: "#F1F4F2",
   surface: "#FFFFFF",
+  surface2: "#FAFBF7",
   ink: "#16201B",
   inkMuted: "#5B6B62",
   border: "#DCE3DD",
@@ -55,6 +56,7 @@ const DEFAULT_NEED_CATS = [
   { name: "Лекарства/здоровье", icon: "HeartPulse", color: "#D46A93" },
   { name: "Прочее", icon: "MoreHorizontal", color: "#6B7280" },
 ];
+
 const DEFAULT_WANT_CATS = [
   { name: "Кафе/рестораны", icon: "UtensilsCrossed", color: "#C4573B" },
   { name: "Кино/развлечения", icon: "Film", color: "#7C6FC4" },
@@ -129,17 +131,23 @@ function computeBalances(transactions, settings, uptoDateInclusive) {
   let alfa = settings.openingBalance?.alfa || 0;
   let ozon = settings.openingBalance?.ozon || 0;
   const list = uptoDateInclusive ? transactions.filter((t) => t.date <= uptoDateInclusive) : transactions;
+
   const add = (card, amt) => {
     if (card === "sber") sber += amt;
     else if (card === "alfa") alfa += amt;
     else if (card === "ozon") ozon += amt;
   };
+
   list.forEach((t) => {
     if (t.type === "income") add(t.card, t.amount);
     else if (t.type === "expense") add(t.card, -t.amount);
     else if (t.type === "adjustment") add(t.card, t.amount);
-    else if (t.type === "transfer") { add(t.fromCard, -t.amount); add(t.toCard, t.amount); }
+    else if (t.type === "transfer") {
+      add(t.fromCard, -t.amount);
+      add(t.toCard, t.amount);
+    }
   });
+
   return { sber, alfa, ozon };
 }
 
@@ -151,9 +159,12 @@ function aggregateMonth(mk, transactions, settings) {
     alfa: { income: 0, transferIn: 0, transferOut: 0, spent: 0, adj: 0 },
     ozon: { income: 0, transferIn: 0, transferOut: 0, spent: 0, adj: 0 },
   };
+
   let incomeTotal = 0;
-  const needCatTotals = {}; settings.needCats.forEach((c) => { needCatTotals[c.name] = 0; });
-  const wantCatTotals = {}; settings.wantCats.forEach((c) => { wantCatTotals[c.name] = 0; });
+  const needCatTotals = {};
+  const wantCatTotals = {};
+  settings.needCats.forEach((c) => { needCatTotals[c.name] = 0; });
+  settings.wantCats.forEach((c) => { wantCatTotals[c.name] = 0; });
 
   inMonth.forEach((t) => {
     if (t.type === "income") {
@@ -178,7 +189,10 @@ function aggregateMonth(mk, transactions, settings) {
     const net = avail - x.spent + x.adj;
     return { avail, inflow, outflow, net, spent: x.spent };
   }
-  const sberD = derive(acc.sber), alfaD = derive(acc.alfa), ozonD = derive(acc.ozon);
+
+  const sberD = derive(acc.sber);
+  const alfaD = derive(acc.alfa);
+  const ozonD = derive(acc.ozon);
 
   const items = inMonth.filter((t) => !t.hidden).sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? 1 : -1;
@@ -187,37 +201,52 @@ function aggregateMonth(mk, transactions, settings) {
 
   return {
     incomeTotal,
-    sberAvail: sberD.avail, alfaAvail: alfaD.avail, ozonAvail: ozonD.avail,
-    sberInflow: sberD.inflow, alfaInflow: alfaD.inflow, ozonInflow: ozonD.inflow,
-    sberOutflow: sberD.outflow, alfaOutflow: alfaD.outflow, ozonOutflow: ozonD.outflow,
-    sberSpent: sberD.spent, alfaSpent: alfaD.spent, ozonSpent: ozonD.spent,
-    sberNet: sberD.net, alfaNet: alfaD.net, ozonNet: ozonD.net,
-    needCatTotals, wantCatTotals, items,
+    sberAvail: sberD.avail,
+    alfaAvail: alfaD.avail,
+    ozonAvail: ozonD.avail,
+    sberInflow: sberD.inflow,
+    alfaInflow: alfaD.inflow,
+    ozonInflow: ozonD.inflow,
+    sberOutflow: sberD.outflow,
+    alfaOutflow: alfaD.outflow,
+    ozonOutflow: ozonD.outflow,
+    sberSpent: sberD.spent,
+    alfaSpent: alfaD.spent,
+    ozonSpent: ozonD.spent,
+    sberNet: sberD.net,
+    alfaNet: alfaD.net,
+    ozonNet: ozonD.net,
+    needCatTotals,
+    wantCatTotals,
+    items,
   };
 }
 
-// Per-category usage count and "modal" (most frequently used) amount, for a given card's
-// expense history — powers both the quick-add tile ordering and the pre-filled amount.
 function categoryStats(transactions, card) {
   const byName = {};
   transactions.filter((t) => t.type === "expense" && t.card === card).forEach((t) => {
     if (!byName[t.category]) byName[t.category] = {};
     byName[t.category][t.amount] = (byName[t.category][t.amount] || 0) + 1;
   });
+
   const stats = {};
   Object.entries(byName).forEach(([name, amounts]) => {
-    let count = 0, modalAmount = null, modalCount = 0;
+    let count = 0;
+    let modalAmount = null;
+    let modalCount = 0;
     Object.entries(amounts).forEach(([amtStr, c]) => {
       count += c;
-      if (c > modalCount) { modalCount = c; modalAmount = Number(amtStr); }
+      if (c > modalCount) {
+        modalCount = c;
+        modalAmount = Number(amtStr);
+      }
     });
     stats[name] = { count, modalAmount };
   });
+
   return stats;
 }
 
-// Same idea for the Ozon quick-add panel, grouped by day-of-month rather than category —
-// looks at transfers into Ozon and positive Ozon adjustments.
 function ozonDayStats(transactions) {
   const byDay = {};
   transactions.forEach((t) => {
@@ -225,39 +254,47 @@ function ozonDayStats(transactions) {
     if (t.type === "transfer" && t.toCard === "ozon") amt = t.amount;
     else if (t.type === "adjustment" && t.card === "ozon" && t.amount > 0) amt = t.amount;
     if (amt == null) return;
+
     const day = dayOfMonth(t.date);
     if (!byDay[day]) byDay[day] = {};
     byDay[day][amt] = (byDay[day][amt] || 0) + 1;
   });
+
   const result = {};
   Object.entries(byDay).forEach(([day, amounts]) => {
-    let count = 0, modalAmount = null, modalCount = 0;
+    let count = 0;
+    let modalAmount = null;
+    let modalCount = 0;
     Object.entries(amounts).forEach(([amtStr, c]) => {
       count += c;
-      if (c > modalCount) { modalCount = c; modalAmount = Number(amtStr); }
+      if (c > modalCount) {
+        modalCount = c;
+        modalAmount = Number(amtStr);
+      }
     });
     result[day] = { count, modalAmount };
   });
+
   return result;
 }
 
 function estimateMonthlyRate(transactions, settings, fromMonthKey) {
-  let mk = fromMonthKey, sum = 0, count = 0;
+  let mk = fromMonthKey;
+  let sum = 0;
+  let count = 0;
+
   for (let i = 0; i < 3; i++) {
     const agg = aggregateMonth(mk, transactions, settings);
-    if (agg.ozonNet !== 0) { sum += agg.ozonNet; count += 1; }
+    if (agg.ozonNet !== 0) {
+      sum += agg.ozonNet;
+      count += 1;
+    }
     mk = shiftMonth(mk, -1);
   }
+
   return count > 0 ? sum / count : 0;
 }
 
-function getAllMonthKeys(transactions) {
-  const set = new Set(transactions.map((t) => monthKeyOf(t.date)));
-  set.add(todayMonthKey());
-  return Array.from(set).sort();
-}
-
-/* ============================================================ migration (old data shapes) */
 function migrateCategoryList(list, defaults) {
   if (!Array.isArray(list) || list.length === 0) return defaults;
   return list.map((item, i) => {
@@ -265,12 +302,17 @@ function migrateCategoryList(list, defaults) {
       const found = defaults.find((d) => d.name === item);
       return found || { name: item, icon: "HelpCircle", color: CATEGORY_COLORS[i % CATEGORY_COLORS.length] };
     }
-    return item;
+    return {
+      name: item.name || defaults[i]?.name || "Категория",
+      icon: item.icon || defaults[i]?.icon || "HelpCircle",
+      color: item.color || defaults[i]?.color || CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+    };
   });
 }
 
 function migrateSettings(raw) {
   if (!raw) return DEFAULT_SETTINGS;
+
   const looksOld = "salary" in raw || !("savePct" in raw);
   if (looksOld) {
     return {
@@ -281,6 +323,7 @@ function migrateSettings(raw) {
       wantCats: migrateCategoryList(raw.wantCats, DEFAULT_WANT_CATS),
     };
   }
+
   return {
     ...DEFAULT_SETTINGS,
     ...raw,
@@ -293,45 +336,1089 @@ function migrateSettings(raw) {
 
 function migrateTransactions(list, settings) {
   const out = [];
+
   (list || []).forEach((t) => {
     if (t.type === "saving") {
       out.push({ ...t, type: "adjustment", card: "ozon" });
       return;
     }
+
     if (t.type === "income" && !t.card) {
       const s = computeIncomeSplit(t.amount, settings);
       out.push({ ...t, card: "sber" });
+
       const alfaAmt = Math.round(s.toAlfa);
       const ozonAmt = Math.round(s.toOzon);
+
       if (alfaAmt > 0) {
-        out.push({ id: uid(), type: "transfer", date: t.date, amount: alfaAmt, fromCard: "sber", toCard: "alfa", note: "Авто-перенос при обновлении приложения" });
+        out.push({
+          id: uid(),
+          type: "transfer",
+          date: t.date,
+          amount: alfaAmt,
+          fromCard: "sber",
+          toCard: "alfa",
+          note: "Авто-перенос при обновлении приложения",
+        });
       }
+
       if (ozonAmt > 0) {
-        out.push({ id: uid(), type: "transfer", date: t.date, amount: ozonAmt, fromCard: "sber", toCard: "ozon", note: "Авто-перенос при обновлении приложения" });
+        out.push({
+          id: uid(),
+          type: "transfer",
+          date: t.date,
+          amount: ozonAmt,
+          fromCard: "sber",
+          toCard: "ozon",
+          note: "Авто-перенос при обновлении приложения",
+        });
       }
+
       return;
     }
+
     out.push(t);
   });
+
   return out;
+}
+
+/* ============================================================ CSS */
+function AppStyles() {
+  return (
+    <style>{`
+      * {
+        box-sizing: border-box;
+      }
+
+      html, body, #root {
+        width: 100%;
+        min-height: 100%;
+        margin: 0;
+        overflow-x: hidden;
+        background: ${C.bg};
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: ${C.ink};
+      }
+
+      button, input, select, textarea {
+        font: inherit;
+        max-width: 100%;
+      }
+
+      button {
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+
+      .app-viewport {
+        width: 100%;
+        min-height: 100svh;
+        background: ${C.bg};
+        color: ${C.ink};
+        overflow-x: hidden;
+      }
+
+      .app-shell {
+        width: 100%;
+        max-width: 430px;
+        min-height: 100svh;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        overflow-x: hidden;
+      }
+
+      .app-header {
+        flex: 0 0 auto;
+        padding: calc(10px + env(safe-area-inset-top)) 14px 6px;
+      }
+
+      .app-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .app-title {
+        font-size: 18px;
+        line-height: 1.2;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .app-date {
+        font-size: 12px;
+        color: ${C.inkMuted};
+        white-space: nowrap;
+      }
+
+      .app-main {
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
+        padding: 8px 12px calc(94px + env(safe-area-inset-bottom));
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .app-main::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+      }
+
+      .screen-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        width: 100%;
+        min-width: 0;
+      }
+
+      .soft-card {
+        width: 100%;
+        min-width: 0;
+        border: 1px solid ${C.border};
+        background: ${C.surface};
+        border-radius: 18px;
+        box-shadow: 0 8px 20px rgba(22, 32, 27, 0.05);
+      }
+
+      .panel {
+        border: 1px solid ${C.border};
+        background: ${C.surface};
+        border-radius: 18px;
+        padding: 14px;
+        width: 100%;
+        min-width: 0;
+      }
+
+      .muted {
+        color: ${C.inkMuted};
+      }
+
+      .mono {
+        font-variant-numeric: tabular-nums;
+      }
+
+      .section-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: ${C.ink};
+        margin: 12px 2px 8px;
+      }
+
+      .month-nav {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr) 42px;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+      }
+
+      .month-nav button {
+        width: 42px;
+        height: 40px;
+        border-radius: 13px;
+        border: 1px solid ${C.border};
+        background: ${C.surface};
+        color: ${C.ink};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .month-label {
+        text-align: center;
+        font-size: 15px;
+        font-weight: 700;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .add-panel {
+        width: 100%;
+        min-width: 0;
+        border: 1px solid ${C.border};
+        border-radius: 24px;
+        padding: 14px 12px 14px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 0% 18%, color-mix(in srgb, var(--soft) 65%, transparent) 0, transparent 34%),
+          radial-gradient(circle at 100% 82%, color-mix(in srgb, var(--soft) 65%, transparent) 0, transparent 32%),
+          linear-gradient(180deg, color-mix(in srgb, var(--soft) 74%, #fff) 0%, ${C.bg} 100%);
+      }
+
+      .add-top {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 50px minmax(0, 1fr);
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .amount-mini {
+        min-width: 0;
+        text-align: left;
+      }
+
+      .amount-mini.right {
+        text-align: right;
+      }
+
+      .amount-mini span {
+        display: block;
+        font-size: 10px;
+        line-height: 1.1;
+        font-weight: 700;
+        color: ${C.ink};
+        margin-bottom: 2px;
+      }
+
+      .amount-mini b {
+        display: block;
+        font-size: 12px;
+        line-height: 1.15;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .bank-badge {
+        width: 46px;
+        height: 46px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        line-height: 1;
+        font-weight: 900;
+        text-align: center;
+        border: 3px solid rgba(255,255,255,0.88);
+        box-shadow: 0 4px 12px rgba(22, 32, 27, 0.14);
+      }
+
+      .carousel-heading {
+        text-align: center;
+        margin: 4px 0 10px;
+      }
+
+      .carousel-heading h2 {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.02;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        color: ${C.ink};
+      }
+
+      .carousel-heading .sum {
+        margin-top: 3px;
+        font-size: 20px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        color: ${C.ink};
+      }
+
+      .hero-row {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) 34px;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .side-arrow {
+        width: 34px;
+        height: 48px;
+        border: 0;
+        background: transparent;
+        color: ${C.inkMuted};
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .side-arrow:disabled {
+        opacity: 0.22;
+      }
+
+      .big-add {
+        width: 100%;
+        min-width: 0;
+        height: 104px;
+        border-radius: 18px;
+        border: 1px solid color-mix(in srgb, var(--accent) 35%, ${C.border});
+        background: rgba(255,255,255,0.88);
+        color: var(--accent);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        box-shadow: 0 8px 18px rgba(22, 32, 27, 0.08);
+      }
+
+      .big-add .plus-circle {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        background: color-mix(in srgb, var(--soft) 78%, #fff);
+        border: 1px dashed color-mix(in srgb, var(--accent) 40%, ${C.border});
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .big-add span {
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .quick-grid {
+        width: 100%;
+        min-width: 0;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+      }
+
+      .quick-tile {
+        min-width: 0;
+        min-height: 104px;
+        border: 1px solid color-mix(in srgb, var(--accent) 20%, ${C.border});
+        background: rgba(255,255,255,0.9);
+        border-radius: 17px;
+        padding: 9px 7px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        color: ${C.ink};
+        box-shadow: 0 5px 12px rgba(22, 32, 27, 0.04);
+      }
+
+      .quick-tile.empty {
+        opacity: 0.55;
+        border-style: dashed;
+      }
+
+      .quick-amount {
+        max-width: 100%;
+        font-size: 11px;
+        line-height: 1.1;
+        color: ${C.inkMuted};
+        font-variant-numeric: tabular-nums;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .quick-icon {
+        width: 42px;
+        height: 42px;
+        flex: 0 0 auto;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: color-mix(in srgb, var(--soft) 72%, #fff);
+      }
+
+      .quick-icon svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .quick-name {
+        max-width: 100%;
+        min-height: 28px;
+        font-size: 12px;
+        line-height: 1.15;
+        font-weight: 700;
+        text-align: center;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+      }
+
+      .dots {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        margin: 12px 0 0;
+      }
+
+      .dot {
+        width: 7px;
+        height: 7px;
+        border: 0;
+        border-radius: 999px;
+        background: ${C.border};
+        padding: 0;
+      }
+
+      .dot.active {
+        background: var(--accent);
+      }
+
+      .ozon-detail {
+        margin-top: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .progress {
+        height: 8px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: ${C.ozonSoft};
+      }
+
+      .progress div {
+        height: 100%;
+        border-radius: 999px;
+        background: ${C.ozon};
+      }
+
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+      }
+
+      .stat-box {
+        min-width: 0;
+        border: 1px solid ${C.border};
+        background: ${C.surface};
+        border-radius: 16px;
+        padding: 12px;
+      }
+
+      .stat-box .label {
+        font-size: 11px;
+        color: ${C.inkMuted};
+        margin-bottom: 5px;
+      }
+
+      .stat-box .value {
+        font-size: 15px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .form-card {
+        border: 1px solid ${C.border};
+        background: ${C.surface};
+        border-radius: 20px;
+        padding: 14px;
+        width: 100%;
+        min-width: 0;
+      }
+
+      .form-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .form-title-row h2 {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.2;
+        font-weight: 800;
+      }
+
+      .icon-button {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        border: 1px solid ${C.border};
+        background: ${C.surface2};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: ${C.inkMuted};
+      }
+
+      .operation-tabs {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 5px;
+        padding: 4px;
+        border: 1px solid ${C.border};
+        background: ${C.surface2};
+        border-radius: 15px;
+        margin-bottom: 12px;
+      }
+
+      .operation-tabs button {
+        min-width: 0;
+        height: 34px;
+        border: 0;
+        border-radius: 11px;
+        background: transparent;
+        color: ${C.inkMuted};
+        font-size: 11px;
+        font-weight: 700;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .operation-tabs button.active {
+        background: ${C.ink};
+        color: #fff;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 11px;
+        min-width: 0;
+      }
+
+      .field label {
+        font-size: 11px;
+        line-height: 1.1;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: ${C.inkMuted};
+      }
+
+      .field input,
+      .field select {
+        width: 100%;
+        height: 44px;
+        border: 1px solid ${C.border};
+        background: ${C.surface2};
+        border-radius: 14px;
+        color: ${C.ink};
+        padding: 0 12px;
+        outline: none;
+      }
+
+      .field input.amount-input {
+        height: 54px;
+        font-size: 28px;
+        line-height: 1;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .form-grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+      }
+
+      .card-picker {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+        gap: 7px;
+        margin-bottom: 11px;
+      }
+
+      .card-picker-item {
+        min-width: 0;
+        border: 1px solid ${C.border};
+        background: ${C.surface};
+        border-radius: 15px;
+        padding: 9px 6px;
+        text-align: center;
+        color: ${C.ink};
+      }
+
+      .card-picker-item.active {
+        border-color: var(--pick-color);
+        background: var(--pick-soft);
+      }
+
+      .card-picker-item .main {
+        font-size: 12px;
+        font-weight: 800;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .card-picker-item .sub {
+        font-size: 10px;
+        margin-top: 2px;
+        color: ${C.inkMuted};
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .button-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 9px;
+        margin-top: 4px;
+      }
+
+      .btn {
+        height: 44px;
+        border-radius: 14px;
+        border: 1px solid ${C.border};
+        background: ${C.surface2};
+        color: ${C.ink};
+        font-weight: 800;
+      }
+
+      .btn.primary {
+        background: ${C.ink};
+        border-color: ${C.ink};
+        color: #fff;
+      }
+
+      .total-balance {
+        text-align: center;
+        padding: 16px 12px;
+      }
+
+      .total-balance .label {
+        font-size: 12px;
+        color: ${C.inkMuted};
+        margin-bottom: 4px;
+      }
+
+      .total-balance .value {
+        font-size: 27px;
+        line-height: 1.12;
+        font-weight: 900;
+        font-variant-numeric: tabular-nums;
+        margin-bottom: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .check-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+      }
+
+      .check-row label {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .bank-card {
+        width: 100%;
+        min-width: 0;
+        display: flex;
+        overflow: hidden;
+        border: 1px solid ${C.border};
+        background: ${C.surface};
+        border-radius: 18px;
+      }
+
+      .bank-stripe {
+        width: 5px;
+        flex: 0 0 auto;
+      }
+
+      .bank-body {
+        min-width: 0;
+        flex: 1;
+        padding: 13px;
+      }
+
+      .bank-row {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .bank-name {
+        min-width: 0;
+        font-size: 14px;
+        font-weight: 800;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .bank-value {
+        flex: 0 1 auto;
+        min-width: 0;
+        max-width: 54%;
+        text-align: right;
+        font-size: 15px;
+        font-weight: 900;
+        font-variant-numeric: tabular-nums;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .bank-subrow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 2px;
+        margin-bottom: 9px;
+        font-size: 11px;
+        color: ${C.inkMuted};
+      }
+
+      .bank-progress {
+        height: 7px;
+        border-radius: 999px;
+        overflow: hidden;
+        margin-bottom: 7px;
+      }
+
+      .bank-progress div {
+        height: 100%;
+        border-radius: 999px;
+      }
+
+      .small-note {
+        font-size: 11px;
+        line-height: 1.35;
+        color: ${C.inkMuted};
+      }
+
+      .chart-box {
+        width: 100%;
+        height: 220px;
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      .tx-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        padding: 10px 0;
+        border-bottom: 1px solid ${C.border};
+      }
+
+      .tx-row:last-child {
+        border-bottom: 0;
+      }
+
+      .tx-day {
+        width: 24px;
+        flex: 0 0 24px;
+        text-align: center;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: ${C.inkMuted};
+      }
+
+      .tx-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        flex: 0 0 auto;
+      }
+
+      .tx-main {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .tx-label {
+        font-size: 12px;
+        font-weight: 700;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .tx-sub {
+        font-size: 11px;
+        color: ${C.inkMuted};
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .tx-amount {
+        max-width: 112px;
+        flex: 0 1 auto;
+        font-size: 12px;
+        font-weight: 900;
+        font-variant-numeric: tabular-nums;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: right;
+      }
+
+      .delete-btn {
+        width: 30px;
+        height: 30px;
+        border: 0;
+        background: transparent;
+        color: ${C.inkMuted};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 34px 12px;
+      }
+
+      .empty-state svg {
+        margin: 0 auto 10px;
+        color: ${C.inkMuted};
+      }
+
+      .bottom-nav {
+        position: fixed;
+        left: 50%;
+        bottom: max(10px, env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        width: min(calc(100vw - 24px), 406px);
+        z-index: 30;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid ${C.border};
+        border-radius: 22px;
+        background: rgba(255,255,255,0.94);
+        box-shadow: 0 12px 28px rgba(22, 32, 27, 0.13);
+        backdrop-filter: blur(10px);
+      }
+
+      .nav-btn {
+        min-width: 0;
+        height: 54px;
+        border: 1px solid ${C.border};
+        border-radius: 16px;
+        background: ${C.surface};
+        color: ${C.inkMuted};
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .nav-btn svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .nav-btn.active {
+        background: ${C.sberSoft};
+        color: ${C.ink};
+        border-color: ${C.border};
+      }
+
+      .nav-btn.add.active svg {
+        color: ${C.sber};
+      }
+
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: calc(84px + env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        max-width: min(360px, calc(100vw - 32px));
+        z-index: 60;
+        border-radius: 999px;
+        padding: 10px 14px;
+        background: ${C.ink};
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+        font-weight: 800;
+        box-shadow: 0 12px 26px rgba(22,32,27,0.2);
+      }
+
+      .notice {
+        border-radius: 16px;
+        padding: 12px;
+        font-size: 12px;
+        line-height: 1.4;
+        border: 1px solid ${C.amber};
+        background: ${C.amberSoft};
+        color: #8A5A15;
+      }
+
+      .history-list {
+        border: 1px solid ${C.border};
+        border-radius: 18px;
+        background: ${C.surface};
+        padding: 4px 12px;
+      }
+
+      @media (max-width: 360px) {
+        .app-main {
+          padding-left: 9px;
+          padding-right: 9px;
+        }
+
+        .add-panel {
+          border-radius: 20px;
+          padding: 12px 9px;
+        }
+
+        .carousel-heading h2 {
+          font-size: 25px;
+        }
+
+        .carousel-heading .sum {
+          font-size: 18px;
+        }
+
+        .hero-row {
+          grid-template-columns: 28px minmax(0, 1fr) 28px;
+          gap: 5px;
+        }
+
+        .side-arrow {
+          width: 28px;
+        }
+
+        .big-add {
+          height: 96px;
+        }
+
+        .quick-grid {
+          gap: 7px;
+        }
+
+        .quick-tile {
+          min-height: 96px;
+          padding: 8px 5px;
+        }
+
+        .quick-icon {
+          width: 38px;
+          height: 38px;
+        }
+
+        .operation-tabs button {
+          font-size: 10px;
+        }
+
+        .field input.amount-input {
+          font-size: 24px;
+        }
+
+        .bottom-nav {
+          width: calc(100vw - 16px);
+          gap: 6px;
+          padding: 7px;
+        }
+
+        .nav-btn {
+          height: 50px;
+          font-size: 10px;
+        }
+      }
+
+      @media (max-height: 720px) {
+        .app-header {
+          padding-top: calc(7px + env(safe-area-inset-top));
+          padding-bottom: 3px;
+        }
+
+        .app-main {
+          padding-top: 6px;
+        }
+
+        .add-panel {
+          padding-top: 11px;
+          padding-bottom: 11px;
+        }
+
+        .add-top {
+          margin-bottom: 7px;
+        }
+
+        .bank-badge {
+          width: 42px;
+          height: 42px;
+        }
+
+        .carousel-heading {
+          margin-bottom: 8px;
+        }
+
+        .hero-row {
+          margin-bottom: 9px;
+        }
+
+        .big-add {
+          height: 92px;
+        }
+
+        .quick-tile {
+          min-height: 92px;
+        }
+
+        .quick-name {
+          min-height: 24px;
+        }
+      }
+    `}</style>
+  );
 }
 
 /* ============================================================ small UI parts */
 function SectionTitle({ children }) {
-  return <div className="text-xs font-semibold mt-6 mb-2" style={{ color: C.ink }}>{children}</div>;
+  return <div className="section-title">{children}</div>;
 }
 
 function MonthNav({ value, onChange }) {
   return (
-    <div className="flex items-center justify-between mb-4">
-      <button onClick={() => onChange(shiftMonth(value, -1))}
-        className="p-2 rounded-lg border" style={{ borderColor: C.border, color: C.ink }}>
-        <ChevronLeft size={16} />
+    <div className="month-nav">
+      <button onClick={() => onChange(shiftMonth(value, -1))} type="button">
+        <ChevronLeft size={17} />
       </button>
-      <div className="text-base font-semibold capitalize">{monthLabel(value)}</div>
-      <button onClick={() => onChange(shiftMonth(value, 1))}
-        className="p-2 rounded-lg border" style={{ borderColor: C.border, color: C.ink }}>
-        <ChevronRight size={16} />
+      <div className="month-label">{monthLabel(value)}</div>
+      <button onClick={() => onChange(shiftMonth(value, 1))} type="button">
+        <ChevronRight size={17} />
       </button>
     </div>
   );
@@ -340,17 +1427,20 @@ function MonthNav({ value, onChange }) {
 function PaydayReminder({ settings, transactions }) {
   const today = todayStr();
   const day = dayOfMonth(today);
+
   if (!settings.reminderDays.includes(day)) return null;
+
   const todayIncome = transactions
     .filter((t) => t.type === "income" && t.date === today)
     .reduce((sum, t) => sum + t.amount, 0);
+
   const needPct = needPctOf(settings);
 
   if (todayIncome <= 0) {
     return (
-      <div className="rounded-lg border p-3 mb-4 text-xs" style={{ borderColor: C.amber, background: C.amberSoft }}>
-        <div className="font-medium mb-1" style={{ color: "#8A5A15" }}>Сегодня день выплаты</div>
-        <div style={{ color: "#8A5A15" }}>
+      <div className="notice">
+        <div style={{ fontWeight: 800, marginBottom: 4 }}>Сегодня день выплаты</div>
+        <div>
           Не забудьте занести доход на вкладке «Добавить» — после этого приложение подскажет, сколько перевести в Альфа и Озон.
         </div>
       </div>
@@ -358,13 +1448,13 @@ function PaydayReminder({ settings, transactions }) {
   }
 
   const split = computeIncomeSplit(todayIncome, settings);
+
   return (
-    <div className="rounded-lg border p-3 mb-4 text-xs" style={{ borderColor: C.amber, background: C.amberSoft }}>
-      <div className="font-medium mb-1" style={{ color: "#8A5A15" }}>Не забудьте сделать переводы</div>
-      <div style={{ color: "#8A5A15" }}>
+    <div className="notice">
+      <div style={{ fontWeight: 800, marginBottom: 4 }}>Не забудьте сделать переводы</div>
+      <div>
         Из сегодняшнего дохода ({formatMoney(todayIncome)}): {formatMoney(split.toAlfa)} в Альфа,
         {" "}{formatMoney(split.toOzon)} в Озон. Остальное ({needPct}%) остаётся на карте зачисления.
-        Сделайте перевод на вкладке «Добавить».
       </div>
     </div>
   );
@@ -376,14 +1466,19 @@ function TotalBalanceCard({ total, settings, onToggle }) {
     { key: "alfa", label: "Альфа", color: C.alfa },
     { key: "ozon", label: "Озон", color: C.ozon },
   ];
+
   return (
-    <div className="rounded-lg border p-4 mb-3 text-center" style={{ borderColor: C.border, background: C.surface }}>
-      <div className="text-xs mb-1" style={{ color: C.inkMuted }}>Общий баланс</div>
-      <div className="font-mono text-2xl font-semibold mb-3">{formatMoney(total)}</div>
-      <div className="flex justify-center gap-4">
+    <div className="soft-card total-balance">
+      <div className="label">Общий баланс</div>
+      <div className="value">{formatMoney(total)}</div>
+      <div className="check-row">
         {items.map((it) => (
-          <label key={it.key} className="flex items-center gap-1.5 text-xs" style={{ cursor: "pointer" }}>
-            <input type="checkbox" checked={!!settings.includeInTotal[it.key]} onChange={() => onToggle(it.key)} />
+          <label key={it.key}>
+            <input
+              type="checkbox"
+              checked={!!settings.includeInTotal?.[it.key]}
+              onChange={() => onToggle(it.key)}
+            />
             <span style={{ color: it.color }}>{it.label}</span>
           </label>
         ))}
@@ -394,22 +1489,22 @@ function TotalBalanceCard({ total, settings, onToggle }) {
 
 function BankCard({ stripe, soft, name, role, bigLabel, bigValue, pct, sub, footnote }) {
   return (
-    <div className="flex rounded-lg overflow-hidden border mb-3" style={{ borderColor: C.border, background: C.surface }}>
-      <div style={{ width: 5, background: stripe, flexShrink: 0 }} />
-      <div className="flex-1 p-3.5">
-        <div className="flex items-center justify-between mb-0.5">
-          <span className="text-sm font-medium">{name}</span>
-          <span className="font-mono text-base font-semibold">{formatMoney(bigValue)}</span>
+    <div className="bank-card">
+      <div className="bank-stripe" style={{ background: stripe }} />
+      <div className="bank-body">
+        <div className="bank-row">
+          <span className="bank-name">{name}</span>
+          <span className="bank-value">{formatMoney(bigValue)}</span>
         </div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs" style={{ color: C.inkMuted }}>{role}</span>
-          <span className="text-xs" style={{ color: C.inkMuted }}>{bigLabel}</span>
+        <div className="bank-subrow">
+          <span>{role}</span>
+          <span>{bigLabel}</span>
         </div>
-        <div className="h-1.5 rounded-full overflow-hidden mb-1.5" style={{ background: soft }}>
-          <div className="h-full rounded-full" style={{ width: `${clampPct(pct) * 100}%`, background: stripe }} />
+        <div className="bank-progress" style={{ background: soft }}>
+          <div style={{ width: `${clampPct(pct) * 100}%`, background: stripe }} />
         </div>
-        <div className="text-xs font-mono" style={{ color: C.inkMuted }}>{sub}</div>
-        {footnote && <div className="text-xs mt-1" style={{ color: C.inkMuted }}>{footnote}</div>}
+        <div className="small-note mono">{sub}</div>
+        {footnote && <div className="small-note" style={{ marginTop: 4 }}>{footnote}</div>}
       </div>
     </div>
   );
@@ -420,27 +1515,31 @@ function TxRow({ tx, onDelete }) {
     : tx.type === "expense" ? (tx.card === "sber" ? C.sber : C.alfa)
     : tx.type === "transfer" ? C.amber
     : (tx.card === "sber" ? C.sber : tx.card === "alfa" ? C.alfa : (tx.amount < 0 ? C.danger : C.ozon));
+
   const sign = tx.type === "expense" ? "−"
     : tx.type === "transfer" ? ""
     : (tx.type === "adjustment" && tx.amount < 0) ? "−" : "+";
+
   const label = tx.type === "income" ? (tx.note || `Доход (${cardLabel(tx.card)})`)
     : tx.type === "expense" ? (tx.note || tx.category)
     : tx.type === "transfer" ? (tx.note || `${cardLabel(tx.fromCard)} → ${cardLabel(tx.toCard)}`)
     : (tx.note || `Корректировка (${cardLabel(tx.card)})`);
+
   const day = tx.date.slice(8, 10);
+
   return (
-    <div className="flex items-center gap-2.5 py-2 border-b" style={{ borderColor: C.border }}>
-      <div className="text-xs font-mono w-6 text-center shrink-0" style={{ color: C.inkMuted }}>{day}</div>
-      <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />
-      <div className="flex-1 min-w-0">
-        <div className="text-xs truncate">{label}</div>
-        {tx.type === "expense" && <div className="text-xs" style={{ color: C.inkMuted }}>{tx.category}</div>}
+    <div className="tx-row">
+      <div className="tx-day">{day}</div>
+      <div className="tx-dot" style={{ background: color }} />
+      <div className="tx-main">
+        <div className="tx-label">{label}</div>
+        {tx.type === "expense" && <div className="tx-sub">{tx.category}</div>}
       </div>
-      <div className="font-mono text-xs font-medium shrink-0" style={{ color }}>
+      <div className="tx-amount" style={{ color }}>
         {sign}{formatMoney(Math.abs(tx.amount))}
       </div>
-      <button onClick={() => onDelete(tx.id)} className="shrink-0 p-1" style={{ color: C.inkMuted }}>
-        <Trash2 size={13} />
+      <button onClick={() => onDelete(tx.id)} className="delete-btn" type="button" aria-label="Удалить">
+        <Trash2 size={14} />
       </button>
     </div>
   );
@@ -448,22 +1547,21 @@ function TxRow({ tx, onDelete }) {
 
 function StatBox({ label, value, color }) {
   return (
-    <div className="rounded-lg border p-3" style={{ borderColor: C.border, background: C.surface }}>
-      <div className="text-xs mb-1" style={{ color: C.inkMuted }}>{label}</div>
-      <div className="font-mono text-base font-semibold" style={{ color }}>{value}</div>
+    <div className="stat-box">
+      <div className="label">{label}</div>
+      <div className="value" style={{ color }}>{value}</div>
     </div>
   );
 }
 
 function EmptyState({ onAdd }) {
   return (
-    <div className="text-center py-16">
-      <Wallet size={34} style={{ color: C.inkMuted, margin: "0 auto" }} />
-      <div className="text-sm mt-3 mb-4" style={{ color: C.inkMuted }}>
+    <div className="soft-card empty-state">
+      <Wallet size={34} />
+      <div className="muted" style={{ fontSize: 13, lineHeight: 1.4, marginBottom: 14 }}>
         Пока нет операций.<br />Добавьте первый доход или трату.
       </div>
-      <button onClick={onAdd} className="rounded-lg px-4 py-2 text-sm font-medium"
-        style={{ background: C.ink, color: C.surface }}>
+      <button onClick={onAdd} className="btn primary" type="button" style={{ width: "100%" }}>
         Добавить операцию
       </button>
     </div>
@@ -473,98 +1571,145 @@ function EmptyState({ onAdd }) {
 function Toast({ text }) {
   if (!text) return null;
   return (
-    <div className="fixed left-1/2 bottom-24 -translate-x-1/2 rounded-full px-4 py-2 text-xs font-medium flex items-center gap-1.5 shadow-lg"
-      style={{ background: C.ink, color: "#fff", zIndex: 50 }}>
-      <Check size={14} /> {text}
+    <div className="toast">
+      <Check size={15} /> {text}
     </div>
   );
 }
 
-/* ============================================================ Dashboard */
-/* ============================================================ Quick-add carousel */
-function SummaryMini({ icon: Icon, label, amount, tone }) {
-  const bg = tone === "in" ? C.sberSoft : C.dangerSoft;
-  const fg = tone === "in" ? C.sber : C.danger;
-  const sign = tone === "in" ? "+" : "−";
+/* ============================================================ Add carousel parts */
+function BankBadge({ label, accentColor }) {
   return (
-    <div className="rounded-lg p-3 flex items-center gap-2.5" style={{ background: bg }}>
-      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: C.surface }}>
-        <Icon size={15} style={{ color: fg }} />
+    <div className="bank-badge" style={{ background: accentColor }}>
+      {label === "check" ? <Check size={23} /> : <span>{label}</span>}
+    </div>
+  );
+}
+
+function TopAmounts({ inflow, outflow, logo, accentColor }) {
+  return (
+    <div className="add-top">
+      <div className="amount-mini">
+        <span>Пришло:</span>
+        <b style={{ color: C.sber }}>+{formatMoney(Math.abs(inflow))}</b>
       </div>
-      <div className="min-w-0">
-        <div className="text-xs" style={{ color: C.inkMuted }}>{label}:</div>
-        <div className="font-mono text-sm font-semibold truncate" style={{ color: fg }}>{sign}{formatMoney(Math.abs(amount))}</div>
+      <BankBadge label={logo} accentColor={accentColor} />
+      <div className="amount-mini right">
+        <span>Ушло:</span>
+        <b style={{ color: C.danger }}>−{formatMoney(Math.abs(outflow))}</b>
       </div>
     </div>
   );
 }
 
-function AddBigButton({ label, color, onClick }) {
+function AddBigButton({ label, onClick }) {
   return (
-    <button onClick={onClick}
-      className="w-full rounded-xl border-2 flex flex-col items-center justify-center gap-2 py-6 mb-5"
-      style={{ borderColor: C.border, borderStyle: "dashed", background: C.surface }}>
-      <div className="w-11 h-11 rounded-full flex items-center justify-center" style={{ background: C.bg }}>
-        <Plus size={22} style={{ color }} />
+    <button onClick={onClick} className="big-add" type="button">
+      <div className="plus-circle">
+        <Plus size={25} />
       </div>
-      <span className="text-sm font-medium" style={{ color }}>{label}</span>
+      <span>{label}</span>
     </button>
   );
 }
 
-function ListTile({ icon: Icon, color, name, amount, onClick }) {
+function ListTile({ icon: Icon, color, name, amount, onClick, empty }) {
+  if (empty) {
+    return (
+      <div className="quick-tile empty">
+        <div className="quick-amount">—</div>
+        <div className="quick-icon" />
+        <div className="quick-name">Свободно</div>
+      </div>
+    );
+  }
+
   return (
-    <button onClick={onClick}
-      className="rounded-xl border flex items-center gap-2.5 p-3" style={{ borderColor: C.border, background: C.surface }}>
-      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: color + "22" }}>
-        <Icon size={18} style={{ color }} />
+    <button onClick={onClick} className="quick-tile" type="button">
+      <div className="quick-amount">{amount != null ? formatMoney(amount) : "—"}</div>
+      <div className="quick-icon">
+        <Icon size={20} style={{ color }} />
       </div>
-      <div className="flex-1 min-w-0 text-left">
-        <div className="text-xs font-medium truncate">{name}</div>
-        <div className="font-mono text-xs" style={{ color: C.inkMuted }}>{amount != null ? formatMoney(amount) : "—"}</div>
-      </div>
-      <ChevronRight size={14} style={{ color: C.inkMuted, flexShrink: 0 }} />
+      <div className="quick-name">{name}</div>
     </button>
   );
 }
 
-function CategoryPanel({ title, accentColor, card, categories, transactions, settings, onOpenFull }) {
+function CategoryPanel({
+  title,
+  accentColor,
+  softColor,
+  logo,
+  card,
+  categories,
+  transactions,
+  settings,
+  canPrev,
+  canNext,
+  onPrev,
+  onNext,
+  onOpenFull,
+}) {
   const stats = useMemo(() => categoryStats(transactions, card), [transactions, card]);
   const ordered = useMemo(
     () => [...categories].sort((a, b) => (stats[b.name]?.count || 0) - (stats[a.name]?.count || 0)),
     [categories, stats]
   );
+
   const agg = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
   const inflow = card === "sber" ? agg.sberInflow : agg.alfaInflow;
   const spent = card === "sber" ? agg.sberSpent : agg.alfaSpent;
+  const monthlyTotals = card === "sber" ? agg.needCatTotals : agg.wantCatTotals;
+
+  const visible = ordered.slice(0, 8);
+  while (visible.length < 8) visible.push(null);
 
   return (
-    <div>
-      <div className="grid grid-cols-2 gap-2.5 mb-5">
-        <SummaryMini icon={ArrowUp} label="Пришло" amount={inflow} tone="in" />
-        <SummaryMini icon={ArrowDown} label="Ушло" amount={spent} tone="out" />
+    <div className="add-panel" style={{ "--accent": accentColor, "--soft": softColor }}>
+      <TopAmounts inflow={inflow} outflow={spent} logo={logo} accentColor={accentColor} />
+
+      <div className="carousel-heading">
+        <h2>{title}</h2>
+        <div className="sum">{formatMoney(spent)}</div>
       </div>
 
-      <div className="text-center mb-4">
-        <div className="text-base font-semibold" style={{ color: accentColor }}>{title}</div>
-        <div className="font-mono text-2xl font-bold mt-1">{formatMoney(spent)}</div>
+      <div className="hero-row">
+        <button className="side-arrow" disabled={!canPrev} onClick={onPrev} type="button">
+          <ChevronLeft size={30} />
+        </button>
+
+        <AddBigButton label="Новое" onClick={() => onOpenFull({ type: "expense", card })} />
+
+        <button className="side-arrow" disabled={!canNext} onClick={onNext} type="button">
+          <ChevronRight size={30} />
+        </button>
       </div>
 
-      <AddBigButton label="Добавить расход" color={accentColor} onClick={() => onOpenFull({ type: "expense", card })} />
+      <div className="quick-grid">
+        {visible.map((cat, i) => {
+          if (!cat) return <ListTile key={`empty-${i}`} empty />;
 
-      <div className="grid grid-cols-2 gap-2.5">
-        {ordered.map((cat) => {
           const s = stats[cat.name];
           const Icon = getIcon(cat.icon);
+          const monthAmount = monthlyTotals[cat.name] || 0;
+          const showAmount = monthAmount > 0 ? monthAmount : (s?.modalAmount ?? null);
+
           return (
-            <ListTile key={cat.name} icon={Icon} color={cat.color} name={cat.name} amount={s?.modalAmount ?? null}
+            <ListTile
+              key={cat.name}
+              icon={Icon}
+              color={cat.color}
+              name={cat.name}
+              amount={showAmount}
               onClick={() => {
-                if (s?.modalAmount != null) {
-                  onOpenFull({ type: "expense", card, category: cat.name, amount: s.modalAmount });
-                } else {
-                  onOpenFull({ type: "expense", card });
-                }
-              }} />
+                onOpenFull({
+                  type: "expense",
+                  card,
+                  category: cat.name,
+                  amount: s?.modalAmount ?? "",
+                });
+              }}
+            />
           );
         })}
       </div>
@@ -572,12 +1717,19 @@ function CategoryPanel({ title, accentColor, card, categories, transactions, set
   );
 }
 
-function OzonPanel({ settings, transactions, onOpenFull }) {
+function OzonPanel({
+  settings,
+  transactions,
+  canPrev,
+  canNext,
+  onPrev,
+  onNext,
+  onOpenFull,
+}) {
   const dayStats = useMemo(() => ozonDayStats(transactions), [transactions]);
   const days = settings.reminderDays.length ? settings.reminderDays : [5, 15, 30];
   const agg = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
 
-  // detailed savings info (previously a separate "Подушка" tab, now folded into this panel)
   const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
   const totalSaved = balances.ozon;
   const pct = settings.goal > 0 ? totalSaved / settings.goal : 0;
@@ -585,6 +1737,7 @@ function OzonPanel({ settings, transactions, onOpenFull }) {
   const rate = useMemo(() => estimateMonthlyRate(transactions, settings, todayMonthKey()), [transactions, settings]);
   const monthsLeft = left <= 0 ? 0 : (rate > 0 ? Math.ceil(left / rate) : null);
   const thisMonth = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
+
   const ozonEntries = useMemo(() => {
     const list = transactions.filter((t) =>
       (t.type === "adjustment" && t.card === "ozon") ||
@@ -593,316 +1746,330 @@ function OzonPanel({ settings, transactions, onOpenFull }) {
     return list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   }, [transactions]);
 
+  const visibleDays = days.slice(0, 4);
+  while (visibleDays.length < 4) visibleDays.push(null);
+
   return (
-    <div>
-      <div className="grid grid-cols-2 gap-2.5 mb-5">
-        <SummaryMini icon={ArrowUp} label="Пришло" amount={agg.ozonInflow} tone="in" />
-        <SummaryMini icon={ArrowDown} label="Ушло" amount={agg.ozonOutflow} tone="out" />
+    <div className="add-panel" style={{ "--accent": C.ozon, "--soft": C.ozonSoft }}>
+      <TopAmounts inflow={agg.ozonInflow} outflow={agg.ozonOutflow} logo="ozon" accentColor={C.ozon} />
+
+      <div className="carousel-heading">
+        <h2>Подушка</h2>
+        <div className="sum">{formatMoney(totalSaved)}</div>
       </div>
 
-      <div className="text-center mb-4">
-        <div className="text-base font-semibold" style={{ color: C.ozon }}>Подушка</div>
-        <div className="font-mono text-2xl font-bold mt-1">{formatMoney(agg.ozonOutflow)}</div>
+      <div className="hero-row">
+        <button className="side-arrow" disabled={!canPrev} onClick={onPrev} type="button">
+          <ChevronLeft size={30} />
+        </button>
+
+        <AddBigButton
+          label="Добавить перевод"
+          onClick={() => onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon" })}
+        />
+
+        <button className="side-arrow" disabled={!canNext} onClick={onNext} type="button">
+          <ChevronRight size={30} />
+        </button>
       </div>
 
-      <AddBigButton label="Добавить перевод" color={C.ozon} onClick={() => onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon" })} />
+      <div className="quick-grid">
+        {visibleDays.map((d, i) => {
+          if (!d) return <ListTile key={`empty-day-${i}`} empty />;
 
-      <div className="grid grid-cols-2 gap-2.5 mb-5">
-        {days.map((d) => {
           const s = dayStats[d];
+
           return (
-            <ListTile key={d} icon={PiggyBank} color={C.ozon} name={`${d} числа`} amount={s?.modalAmount ?? null}
+            <ListTile
+              key={d}
+              icon={PiggyBank}
+              color={C.ozon}
+              name={`${d} числа`}
+              amount={s?.modalAmount ?? null}
               onClick={() => {
-                if (s?.modalAmount != null) {
-                  onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon", amount: s.modalAmount });
-                } else {
-                  onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon" });
-                }
-              }} />
+                onOpenFull({
+                  type: "transfer",
+                  fromCard: "sber",
+                  toCard: "ozon",
+                  amount: s?.modalAmount ?? "",
+                });
+              }}
+            />
           );
         })}
       </div>
 
-      <div className="rounded-lg border p-5 mb-4 text-center" style={{ borderColor: C.border, background: C.surface }}>
-        <div className="text-xs mb-1" style={{ color: C.inkMuted }}>Баланс на Озон</div>
-        <div className="font-mono text-3xl font-semibold mb-1" style={{ color: C.ozon }}>{formatMoney(totalSaved)}</div>
-        <div className="text-xs mb-3" style={{ color: C.inkMuted }}>из цели {formatMoney(settings.goal)}</div>
-        <div className="h-2 rounded-full overflow-hidden mb-3" style={{ background: C.ozonSoft }}>
-          <div className="h-full rounded-full" style={{ width: `${clampPct(pct) * 100}%`, background: C.ozon }} />
+      <div className="ozon-detail">
+        <div className="soft-card" style={{ padding: 14, textAlign: "center" }}>
+          <div style={{ fontSize: 12, color: C.inkMuted, marginBottom: 4 }}>Баланс на Озон</div>
+          <div className="mono" style={{ fontSize: 27, lineHeight: 1.1, fontWeight: 900, color: C.ozon }}>
+            {formatMoney(totalSaved)}
+          </div>
+          <div style={{ fontSize: 12, color: C.inkMuted, marginTop: 4, marginBottom: 11 }}>
+            из цели {formatMoney(settings.goal)}
+          </div>
+          <div className="progress">
+            <div style={{ width: `${clampPct(pct) * 100}%` }} />
+          </div>
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 8,
+            marginTop: 9,
+            fontSize: 11,
+            color: C.inkMuted,
+          }}>
+            <span className="mono">{Math.round(clampPct(pct) * 100)}%</span>
+            <span className="mono" style={{
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}>
+              {left > 0 ? `осталось ${formatMoney(left)}` : "цель достигнута"}
+            </span>
+          </div>
         </div>
-        <div className="flex justify-between text-xs font-mono">
-          <span style={{ color: C.inkMuted }}>{Math.round(pct * 100)}%</span>
-          <span style={{ color: C.inkMuted }}>{left > 0 ? `осталось ${formatMoney(left)}` : "цель достигнута 🎉"}</span>
+
+        <div className="stat-grid">
+          <StatBox
+            label="В этом месяце"
+            value={`${thisMonth.ozonNet >= 0 ? "+" : ""}${formatMoney(thisMonth.ozonNet)}`}
+            color={C.ozon}
+          />
+          <StatBox
+            label="Прогноз до цели"
+            value={monthsLeft === 0 ? "готово" : monthsLeft ? `~${monthsLeft} мес.` : "—"}
+            color={C.ozon}
+          />
         </div>
-      </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <StatBox label="В этом месяце" value={`${thisMonth.ozonNet >= 0 ? "+" : ""}${formatMoney(thisMonth.ozonNet)}`} color={C.ozon} />
-        <StatBox label="Прогноз до цели" value={monthsLeft === 0 ? "готово" : monthsLeft ? `~${monthsLeft} мес.` : "—"} color={C.ozon} />
-      </div>
-
-      <div className="rounded-lg p-3 text-xs mb-5" style={{ background: C.amberSoft, color: "#8A5A15" }}>
-        Деньги из подушки не трогаем ни при каких условиях, кроме реального форс-мажора — потери работы или проблем со здоровьем.
-        С 3-го месяца стоит подключить Ozon Premium (199 ₽/мес): ставка поднимется примерно до 12% годовых.
-      </div>
-
-      <div className="text-xs font-medium mb-2" style={{ color: C.inkMuted }}>История по Озон</div>
-      {ozonEntries.length === 0 ? (
-        <div className="text-xs py-4 text-center" style={{ color: C.inkMuted }}>
-          Переводы и корректировки, которые касаются Озон, появятся здесь.
+        <div className="notice">
+          Деньги из подушки не трогаем ни при каких условиях, кроме реального форс-мажора — потери работы или проблем со здоровьем.
         </div>
-      ) : (
+
         <div>
-          {ozonEntries.map((t) => {
-            const isTransferOut = t.type === "transfer" && t.fromCard === "ozon";
-            const signedAmt = isTransferOut ? -t.amount : t.amount;
-            const label = t.type === "adjustment"
-              ? (t.note || (t.amount < 0 ? "Списание" : "Пополнение"))
-              : isTransferOut ? (t.note || `Перевод в ${cardLabel(t.toCard)}`)
-              : (t.note || `Перевод из ${cardLabel(t.fromCard)}`);
-            return (
-              <div key={t.id} className="flex items-center justify-between text-xs py-2 border-b" style={{ borderColor: C.border }}>
-                <div>
-                  <div>{label} {t.hidden ? "(скрыто)" : ""}</div>
-                  <div className="text-xs" style={{ color: C.inkMuted }}>{t.date}</div>
-                </div>
-                <div className="font-mono font-medium" style={{ color: signedAmt < 0 ? C.danger : C.ozon }}>
-                  {signedAmt < 0 ? "−" : "+"}{formatMoney(Math.abs(signedAmt))}
-                </div>
-              </div>
-            );
-          })}
+          <div className="section-title">История по Озон</div>
+          {ozonEntries.length === 0 ? (
+            <div className="history-list" style={{ padding: 16, textAlign: "center", fontSize: 12, color: C.inkMuted }}>
+              Переводы и корректировки, которые касаются Озон, появятся здесь.
+            </div>
+          ) : (
+            <div className="history-list">
+              {ozonEntries.slice(0, 8).map((t) => {
+                const isTransferOut = t.type === "transfer" && t.fromCard === "ozon";
+                const signedAmt = isTransferOut ? -t.amount : t.amount;
+                const label = t.type === "adjustment"
+                  ? (t.note || (t.amount < 0 ? "Списание" : "Пополнение"))
+                  : isTransferOut ? (t.note || `Перевод в ${cardLabel(t.toCard)}`)
+                  : (t.note || `Перевод из ${cardLabel(t.fromCard)}`);
+
+                return (
+                  <div key={t.id} className="tx-row">
+                    <div className="tx-main">
+                      <div className="tx-label">{label} {t.hidden ? "(скрыто)" : ""}</div>
+                      <div className="tx-sub">{t.date}</div>
+                    </div>
+                    <div className="tx-amount" style={{ color: signedAmt < 0 ? C.danger : C.ozon }}>
+                      {signedAmt < 0 ? "−" : "+"}{formatMoney(Math.abs(signedAmt))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
-/* ============================================================ Add */
+/* ============================================================ Add form */
 const EXPENSE_CARDS = [
-  { id: "sber", label: "Сбербанк", sub: "нужды", icon: "🟢", color: C.sber, soft: C.sberSoft },
-  { id: "alfa", label: "Альфа-Банк", sub: "развлечения", icon: "🔴", color: C.alfa, soft: C.alfaSoft },
+  { id: "sber", label: "Сбер", sub: "нужды", color: C.sber, soft: C.sberSoft },
+  { id: "alfa", label: "Альфа", sub: "развлечения", color: C.alfa, soft: C.alfaSoft },
 ];
+
 const ALL_CARDS = [
-  { id: "sber", label: "Сбер", icon: "🟢", color: C.sber, soft: C.sberSoft },
-  { id: "alfa", label: "Альфа", icon: "🔴", color: C.alfa, soft: C.alfaSoft },
-  { id: "ozon", label: "Озон", icon: "🔵", color: C.ozon, soft: C.ozonSoft },
+  { id: "sber", label: "Сбер", color: C.sber, soft: C.sberSoft },
+  { id: "alfa", label: "Альфа", color: C.alfa, soft: C.alfaSoft },
+  { id: "ozon", label: "Озон", color: C.ozon, soft: C.ozonSoft },
 ];
 
 function CardPicker({ options, value, onChange }) {
   return (
-    <div className="flex gap-2">
+    <div className="card-picker">
       {options.map((o) => (
-        <button key={o.id} onClick={() => onChange(o.id)}
-          className="flex-1 rounded-lg border py-2.5 flex flex-col items-center gap-0.5"
-          style={{ borderColor: value === o.id ? o.color : C.border, background: value === o.id ? o.soft : C.surface }}>
-          <span className="text-sm font-medium" style={{ color: value === o.id ? o.color : C.ink }}>{o.icon} {o.label}</span>
-          {o.sub && <span className="text-xs" style={{ color: value === o.id ? o.color : C.inkMuted }}>{o.sub}</span>}
+        <button
+          key={o.id}
+          type="button"
+          onClick={() => onChange(o.id)}
+          className={`card-picker-item ${value === o.id ? "active" : ""}`}
+          style={{ "--pick-color": o.color, "--pick-soft": o.soft }}
+        >
+          <div className="main" style={{ color: value === o.id ? o.color : C.ink }}>{o.label}</div>
+          {o.sub && <div className="sub">{o.sub}</div>}
         </button>
       ))}
     </div>
   );
 }
 
-const TYPE_OPTIONS = [
-  { id: "expense", label: "Трата" },
-  { id: "income", label: "Доход" },
-  { id: "transfer", label: "Перевод" },
-  { id: "adjustment", label: "Коррекция" },
-];
+function OperationTabs({ value, onChange }) {
+  const tabs = [
+    { id: "expense", label: "Трата" },
+    { id: "income", label: "Доход" },
+    { id: "transfer", label: "Перевод" },
+    { id: "adjustment", label: "Коррекция" },
+  ];
 
-function FullAddForm({ settings, transactions, onAdd, initial }) {
+  return (
+    <div className="operation-tabs">
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          className={value === t.id ? "active" : ""}
+          onClick={() => onChange(t.id)}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FullAddForm({ settings, initial, onSubmit, onCancel }) {
+  const defaultCategoryFor = (card) => {
+    const list = card === "alfa" ? settings.wantCats : settings.needCats;
+    return list[0]?.name || "";
+  };
+
   const [type, setType] = useState(initial?.type || "expense");
-  const [date, setDate] = useState(todayStr());
-  const [amount, setAmount] = useState(initial?.amount != null ? String(initial.amount) : "");
+  const [date, setDate] = useState(initial?.date || todayStr());
+  const [amount, setAmount] = useState(initial?.amount ?? "");
   const [card, setCard] = useState(initial?.card || "sber");
-  const [incomeCard, setIncomeCard] = useState("sber");
   const [fromCard, setFromCard] = useState(initial?.fromCard || "sber");
-  const [toCard, setToCard] = useState(initial?.toCard || "ozon");
-  const [category, setCategory] = useState(initial?.category || settings.needCats[0]?.name || "");
-  const [note, setNote] = useState("");
-  const [adjMode, setAdjMode] = useState("delta");
-  const [direction, setDirection] = useState("add");
-  const [showInHistory, setShowInHistory] = useState(true);
+  const [toCard, setToCard] = useState(initial?.toCard || "alfa");
+  const [category, setCategory] = useState(initial?.category || defaultCategoryFor(initial?.card || "sber"));
+  const [note, setNote] = useState(initial?.note || "");
+  const [adjustSign, setAdjustSign] = useState("plus");
+
+  useEffect(() => {
+    setType(initial?.type || "expense");
+    setDate(initial?.date || todayStr());
+    setAmount(initial?.amount ?? "");
+    setCard(initial?.card || "sber");
+    setFromCard(initial?.fromCard || "sber");
+    setToCard(initial?.toCard || "alfa");
+    setCategory(initial?.category || defaultCategoryFor(initial?.card || "sber"));
+    setNote(initial?.note || "");
+    setAdjustSign("plus");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial]);
 
   useEffect(() => {
     if (type !== "expense") return;
-    const list = card === "sber" ? settings.needCats : settings.wantCats;
-    setCategory((prev) => (list.some((c) => c.name === prev) ? prev : (list[0]?.name || "")));
-  }, [type, card, settings.needCats, settings.wantCats]);
-
-  useEffect(() => {
-    if (type === "expense" && card === "ozon") setCard("sber");
-  }, [type, card]);
-
-  const numAmount = parseFloat(amount) || 0;
-  const incomePreview = type === "income" && numAmount > 0 ? computeIncomeSplit(numAmount, settings) : null;
-
-  const currentBalances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
-  const currentCardBalance = currentBalances[card] || 0;
-
-  let adjDelta = 0;
-  if (type === "adjustment") {
-    if (adjMode === "delta") {
-      adjDelta = direction === "withdraw" ? -Math.abs(numAmount) : Math.abs(numAmount);
-    } else {
-      const target = amount === "" ? null : (parseFloat(amount) || 0);
-      adjDelta = target === null ? 0 : target - currentCardBalance;
+    const list = card === "alfa" ? settings.wantCats : settings.needCats;
+    if (!list.some((c) => c.name === category)) {
+      setCategory(list[0]?.name || "");
     }
-  }
+  }, [type, card, category, settings.needCats, settings.wantCats]);
 
-  function submit() {
-    if (!date) return;
-    if (type === "expense") {
-      if (numAmount <= 0) return;
-      onAdd({ type: "expense", date, amount: numAmount, card, category, note });
-    } else if (type === "income") {
-      if (numAmount <= 0) return;
-      onAdd({ type: "income", date, amount: numAmount, card: incomeCard, note });
+  const amountNum = Number(amount || 0);
+  const categories = card === "alfa" ? settings.wantCats : settings.needCats;
+
+  function submit(e) {
+    e.preventDefault();
+
+    if (!amountNum || amountNum <= 0) {
+      window.alert("Введите сумму больше 0");
+      return;
+    }
+
+    if (type === "transfer" && fromCard === toCard) {
+      window.alert("Выберите разные карты для перевода");
+      return;
+    }
+
+    if (type === "income") {
+      onSubmit({
+        type: "income",
+        date,
+        amount: amountNum,
+        card,
+        note: note.trim(),
+      });
+    } else if (type === "expense") {
+      onSubmit({
+        type: "expense",
+        date,
+        amount: amountNum,
+        card,
+        category,
+        note: note.trim(),
+      });
     } else if (type === "transfer") {
-      if (numAmount <= 0 || fromCard === toCard) return;
-      onAdd({ type: "transfer", date, amount: numAmount, fromCard, toCard, note });
-    } else {
-      if (adjMode === "delta" && numAmount <= 0) return;
-      if (adjMode === "target" && amount === "") return;
-      onAdd({ type: "adjustment", date, amount: adjDelta, card, note, hidden: !showInHistory });
+      onSubmit({
+        type: "transfer",
+        date,
+        amount: amountNum,
+        fromCard,
+        toCard,
+        note: note.trim(),
+      });
+    } else if (type === "adjustment") {
+      onSubmit({
+        type: "adjustment",
+        date,
+        amount: adjustSign === "minus" ? -amountNum : amountNum,
+        card,
+        note: note.trim(),
+      });
     }
-    setAmount("");
-    setNote("");
   }
-
-  const canSubmit = !!date && (
-    type === "expense" ? numAmount > 0
-    : type === "income" ? numAmount > 0
-    : type === "transfer" ? (numAmount > 0 && fromCard !== toCard)
-    : adjMode === "delta" ? numAmount > 0 : amount !== ""
-  );
 
   return (
-    <div>
-      <div className="flex rounded-lg overflow-hidden border mb-5" style={{ borderColor: C.border }}>
-        {TYPE_OPTIONS.map((opt) => (
-          <button key={opt.id} onClick={() => setType(opt.id)}
-            className="flex-1 py-2.5 text-xs font-medium"
-            style={{ background: type === opt.id ? C.ink : C.surface, color: type === opt.id ? C.surface : C.inkMuted }}>
-            {opt.label}
-          </button>
-        ))}
+    <form className="form-card" onSubmit={submit}>
+      <div className="form-title-row">
+        <h2>Новая операция</h2>
+        <button type="button" onClick={onCancel} className="icon-button" aria-label="Закрыть">
+          <X size={18} />
+        </button>
       </div>
 
-      {type === "income" && (
-        <div className="mb-4">
-          <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Куда пришли деньги</label>
-          <CardPicker options={ALL_CARDS} value={incomeCard} onChange={setIncomeCard} />
-        </div>
-      )}
+      <OperationTabs value={type} onChange={setType} />
 
-      {type === "transfer" && (
-        <>
-          {!(initial?.fromCard && initial?.toCard) && (
-            <>
-              <div className="mb-3">
-                <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Откуда</label>
-                <CardPicker options={ALL_CARDS} value={fromCard} onChange={setFromCard} />
-              </div>
-              <div className="mb-2">
-                <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Куда</label>
-                <CardPicker options={ALL_CARDS} value={toCard} onChange={setToCard} />
-              </div>
-              {fromCard === toCard && (
-                <div className="text-xs mb-3" style={{ color: C.danger }}>Карты должны отличаться</div>
-              )}
-            </>
-          )}
-          <div className="text-xs mb-4" style={{ color: C.inkMuted }}>
-            Баланс «Откуда»: <span className="font-mono">{formatMoney(currentBalances[fromCard] || 0)}</span>
-            {" · "}Баланс «Куда»: <span className="font-mono">{formatMoney(currentBalances[toCard] || 0)}</span>
-          </div>
-        </>
-      )}
-
-      {type === "adjustment" && (
-        <>
-          <div className="mb-3">
-            <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Карта</label>
-            <CardPicker options={ALL_CARDS} value={card} onChange={setCard} />
-            <div className="text-xs mt-2" style={{ color: C.inkMuted }}>
-              Текущий баланс: <span className="font-mono">{formatMoney(currentCardBalance)}</span>
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Как задать</label>
-            <div className="flex gap-2">
-              <button onClick={() => setAdjMode("delta")} className="flex-1 rounded-lg border py-2 text-xs font-medium"
-                style={{ borderColor: adjMode === "delta" ? C.ink : C.border, background: adjMode === "delta" ? C.bg : C.surface, color: adjMode === "delta" ? C.ink : C.inkMuted }}>
-                На сумму (+/−)
-              </button>
-              <button onClick={() => setAdjMode("target")} className="flex-1 rounded-lg border py-2 text-xs font-medium"
-                style={{ borderColor: adjMode === "target" ? C.ink : C.border, background: adjMode === "target" ? C.bg : C.surface, color: adjMode === "target" ? C.ink : C.inkMuted }}>
-                Задать итог
-              </button>
-            </div>
-            <div className="text-xs mt-2" style={{ color: C.inkMuted }}>
-              {adjMode === "delta"
-                ? "Прибавит или вычтет указанную сумму."
-                : "Например: было 1000 ₽, по факту 600 ₽ — впишите 600, разница в 400 ₽ учтётся сама."}
-            </div>
-          </div>
-
-          {adjMode === "delta" && (
-            <div className="mb-4">
-              <div className="flex gap-2">
-                <button onClick={() => setDirection("add")} className="flex-1 rounded-lg border py-2.5 text-sm font-medium"
-                  style={{ borderColor: direction === "add" ? C.ozon : C.border, background: direction === "add" ? C.ozonSoft : C.surface, color: direction === "add" ? C.ozon : C.inkMuted }}>
-                  Пополнение
-                </button>
-                <button onClick={() => setDirection("withdraw")} className="flex-1 rounded-lg border py-2.5 text-sm font-medium"
-                  style={{ borderColor: direction === "withdraw" ? C.danger : C.border, background: direction === "withdraw" ? C.dangerSoft : C.surface, color: direction === "withdraw" ? C.danger : C.inkMuted }}>
-                  Списание
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      <div className="mb-5">
-        <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>
-          {type === "adjustment" && adjMode === "target" ? "Сколько сейчас на карте на самом деле" : "Сумма"}
-        </label>
-        <div className="flex items-baseline gap-2 border-b-2 pb-2" style={{ borderColor: C.ink }}>
-          <input type="number" inputMode="decimal" min="0" step="1" value={amount}
-            onChange={(e) => setAmount(e.target.value)} placeholder="0"
-            className="font-mono text-4xl w-full outline-none bg-transparent" style={{ color: C.ink }} />
-          <span className="font-mono text-2xl" style={{ color: C.inkMuted }}>₽</span>
-        </div>
-        {type === "adjustment" && adjMode === "target" && amount !== "" && (
-          <div className="text-xs mt-2" style={{ color: adjDelta >= 0 ? C.ozon : C.danger }}>
-            Корректировка: {adjDelta >= 0 ? "+" : ""}{formatMoney(adjDelta)}
-          </div>
-        )}
+      <div className="field">
+        <label>Сумма</label>
+        <input
+          className="amount-input mono"
+          inputMode="numeric"
+          type="number"
+          min="0"
+          step="1"
+          placeholder="0"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
       </div>
 
-      <div className="mb-4">
-        <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Дата</label>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-          className="w-full border rounded-lg px-3 py-2 text-sm font-mono" style={{ borderColor: C.border, color: C.ink }} />
+      <div className="field">
+        <label>Дата</label>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
 
       {type === "expense" && (
         <>
-          {!initial?.card && (
-            <div className="mb-4">
-              <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Карта</label>
-              <CardPicker options={EXPENSE_CARDS} value={card} onChange={setCard} />
-            </div>
-          )}
-          <div className="mb-4">
-            <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>Категория</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.ink }}>
-              {(card === "sber" ? settings.needCats : settings.wantCats).map((c) => (
+          <div className="field">
+            <label>Карта</label>
+            <CardPicker options={EXPENSE_CARDS} value={card} onChange={setCard} />
+          </div>
+
+          <div className="field">
+            <label>Категория</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+              {categories.map((c) => (
                 <option key={c.name} value={c.name}>{c.name}</option>
               ))}
             </select>
@@ -910,117 +2077,198 @@ function FullAddForm({ settings, transactions, onAdd, initial }) {
         </>
       )}
 
-      {type === "adjustment" && card === "ozon" && adjDelta < 0 && (
-        <div className="flex gap-2 rounded-lg p-3 text-xs mb-4" style={{ background: C.dangerSoft, color: C.danger }}>
-          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>Подушку трогаем только при реальном форс-мажоре: потеря работы или проблемы со здоровьем.</span>
+      {type === "income" && (
+        <div className="field">
+          <label>Куда пришёл доход</label>
+          <CardPicker options={ALL_CARDS} value={card} onChange={setCard} />
         </div>
       )}
-      {type === "adjustment" && (
-        <label className="flex items-center gap-2 mb-4 text-xs" style={{ color: C.inkMuted }}>
-          <input type="checkbox" checked={showInHistory} onChange={(e) => setShowInHistory(e.target.checked)} />
-          Показывать в истории операций
-        </label>
+
+      {type === "transfer" && (
+        <div className="form-grid-2">
+          <div className="field">
+            <label>Откуда</label>
+            <select value={fromCard} onChange={(e) => setFromCard(e.target.value)}>
+              {ALL_CARDS.map((c) => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Куда</label>
+            <select value={toCard} onChange={(e) => setToCard(e.target.value)}>
+              {ALL_CARDS.map((c) => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       )}
 
-      <div className="mb-5">
-        <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>
-          {type === "expense" ? "Описание (необязательно)" : "Комментарий (необязательно)"}
-        </label>
-        <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
-          placeholder={type === "expense" ? "Пятёрочка, продукты" : type === "income" ? "Зарплата" : type === "transfer" ? "Перевод по СБП" : "Например, кэшбэк"}
-          className="w-full border rounded-lg px-3 py-2 text-sm" style={{ borderColor: C.border, color: C.ink }} />
+      {type === "adjustment" && (
+        <>
+          <div className="field">
+            <label>Карта</label>
+            <CardPicker options={ALL_CARDS} value={card} onChange={setCard} />
+          </div>
+          <div className="field">
+            <label>Тип коррекции</label>
+            <div className="card-picker">
+              <button
+                type="button"
+                className={`card-picker-item ${adjustSign === "plus" ? "active" : ""}`}
+                style={{ "--pick-color": C.sber, "--pick-soft": C.sberSoft }}
+                onClick={() => setAdjustSign("plus")}
+              >
+                <div className="main">Пополнение</div>
+              </button>
+              <button
+                type="button"
+                className={`card-picker-item ${adjustSign === "minus" ? "active" : ""}`}
+                style={{ "--pick-color": C.danger, "--pick-soft": C.dangerSoft }}
+                onClick={() => setAdjustSign("minus")}
+              >
+                <div className="main">Списание</div>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="field">
+        <label>Заметка</label>
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Необязательно" />
       </div>
 
-      {type === "income" && incomePreview && (
-        <div className="mb-5 rounded-lg border p-3 text-xs" style={{ borderColor: C.border, background: C.bg }}>
-          <div className="mb-2" style={{ color: C.inkMuted }}>Не забудьте перевести после зачисления:</div>
-          <div className="flex justify-between mb-1">
-            <span style={{ color: C.alfa }}>🔴 В Альфа ({settings.wantPct}%)</span>
-            <span className="font-mono font-medium">{formatMoney(incomePreview.toAlfa)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span style={{ color: C.ozon }}>🔵 В Озон ({settings.savePct}%)</span>
-            <span className="font-mono font-medium">{formatMoney(incomePreview.toOzon)}</span>
-          </div>
-          <div className="pt-2 mt-2 border-t text-xs" style={{ borderColor: C.border, color: C.inkMuted }}>
-            Остальное ({needPctOf(settings)}%) остаётся на карте зачисления — переводы делайте через тип «Перевод».
-          </div>
-        </div>
-      )}
-
-      <button onClick={submit} disabled={!canSubmit}
-        className="w-full rounded-lg py-3 text-sm font-semibold"
-        style={{ background: canSubmit ? C.ink : C.border, color: canSubmit ? C.surface : C.inkMuted }}>
-        Добавить
-      </button>
-    </div>
+      <div className="button-row">
+        <button type="button" onClick={onCancel} className="btn">Отмена</button>
+        <button type="submit" className="btn primary">Сохранить</button>
+      </div>
+    </form>
   );
 }
 
+/* ============================================================ Add view */
 function AddView({ settings, transactions, onAdd }) {
-  const [view, setView] = useState("carousel"); // "carousel" | "form"
-  const [activePanel, setActivePanel] = useState(0);
-  const [prefill, setPrefill] = useState(null);
-  const [prefillSeq, setPrefillSeq] = useState(0);
-  const scrollRef = useRef(null);
+  const [slide, setSlide] = useState(0);
+  const [formInitial, setFormInitial] = useState(null);
 
-  function openFull(partial) {
-    setPrefill(partial);
-    setPrefillSeq((s) => s + 1);
-    setView("form");
+  const slides = [
+    {
+      id: "needs",
+      title: "Нужды",
+      accent: C.sber,
+      soft: C.sberSoft,
+      logo: "check",
+      render: (navProps) => (
+        <CategoryPanel
+          title="Нужды"
+          accentColor={C.sber}
+          softColor={C.sberSoft}
+          logo="check"
+          card="sber"
+          categories={settings.needCats}
+          transactions={transactions}
+          settings={settings}
+          onOpenFull={openForm}
+          {...navProps}
+        />
+      ),
+    },
+    {
+      id: "wants",
+      title: "Развлечения",
+      accent: C.alfa,
+      soft: C.alfaSoft,
+      logo: "A",
+      render: (navProps) => (
+        <CategoryPanel
+          title="Развлечения"
+          accentColor={C.alfa}
+          softColor={C.alfaSoft}
+          logo="A"
+          card="alfa"
+          categories={settings.wantCats}
+          transactions={transactions}
+          settings={settings}
+          onOpenFull={openForm}
+          {...navProps}
+        />
+      ),
+    },
+    {
+      id: "cushion",
+      title: "Подушка",
+      accent: C.ozon,
+      soft: C.ozonSoft,
+      logo: "ozon",
+      render: (navProps) => (
+        <OzonPanel
+          settings={settings}
+          transactions={transactions}
+          onOpenFull={openForm}
+          {...navProps}
+        />
+      ),
+    },
+  ];
+
+  function openForm(initial) {
+    setFormInitial(initial || { type: "expense", card: "sber" });
   }
 
-  function handleAdd(tx) {
+  function closeForm() {
+    setFormInitial(null);
+  }
+
+  function submit(tx) {
     onAdd(tx);
-    setView("carousel");
+    setFormInitial(null);
   }
 
-  function goToPanel(i) {
-    setActivePanel(i);
-    const el = scrollRef.current;
-    if (el && el.children[i]) el.children[i].scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+  const current = slides[slide];
+  const canPrev = slide > 0;
+  const canNext = slide < slides.length - 1;
+
+  function go(delta) {
+    setSlide((v) => Math.max(0, Math.min(slides.length - 1, v + delta)));
+    setFormInitial(null);
   }
 
-  function handleScroll() {
-    const el = scrollRef.current;
-    if (!el || el.clientWidth === 0) return;
-    const idx = Math.round(el.scrollLeft / el.clientWidth);
-    if (idx !== activePanel) setActivePanel(idx);
-  }
-
-  if (view === "form") {
+  if (formInitial) {
     return (
-      <div>
-        <button onClick={() => setView("carousel")}
-          className="flex items-center gap-1 mb-4"
-          style={{ color: C.inkMuted, background: "none", border: "none", fontSize: 13, padding: 0 }}>
-          <ChevronLeft size={16} /> Назад
-        </button>
-        <FullAddForm key={prefillSeq} settings={settings} transactions={transactions} onAdd={handleAdd} initial={prefill} />
+      <div className="screen-stack">
+        <FullAddForm
+          settings={settings}
+          initial={formInitial}
+          onSubmit={submit}
+          onCancel={closeForm}
+        />
       </div>
     );
   }
 
-  const panelDefs = [
-    { key: "need", render: () => <CategoryPanel title="Нужды" accentColor={C.sber} card="sber" categories={settings.needCats} transactions={transactions} settings={settings} onOpenFull={openFull} /> },
-    { key: "want", render: () => <CategoryPanel title="Развлечения" accentColor={C.alfa} card="alfa" categories={settings.wantCats} transactions={transactions} settings={settings} onOpenFull={openFull} /> },
-    { key: "ozon", render: () => <OzonPanel settings={settings} transactions={transactions} onOpenFull={openFull} /> },
-  ];
-
   return (
-    <div>
-      <div ref={scrollRef} onScroll={handleScroll}
-        style={{ display: "flex", overflowX: "auto", scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch" }}
-        className="mb-1">
-        {panelDefs.map((p) => (
-          <div key={p.key} style={{ minWidth: "100%", scrollSnapAlign: "start", flexShrink: 0 }}>{p.render()}</div>
-        ))}
-      </div>
-      <div className="flex justify-center gap-1.5 mb-5">
-        {panelDefs.map((p, i) => (
-          <button key={p.key} onClick={() => goToPanel(i)} aria-label={`Панель ${i + 1}`}
-            style={{ width: 6, height: 6, borderRadius: 999, background: i === activePanel ? C.ink : C.border, border: "none", padding: 0 }} />
+    <div className="screen-stack">
+      {current.render({
+        canPrev,
+        canNext,
+        onPrev: () => go(-1),
+        onNext: () => go(1),
+      })}
+
+      <div className="dots" style={{ "--accent": current.accent }}>
+        {slides.map((s, i) => (
+          <button
+            key={s.id}
+            className={`dot ${i === slide ? "active" : ""}`}
+            type="button"
+            onClick={() => {
+              setSlide(i);
+              setFormInitial(null);
+            }}
+            aria-label={s.title}
+          />
         ))}
       </div>
     </div>
@@ -1028,383 +2276,386 @@ function AddView({ settings, transactions, onAdd }) {
 }
 
 /* ============================================================ Analysis */
-function AnalysisView({ settings, transactions, selectedMonth, setSelectedMonth, onDelete, onToggleInclude, goToAdd }) {
-  const cutoff = endOfMonthStr(selectedMonth);
-  const bal = useMemo(() => computeBalances(transactions, settings, cutoff), [transactions, settings, cutoff]);
-  const hasAnyTx = transactions.length > 0;
-
-  const totalBalance =
-    (settings.includeInTotal.sber ? bal.sber : 0) +
-    (settings.includeInTotal.alfa ? bal.alfa : 0) +
-    (settings.includeInTotal.ozon ? bal.ozon : 0);
-  const ozonPct = settings.goal > 0 ? bal.ozon / settings.goal : 0;
-
-  const months = useMemo(() => getAllMonthKeys(transactions).slice(-6), [transactions]);
-
-  const chartData = useMemo(() => months.map((mk) => {
-    const a = aggregateMonth(mk, transactions, settings);
-    return {
-      month: monthLabelShort(mk),
-      "Нужды": Math.round(a.sberSpent),
-      "Развлечения": Math.round(a.alfaSpent),
-      "Накопления": Math.round(a.ozonNet),
-    };
-  }), [months, transactions, settings]);
-
+function AnalysisView({
+  settings,
+  transactions,
+  selectedMonth,
+  setSelectedMonth,
+  onDelete,
+  onToggleInclude,
+  goToAdd,
+}) {
   const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
-  const sberUtil = agg.sberAvail > 0 ? agg.sberSpent / agg.sberAvail : 0;
-  const alfaUtil = agg.alfaAvail > 0 ? agg.alfaSpent / agg.alfaAvail : 0;
+  const balances = useMemo(
+    () => computeBalances(transactions, settings, endOfMonthStr(selectedMonth)),
+    [transactions, settings, selectedMonth]
+  );
 
-  const allCats = useMemo(() => {
-    const need = Object.entries(agg.needCatTotals).map(([cat, val]) => ({ cat, val, type: "need" }));
-    const want = Object.entries(agg.wantCatTotals).map(([cat, val]) => ({ cat, val, type: "want" }));
-    return [...need, ...want].filter((x) => x.val > 0).sort((a, b) => b.val - a.val);
-  }, [agg]);
+  const totalBalance = ["sber", "alfa", "ozon"].reduce((sum, key) => {
+    if (!settings.includeInTotal?.[key]) return sum;
+    return sum + (balances[key] || 0);
+  }, 0);
 
-  const topCat = allCats[0];
+  const chartData = [
+    { name: "Нужды", value: agg.sberSpent, fill: C.sber },
+    { name: "Развлеч.", value: agg.alfaSpent, fill: C.alfa },
+    { name: "Подушка", value: Math.max(0, agg.ozonNet), fill: C.ozon },
+  ];
+
+  const monthItems = agg.items;
 
   return (
-    <div>
+    <div className="screen-stack">
       <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
       <PaydayReminder settings={settings} transactions={transactions} />
 
-      {!hasAnyTx ? (
-        <EmptyState onAdd={goToAdd} />
-      ) : (
-        <>
-          <TotalBalanceCard total={totalBalance} settings={settings} onToggle={onToggleInclude} />
+      <TotalBalanceCard total={totalBalance} settings={settings} onToggle={onToggleInclude} />
 
-          <BankCard stripe={C.sber} soft={C.sberSoft} name="Сбербанк" role="Обязательные нужды"
-            bigLabel="баланс" bigValue={bal.sber} pct={sberUtil}
-            sub={`Пришло +${formatMoney(agg.sberInflow)} · Ушло −${formatMoney(agg.sberOutflow)}`} />
-          <BankCard stripe={C.alfa} soft={C.alfaSoft} name="Альфа-Банк" role="Развлечения"
-            bigLabel="баланс" bigValue={bal.alfa} pct={alfaUtil}
-            sub={`Пришло +${formatMoney(agg.alfaInflow)} · Ушло −${formatMoney(agg.alfaOutflow)}`} />
-          <BankCard stripe={C.ozon} soft={C.ozonSoft} name="Озон Банк" role="Подушка безопасности"
-            bigLabel="баланс" bigValue={bal.ozon} pct={ozonPct}
-            sub={`Цель ${formatMoney(settings.goal)}`}
-            footnote={`За этот месяц: ${agg.ozonNet >= 0 ? "+" : ""}${formatMoney(agg.ozonNet)}`} />
+      <div className="stat-grid">
+        <StatBox label="Доход" value={`+${formatMoney(agg.incomeTotal)}`} color={C.sber} />
+        <StatBox label="Расходы" value={`−${formatMoney(agg.sberSpent + agg.alfaSpent)}`} color={C.danger} />
+      </div>
 
-          {months.length < 2 ? (
-            <div className="text-xs rounded-lg border p-4 mt-4 mb-4" style={{ borderColor: C.border, color: C.inkMuted }}>
-              Тренд по месяцам появится, когда наберётся история за 2 и более месяцев.
-            </div>
-          ) : (
-            <div className="rounded-lg border p-3 mt-4 mb-5" style={{ borderColor: C.border, background: C.surface }}>
-              <div className="text-xs font-medium mb-3" style={{ color: C.inkMuted }}>Тренд по месяцам</div>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: C.inkMuted }} axisLine={{ stroke: C.border }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} axisLine={false} tickLine={false} width={40} />
-                  <Tooltip formatter={(v) => formatMoney(v)} contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${C.border}` }} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="Нужды" fill={C.sber} radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="Развлечения" fill={C.alfa} radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="Накопления" fill={C.ozon} radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+      <BankCard
+        stripe={C.sber}
+        soft={C.sberSoft}
+        name="Сбер"
+        role={`Нужды · ${needPctOf(settings)}%`}
+        bigLabel="баланс"
+        bigValue={balances.sber}
+        pct={agg.sberAvail > 0 ? agg.sberSpent / agg.sberAvail : 0}
+        sub={`Потрачено ${formatMoney(agg.sberSpent)} из ${formatMoney(Math.max(0, agg.sberAvail))}`}
+      />
 
-          <div className="grid grid-cols-3 gap-2 mb-5">
-            <StatBox label="Доход" value={formatMoney(agg.incomeTotal)} color={C.ink} />
-            <StatBox label="Траты" value={formatMoney(agg.sberSpent + agg.alfaSpent)} color={C.ink} />
-            <StatBox label="В подушку" value={`${agg.ozonNet >= 0 ? "+" : ""}${formatMoney(agg.ozonNet)}`} color={C.ozon} />
+      <BankCard
+        stripe={C.alfa}
+        soft={C.alfaSoft}
+        name="Альфа"
+        role={`Развлечения · ${settings.wantPct}%`}
+        bigLabel="баланс"
+        bigValue={balances.alfa}
+        pct={agg.alfaAvail > 0 ? agg.alfaSpent / agg.alfaAvail : 0}
+        sub={`Потрачено ${formatMoney(agg.alfaSpent)} из ${formatMoney(Math.max(0, agg.alfaAvail))}`}
+      />
+
+      <BankCard
+        stripe={C.ozon}
+        soft={C.ozonSoft}
+        name="Озон"
+        role={`Подушка · ${settings.savePct}%`}
+        bigLabel="баланс"
+        bigValue={balances.ozon}
+        pct={settings.goal > 0 ? balances.ozon / settings.goal : 0}
+        sub={`Цель: ${formatMoney(settings.goal)}`}
+      />
+
+      <div className="panel">
+        <SectionTitle>Структура месяца</SectionTitle>
+        <div className="chart-box">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 10, right: 4, bottom: 4, left: -18 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: C.inkMuted }} />
+              <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} width={42} />
+              <Tooltip formatter={(v) => formatMoney(v)} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar dataKey="value" name="Сумма" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div>
+        <SectionTitle>Операции</SectionTitle>
+        {monthItems.length === 0 ? (
+          <EmptyState onAdd={goToAdd} />
+        ) : (
+          <div className="history-list">
+            {monthItems.map((tx) => (
+              <TxRow key={tx.id} tx={tx} onDelete={onDelete} />
+            ))}
           </div>
-
-          {topCat && (
-            <div className="text-xs mb-4" style={{ color: C.inkMuted }}>
-              Больше всего потрачено на «{topCat.cat}» — {formatMoney(topCat.val)}
-            </div>
-          )}
-
-          <div className="text-xs font-medium mb-2" style={{ color: C.inkMuted }}>Расходы по категориям</div>
-          {allCats.length === 0 ? (
-            <div className="text-xs py-4 text-center" style={{ color: C.inkMuted }}>Трат в этом месяце пока нет</div>
-          ) : (
-            <div className="space-y-2.5 mb-5">
-              {allCats.map(({ cat, val, type }) => {
-                const budget = type === "need" ? agg.sberAvail : agg.alfaAvail;
-                const color = type === "need" ? C.sber : C.alfa;
-                const pct = budget > 0 ? val / budget : 0;
-                return (
-                  <div key={type + cat}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span>{cat}</span>
-                      <span className="font-mono">{formatMoney(val)}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: type === "need" ? C.sberSoft : C.alfaSoft }}>
-                      <div className="h-full rounded-full" style={{ width: `${clampPct(pct) * 100}%`, background: color }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="text-xs font-medium mb-2" style={{ color: C.inkMuted }}>Операции за месяц</div>
-          {agg.items.length === 0 ? (
-            <div className="text-xs py-4 text-center" style={{ color: C.inkMuted }}>Пока нет операций в этом месяце</div>
-          ) : (
-            <div>{agg.items.slice(0, 10).map((t) => <TxRow key={t.id} tx={t} onDelete={onDelete} />)}</div>
-          )}
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
 
 /* ============================================================ Settings */
-function NumField({ label, value, onChange, onBlur, hint }) {
-  return (
-    <div className="mb-3">
-      <label className="text-xs mb-1 block" style={{ color: C.inkMuted }}>{label}</label>
-      <input type="number" min="0" step="1" value={value}
-        onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
-        onBlur={onBlur}
-        className="w-full border rounded-lg px-3 py-2 text-sm font-mono" style={{ borderColor: C.border, color: C.ink }} />
-      {hint && <div className="text-xs mt-1" style={{ color: C.inkMuted }}>{hint}</div>}
-    </div>
-  );
-}
-
-function IconGrid({ value, onChange }) {
-  return (
-    <div className="flex flex-wrap gap-1.5 mb-2">
-      {ICON_KEYS.map((key) => {
-        const Icon = getIcon(key);
-        const active = value === key;
-        return (
-          <button key={key} onClick={() => onChange(key)} type="button"
-            className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: active ? C.ink : C.bg, color: active ? C.surface : C.inkMuted }}>
-            <Icon size={15} />
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function ColorGrid({ value, onChange }) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {CATEGORY_COLORS.map((c) => (
-        <button key={c} onClick={() => onChange(c)} type="button"
-          className="w-7 h-7 rounded-full"
-          style={{ background: c, outline: value === c ? `2px solid ${C.ink}` : "none", outlineOffset: 2, border: "none" }} />
-      ))}
-    </div>
-  );
-}
-
-function CategoryEditor({ categories, onChange }) {
-  const [editing, setEditing] = useState(null);
-  const [newName, setNewName] = useState("");
-  const [newIcon, setNewIcon] = useState(ICON_KEYS[0]);
-  const [newColor, setNewColor] = useState(CATEGORY_COLORS[0]);
-
-  function updateCategory(name, patch) {
-    onChange(categories.map((c) => (c.name === name ? { ...c, ...patch } : c)));
-  }
-  function removeCategory(name) {
-    onChange(categories.filter((c) => c.name !== name));
-    if (editing === name) setEditing(null);
-  }
-  function addCategory() {
-    const name = newName.trim();
-    if (!name || categories.some((c) => c.name === name)) return;
-    onChange([...categories, { name, icon: newIcon, color: newColor }]);
-    setNewName("");
-    setNewIcon(ICON_KEYS[0]);
-    setNewColor(CATEGORY_COLORS[0]);
-  }
+function CategoryRow({ cat, onChange, onDelete }) {
+  const Icon = getIcon(cat.icon);
 
   return (
-    <div className="mb-2">
-      <div className="space-y-2 mb-3">
-        {categories.map((cat) => {
-          const Icon = getIcon(cat.icon);
-          const isEditing = editing === cat.name;
-          return (
-            <div key={cat.name} className="rounded-lg border" style={{ borderColor: C.border }}>
-              <div className="flex items-center gap-2.5 p-2">
-                <button onClick={() => setEditing(isEditing ? null : cat.name)} type="button"
-                  className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                  style={{ background: cat.color + "22" }}>
-                  <Icon size={17} style={{ color: cat.color }} />
-                </button>
-                <span className="text-xs flex-1">{cat.name}</span>
-                <button onClick={() => removeCategory(cat.name)} type="button" style={{ color: C.inkMuted }}>
-                  <X size={14} />
-                </button>
-              </div>
-              {isEditing && (
-                <div className="p-2 pt-0">
-                  <IconGrid value={cat.icon} onChange={(icon) => updateCategory(cat.name, { icon })} />
-                  <ColorGrid value={cat.color} onChange={(color) => updateCategory(cat.name, { color })} />
-                </div>
-              )}
-            </div>
-          );
-        })}
+    <div className="tx-row">
+      <div className="quick-icon" style={{ width: 38, height: 38, background: cat.color + "22" }}>
+        <Icon size={18} style={{ color: cat.color }} />
       </div>
 
-      <div className="rounded-lg border p-2.5" style={{ borderColor: C.border }}>
-        <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
-          placeholder="Новая категория"
-          className="w-full border rounded-lg px-3 py-1.5 text-xs mb-2" style={{ borderColor: C.border, color: C.ink }} />
-        <IconGrid value={newIcon} onChange={setNewIcon} />
-        <ColorGrid value={newColor} onChange={setNewColor} />
-        <button onClick={addCategory} type="button"
-          className="w-full rounded-lg py-2 text-xs font-medium mt-2" style={{ background: C.ink, color: C.surface }}>
+      <div className="tx-main">
+        <input
+          value={cat.name}
+          onChange={(e) => onChange({ ...cat, name: e.target.value })}
+          style={{
+            width: "100%",
+            height: 34,
+            border: `1px solid ${C.border}`,
+            borderRadius: 10,
+            padding: "0 10px",
+            background: C.surface2,
+            color: C.ink,
+          }}
+        />
+      </div>
+
+      <button onClick={onDelete} className="delete-btn" type="button" aria-label="Удалить">
+        <Trash2 size={14} />
+      </button>
+    </div>
+  );
+}
+
+function SettingsView({ settings, onSave, onWipeAll }) {
+  const [draft, setDraft] = useState(settings);
+  const [daysText, setDaysText] = useState((settings.reminderDays || []).join(", "));
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setDraft(settings);
+    setDaysText((settings.reminderDays || []).join(", "));
+  }, [settings]);
+
+  function numberValue(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function save() {
+    const reminderDays = daysText
+      .split(",")
+      .map((x) => parseInt(x.trim(), 10))
+      .filter((x) => Number.isFinite(x) && x >= 1 && x <= 31);
+
+    const next = {
+      ...draft,
+      wantPct: numberValue(draft.wantPct),
+      savePct: numberValue(draft.savePct),
+      goal: numberValue(draft.goal),
+      reminderDays,
+      openingBalance: {
+        sber: numberValue(draft.openingBalance?.sber),
+        alfa: numberValue(draft.openingBalance?.alfa),
+        ozon: numberValue(draft.openingBalance?.ozon),
+      },
+    };
+
+    onSave(next);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1300);
+  }
+
+  function updateNeedCat(index, next) {
+    setDraft((d) => {
+      const arr = [...d.needCats];
+      arr[index] = next;
+      return { ...d, needCats: arr };
+    });
+  }
+
+  function updateWantCat(index, next) {
+    setDraft((d) => {
+      const arr = [...d.wantCats];
+      arr[index] = next;
+      return { ...d, wantCats: arr };
+    });
+  }
+
+  return (
+    <div className="screen-stack">
+      <div className="panel">
+        <SectionTitle>Правило распределения</SectionTitle>
+
+        <div className="form-grid-2">
+          <div className="field">
+            <label>Развлечения, %</label>
+            <input
+              type="number"
+              value={draft.wantPct}
+              onChange={(e) => setDraft({ ...draft, wantPct: e.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label>Подушка, %</label>
+            <input
+              type="number"
+              value={draft.savePct}
+              onChange={(e) => setDraft({ ...draft, savePct: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="notice" style={{ marginBottom: 12 }}>
+          На нужды остаётся {needPctOf({ ...draft, wantPct: Number(draft.wantPct), savePct: Number(draft.savePct) })}% дохода.
+        </div>
+
+        <div className="field">
+          <label>Дни напоминаний</label>
+          <input value={daysText} onChange={(e) => setDaysText(e.target.value)} placeholder="5, 15, 30" />
+        </div>
+
+        <div className="field">
+          <label>Цель подушки</label>
+          <input
+            type="number"
+            value={draft.goal}
+            onChange={(e) => setDraft({ ...draft, goal: e.target.value })}
+          />
+        </div>
+      </div>
+
+      <div className="panel">
+        <SectionTitle>Начальные балансы</SectionTitle>
+
+        <div className="form-grid-2">
+          <div className="field">
+            <label>Сбер</label>
+            <input
+              type="number"
+              value={draft.openingBalance?.sber ?? 0}
+              onChange={(e) => setDraft({
+                ...draft,
+                openingBalance: { ...draft.openingBalance, sber: e.target.value },
+              })}
+            />
+          </div>
+          <div className="field">
+            <label>Альфа</label>
+            <input
+              type="number"
+              value={draft.openingBalance?.alfa ?? 0}
+              onChange={(e) => setDraft({
+                ...draft,
+                openingBalance: { ...draft.openingBalance, alfa: e.target.value },
+              })}
+            />
+          </div>
+        </div>
+
+        <div className="field">
+          <label>Озон</label>
+          <input
+            type="number"
+            value={draft.openingBalance?.ozon ?? 0}
+            onChange={(e) => setDraft({
+              ...draft,
+              openingBalance: { ...draft.openingBalance, ozon: e.target.value },
+            })}
+          />
+        </div>
+      </div>
+
+      <div className="panel">
+        <SectionTitle>Категории нужд</SectionTitle>
+        <div className="history-list">
+          {draft.needCats.map((cat, i) => (
+            <CategoryRow
+              key={`${cat.name}-${i}`}
+              cat={cat}
+              onChange={(next) => updateNeedCat(i, next)}
+              onDelete={() => setDraft((d) => ({ ...d, needCats: d.needCats.filter((_, k) => k !== i) }))}
+            />
+          ))}
+        </div>
+
+        <button
+          className="btn"
+          type="button"
+          style={{ width: "100%", marginTop: 10 }}
+          onClick={() => setDraft((d) => ({
+            ...d,
+            needCats: [
+              ...d.needCats,
+              { name: "Новая категория", icon: "HelpCircle", color: CATEGORY_COLORS[d.needCats.length % CATEGORY_COLORS.length] },
+            ],
+          }))}
+        >
           Добавить категорию
+        </button>
+      </div>
+
+      <div className="panel">
+        <SectionTitle>Категории развлечений</SectionTitle>
+        <div className="history-list">
+          {draft.wantCats.map((cat, i) => (
+            <CategoryRow
+              key={`${cat.name}-${i}`}
+              cat={cat}
+              onChange={(next) => updateWantCat(i, next)}
+              onDelete={() => setDraft((d) => ({ ...d, wantCats: d.wantCats.filter((_, k) => k !== i) }))}
+            />
+          ))}
+        </div>
+
+        <button
+          className="btn"
+          type="button"
+          style={{ width: "100%", marginTop: 10 }}
+          onClick={() => setDraft((d) => ({
+            ...d,
+            wantCats: [
+              ...d.wantCats,
+              { name: "Новая категория", icon: "HelpCircle", color: CATEGORY_COLORS[d.wantCats.length % CATEGORY_COLORS.length] },
+            ],
+          }))}
+        >
+          Добавить категорию
+        </button>
+      </div>
+
+      <div className="button-row">
+        <button className="btn primary" type="button" onClick={save}>
+          {saved ? "Сохранено" : "Сохранить"}
+        </button>
+        <button
+          className="btn"
+          type="button"
+          style={{ color: C.danger }}
+          onClick={() => {
+            if (window.confirm("Удалить все операции? Настройки останутся.")) {
+              onWipeAll();
+            }
+          }}
+        >
+          Очистить
         </button>
       </div>
     </div>
   );
 }
 
-function SettingsView({ settings, onSave, onWipeAll }) {
-  const [local, setLocal] = useState(settings);
-  const [armed, setArmed] = useState(false);
-  const armTimer = useRef(null);
-
-  useEffect(() => { setLocal(settings); }, [settings]);
-
-  function field(key, value) { setLocal((prev) => ({ ...prev, [key]: value })); }
-
-  function commit() {
-    const clean = { ...local };
-    ["wantPct", "savePct", "goal"].forEach((k) => {
-      if (clean[k] === "" || clean[k] === null || Number.isNaN(clean[k])) clean[k] = 0;
-    });
-    const ob = { ...clean.openingBalance };
-    ["sber", "alfa", "ozon"].forEach((k) => {
-      if (ob[k] === "" || ob[k] === null || Number.isNaN(ob[k])) ob[k] = 0;
-    });
-    clean.openingBalance = ob;
-    setLocal(clean);
-    onSave(clean);
-  }
-
-  function toggleReminderDay(d) {
-    const active = local.reminderDays.includes(d);
-    const next = active ? local.reminderDays.filter((x) => x !== d) : [...local.reminderDays, d].sort((a, b) => a - b);
-    const nextSettings = { ...local, reminderDays: next };
-    setLocal(nextSettings); onSave(nextSettings);
-  }
-
-  function saveNeedCats(next) {
-    const s = { ...local, needCats: next };
-    setLocal(s); onSave(s);
-  }
-  function saveWantCats(next) {
-    const s = { ...local, wantCats: next };
-    setLocal(s); onSave(s);
-  }
-
-  function handleDangerClick() {
-    if (!armed) {
-      setArmed(true);
-      armTimer.current = setTimeout(() => setArmed(false), 5000);
-    } else {
-      clearTimeout(armTimer.current);
-      setArmed(false);
-      onWipeAll();
-    }
-  }
-
-  return (
-    <div className="pb-8">
-      <SectionTitle>Проценты для напоминаний о переводах</SectionTitle>
-      <NumField label="В Озон (накопления), %" value={local.savePct} onChange={(v) => field("savePct", v)} onBlur={commit} />
-      <NumField label="В Альфа (развлечения), %" value={local.wantPct} onChange={(v) => field("wantPct", v)} onBlur={commit} />
-      <div className="text-xs mb-5 -mt-1" style={{ color: C.inkMuted }}>
-        На карте зачисления (нужды) останется: {needPctOf({ wantPct: Number(local.wantPct) || 0, savePct: Number(local.savePct) || 0 })}%.
-        Эти проценты используются только для подсказок — переводы между картами вы всегда делаете вручную.
-      </div>
-
-      <SectionTitle>Напоминание о переводах</SectionTitle>
-      <div className="flex gap-2 mb-2">
-        {[5, 15, 30].map((d) => {
-          const active = local.reminderDays.includes(d);
-          return (
-            <button key={d} onClick={() => toggleReminderDay(d)}
-              className="flex-1 rounded-lg border py-2 text-sm font-medium"
-              style={{ borderColor: active ? C.amber : C.border, background: active ? C.amberSoft : C.surface, color: active ? C.amber : C.inkMuted }}>
-              {d} число
-            </button>
-          );
-        })}
-      </div>
-      <div className="text-xs mb-5" style={{ color: C.inkMuted }}>В эти дни на «Обзоре» будет появляться напоминание сделать переводы, и они появятся плитками на вкладке «Добавить».</div>
-
-      <SectionTitle>Начальный баланс</SectionTitle>
-      <NumField label="Сбербанк, ₽" value={local.openingBalance.sber}
-        onChange={(v) => field("openingBalance", { ...local.openingBalance, sber: v })} onBlur={commit} />
-      <NumField label="Альфа-Банк, ₽" value={local.openingBalance.alfa}
-        onChange={(v) => field("openingBalance", { ...local.openingBalance, alfa: v })} onBlur={commit} />
-      <NumField label="Озон Банк, ₽" value={local.openingBalance.ozon}
-        onChange={(v) => field("openingBalance", { ...local.openingBalance, ozon: v })} onBlur={commit} />
-      <div className="text-xs mb-5 -mt-1" style={{ color: C.inkMuted }}>
-        Сколько реально было на картах в день, с которого вы начали вести учёт здесь.
-      </div>
-
-      <SectionTitle>Цель «Подушка безопасности»</SectionTitle>
-      <NumField label="Цель, ₽" value={local.goal} onChange={(v) => field("goal", v)} onBlur={commit} />
-
-      <SectionTitle>Категории — Нужды (Сбер)</SectionTitle>
-      <CategoryEditor categories={local.needCats} onChange={saveNeedCats} />
-
-      <SectionTitle>Категории — Развлечения (Альфа)</SectionTitle>
-      <CategoryEditor categories={local.wantCats} onChange={saveWantCats} />
-
-      <SectionTitle>Подписки</SectionTitle>
-      <div className="text-xs rounded-lg border p-3 mb-5" style={{ borderColor: C.border, color: C.inkMuted }}>
-        <p className="mb-2"><span style={{ color: C.ink, fontWeight: 500 }}>Альфа-Банк:</span> подключите T-Pro (299 ₽/мес) — выше кэшбэк на развлечения и лимиты на переводы между картами.</p>
-        <p><span style={{ color: C.ink, fontWeight: 500 }}>Озон Банк:</span> первые 2 месяца — повышенная приветственная ставка. С 3-го месяца подключите Ozon Premium (199 ₽/мес) — ставка вырастет примерно до 12%.</p>
-      </div>
-
-      <SectionTitle>Данные</SectionTitle>
-      <button onClick={handleDangerClick}
-        className="w-full rounded-lg py-2.5 text-sm font-medium border"
-        style={{
-          borderColor: armed ? C.danger : C.border,
-          background: armed ? C.dangerSoft : C.surface,
-          color: armed ? C.danger : C.inkMuted,
-        }}>
-        {armed ? "Нажмите ещё раз для удаления всех операций" : "Удалить все операции"}
-      </button>
-    </div>
-  );
-}
-
-/* ============================================================ Tab bar */
-const TABS = [
-  { id: "add", label: "Добавить", icon: Plus },
-  { id: "analysis", label: "Анализ", icon: BarChart3 },
-  { id: "settings", label: "Настройки", icon: SettingsIcon },
-];
-
+/* ============================================================ Bottom nav */
 function TabBar({ tab, setTab }) {
+  const items = [
+    { id: "add", label: "Добавить", icon: Plus, cls: "add" },
+    { id: "analysis", label: "Анализ", icon: BarChart3, cls: "" },
+    { id: "settings", label: "Настройки", icon: SettingsIcon, cls: "" },
+  ];
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 border-t" style={{ background: C.surface, borderColor: C.border, zIndex: 40 }}>
-      <div className="max-w-md mx-auto flex justify-around py-1.5 px-1">
-        {TABS.map((t) => {
-          const active = tab === t.id;
-          const Icon = t.icon;
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg"
-              style={{ color: active ? C.ink : C.inkMuted, background: active ? C.bg : "transparent" }}>
-              <Icon size={19} strokeWidth={active ? 2.3 : 1.8} />
-              <span className="text-xs">{t.label}</span>
-            </button>
-          );
-        })}
-      </div>
+    <nav className="bottom-nav">
+      {items.map((it) => {
+        const Icon = it.icon;
+        return (
+          <button
+            key={it.id}
+            type="button"
+            className={`nav-btn ${it.cls} ${tab === it.id ? "active" : ""}`}
+            onClick={() => setTab(it.id)}
+          >
+            <Icon />
+            <span>{it.label}</span>
+          </button>
+        );
+      })}
     </nav>
   );
 }
@@ -1420,28 +2671,51 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
+
     (async () => {
-      let s = DEFAULT_SETTINGS, t = [];
+      let s = DEFAULT_SETTINGS;
+      let t = [];
+
       try {
         const r = await storage.get("settings");
         if (r && r.value) s = migrateSettings(JSON.parse(r.value));
-      } catch (e) { /* first run, use defaults */ }
+      } catch (e) {
+        console.warn("Не удалось загрузить настройки", e);
+      }
+
       try {
         const r = await storage.get("transactions");
         if (r && r.value) t = migrateTransactions(JSON.parse(r.value), s);
-      } catch (e) { /* first run, empty list */ }
-      if (alive) { setSettings(s); setTransactions(t); setLoaded(true); }
+      } catch (e) {
+        console.warn("Не удалось загрузить операции", e);
+      }
+
+      if (alive) {
+        setSettings(s);
+        setTransactions(t);
+        setLoaded(true);
+      }
     })();
+
     return () => { alive = false; };
   }, []);
 
   async function persistTransactions(next) {
     setTransactions(next);
-    try { await storage.set("transactions", JSON.stringify(next)); } catch (e) { console.error(e); }
+    try {
+      await storage.set("transactions", JSON.stringify(next));
+    } catch (e) {
+      console.warn("Не удалось сохранить операции", e);
+    }
   }
+
   async function persistSettings(next) {
     setSettings(next);
-    try { await storage.set("settings", JSON.stringify(next)); } catch (e) { console.error(e); }
+    try {
+      await storage.set("settings", JSON.stringify(next));
+    } catch (e) {
+      console.warn("Не удалось сохранить настройки", e);
+    }
   }
 
   function addTransaction(tx) {
@@ -1450,43 +2724,100 @@ export default function App() {
     setToast("Добавлено");
     setTimeout(() => setToast(null), 1400);
   }
+
   function deleteTransaction(id) {
     persistTransactions(transactions.filter((t) => t.id !== id));
+    setToast("Удалено");
+    setTimeout(() => setToast(null), 1200);
   }
+
   function toggleIncludeInTotal(key) {
-    const next = { ...settings, includeInTotal: { ...settings.includeInTotal, [key]: !settings.includeInTotal[key] } };
+    const next = {
+      ...settings,
+      includeInTotal: {
+        ...settings.includeInTotal,
+        [key]: !settings.includeInTotal?.[key],
+      },
+    };
     persistSettings(next);
   }
 
   if (!loaded) {
     return (
-      <div style={{ background: C.bg, color: C.inkMuted, minHeight: "100vh" }} className="font-display flex items-center justify-center">
-        <div className="text-sm">Загрузка…</div>
-      </div>
+      <>
+        <AppStyles />
+        <div className="app-viewport">
+          <div className="app-shell" style={{ alignItems: "center", justifyContent: "center" }}>
+            <div style={{ color: C.inkMuted, fontSize: 14 }}>Загрузка…</div>
+          </div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div style={{ background: C.bg, color: C.ink, minHeight: "100vh" }} className="font-display">
-      <header className="max-w-md mx-auto px-4 pt-5 pb-1">
-        <div className="text-lg font-semibold">Бюджет</div>
-      </header>
+    <>
+      <AppStyles />
 
-      <main className="max-w-md mx-auto px-4 pb-24 pt-3">
-        {tab === "add" && <AddView settings={settings} transactions={transactions} onAdd={addTransaction} />}
-        {tab === "analysis" && (
-          <AnalysisView settings={settings} transactions={transactions}
-            selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth}
-            onDelete={deleteTransaction} onToggleInclude={toggleIncludeInTotal} goToAdd={() => setTab("add")} />
-        )}
-        {tab === "settings" && (
-          <SettingsView settings={settings} onSave={persistSettings}
-            onWipeAll={() => persistTransactions([])} />
-        )}
-      </main>
+      <div className="app-viewport">
+        <div className="app-shell">
+          <header className="app-header">
+            <div className="app-title-row">
+              <div>
+                <div className="app-title">Бюджет</div>
+                <div className="app-date">{monthLabelShort(todayMonthKey())}</div>
+              </div>
 
-      <TabBar tab={tab} setTab={setTab} />
-      <Toast text={toast} />
-    </div>
+              <div style={{
+                width: 36,
+                height: 36,
+                borderRadius: 14,
+                background: C.surface,
+                border: `1px solid ${C.border}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: C.inkMuted,
+              }}>
+                <Wallet size={18} />
+              </div>
+            </div>
+          </header>
+
+          <main className="app-main">
+            {tab === "add" && (
+              <AddView
+                settings={settings}
+                transactions={transactions}
+                onAdd={addTransaction}
+              />
+            )}
+
+            {tab === "analysis" && (
+              <AnalysisView
+                settings={settings}
+                transactions={transactions}
+                selectedMonth={selectedMonth}
+                setSelectedMonth={setSelectedMonth}
+                onDelete={deleteTransaction}
+                onToggleInclude={toggleIncludeInTotal}
+                goToAdd={() => setTab("add")}
+              />
+            )}
+
+            {tab === "settings" && (
+              <SettingsView
+                settings={settings}
+                onSave={persistSettings}
+                onWipeAll={() => persistTransactions([])}
+              />
+            )}
+          </main>
+
+          <TabBar tab={tab} setTab={setTab} />
+          <Toast text={toast} />
+        </div>
+      </div>
+    </>
   );
 }
