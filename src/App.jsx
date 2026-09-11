@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Plus, PiggyBank, BarChart3, Settings as SettingsIcon,
+  Home, Plus, PiggyBank, BarChart3, Settings as SettingsIcon,
   ChevronLeft, ChevronRight, Trash2, Check, AlertTriangle, Wallet, X, ArrowUp, ArrowDown,
+  ShoppingCart, ShoppingBag, UtensilsCrossed, Coffee, Zap, Droplet, Wifi, Phone,
+  Car, Bus, Fuel, Plane, Train, HeartPulse, Pill, Stethoscope, Dumbbell, GraduationCap,
+  Baby, PawPrint, Gift, Film, Tv, Music, Gamepad2, Book, Shirt, Smartphone, Laptop,
+  Wrench, Scissors, Coins, Users, User, HelpCircle, MoreHorizontal, Sparkles, Umbrella, Wine,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { storage } from "./storage.js";
 
-// ==================== DESIGN TOKENS ====================
+/* ============================================================ design tokens */
 const C = {
   bg: "#F1F4F2",
   surface: "#FFFFFF",
@@ -1421,28 +1425,23 @@ export default function App() {
       try {
         const r = await storage.get("settings");
         if (r && r.value) s = migrateSettings(JSON.parse(r.value));
-      } catch (e) {}
+      } catch (e) { /* first run, use defaults */ }
       try {
         const r = await storage.get("transactions");
         if (r && r.value) t = migrateTransactions(JSON.parse(r.value), s);
-      } catch (e) {}
-      if (alive) {
-        setSettings(s);
-        setTransactions(t);
-        setLoaded(true);
-      }
+      } catch (e) { /* first run, empty list */ }
+      if (alive) { setSettings(s); setTransactions(t); setLoaded(true); }
     })();
     return () => { alive = false; };
   }, []);
 
   async function persistTransactions(next) {
     setTransactions(next);
-    try { await storage.set("transactions", JSON.stringify(next)); } catch (e) {}
+    try { await storage.set("transactions", JSON.stringify(next)); } catch (e) { console.error(e); }
   }
-
   async function persistSettings(next) {
     setSettings(next);
-    try { await storage.set("settings", JSON.stringify(next)); } catch (e) {}
+    try { await storage.set("settings", JSON.stringify(next)); } catch (e) { console.error(e); }
   }
 
   function addTransaction(tx) {
@@ -1451,16 +1450,11 @@ export default function App() {
     setToast("Добавлено");
     setTimeout(() => setToast(null), 1400);
   }
-
   function deleteTransaction(id) {
     persistTransactions(transactions.filter((t) => t.id !== id));
   }
-
   function toggleIncludeInTotal(key) {
-    const next = {
-      ...settings,
-      includeInTotal: { ...settings.includeInTotal, [key]: !settings.includeInTotal[key] },
-    };
+    const next = { ...settings, includeInTotal: { ...settings.includeInTotal, [key]: !settings.includeInTotal[key] } };
     persistSettings(next);
   }
 
@@ -1474,40 +1468,25 @@ export default function App() {
 
   return (
     <div style={{ background: C.bg, color: C.ink, minHeight: "100vh" }} className="font-display">
-      {/* === Главный контейнер (ограничен по ширине для телефона) === */}
-      <div className="max-w-[420px] mx-auto w-full min-h-screen flex flex-col">
-        
-        <header className="px-4 pt-5 pb-1">
-          <div className="text-lg font-semibold">Бюджет</div>
-        </header>
+      <header className="max-w-md mx-auto px-4 pt-5 pb-1">
+        <div className="text-lg font-semibold">Бюджет</div>
+      </header>
 
-        <main className="flex-1 px-4 pb-20 pt-2 overflow-y-auto">
-          {tab === "add" && (
-            <AddView settings={settings} transactions={transactions} onAdd={addTransaction} />
-          )}
-          {tab === "analysis" && (
-            <AnalysisView
-              settings={settings}
-              transactions={transactions}
-              selectedMonth={selectedMonth}
-              setSelectedMonth={setSelectedMonth}
-              onDelete={deleteTransaction}
-              onToggleInclude={toggleIncludeInTotal}
-              goToAdd={() => setTab("add")}
-            />
-          )}
-          {tab === "settings" && (
-            <SettingsView
-              settings={settings}
-              onSave={persistSettings}
-              onWipeAll={() => persistTransactions([])}
-            />
-          )}
-        </main>
+      <main className="max-w-md mx-auto px-4 pb-24 pt-3">
+        {tab === "add" && <AddView settings={settings} transactions={transactions} onAdd={addTransaction} />}
+        {tab === "analysis" && (
+          <AnalysisView settings={settings} transactions={transactions}
+            selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth}
+            onDelete={deleteTransaction} onToggleInclude={toggleIncludeInTotal} goToAdd={() => setTab("add")} />
+        )}
+        {tab === "settings" && (
+          <SettingsView settings={settings} onSave={persistSettings}
+            onWipeAll={() => persistTransactions([])} />
+        )}
+      </main>
 
-        <TabBar tab={tab} setTab={setTab} />
-        <Toast text={toast} />
-      </div>
+      <TabBar tab={tab} setTab={setTab} />
+      <Toast text={toast} />
     </div>
   );
 }
