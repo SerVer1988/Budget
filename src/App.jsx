@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Home, Plus, PiggyBank, BarChart3, Settings as SettingsIcon,
-  ChevronLeft, ChevronRight, Trash2, Check, AlertTriangle, Wallet, X,
+  ChevronLeft, ChevronRight, Trash2, Check, AlertTriangle, Wallet, X, ArrowUp, ArrowDown,
   ShoppingCart, ShoppingBag, UtensilsCrossed, Coffee, Zap, Droplet, Wifi, Phone,
   Car, Bus, Fuel, Plane, Train, HeartPulse, Pill, Stethoscope, Dumbbell, GraduationCap,
   Baby, PawPrint, Gift, Film, Tv, Music, Gamepad2, Book, Shirt, Smartphone, Laptop,
@@ -482,52 +482,82 @@ function Toast({ text }) {
 
 /* ============================================================ Dashboard */
 /* ============================================================ Quick-add carousel */
-function QuickTile({ icon: Icon, color, name, amount, onClick, isAddNew }) {
-  if (isAddNew) {
-    return (
-      <button onClick={onClick}
-        className="rounded-xl border-2 flex flex-col items-center justify-center gap-1 py-4"
-        style={{ borderColor: C.border, borderStyle: "dashed", color: C.inkMuted, background: "transparent" }}>
-        <Plus size={20} />
-        <span className="text-xs">Новое</span>
-      </button>
-    );
-  }
+function SummaryMini({ icon: Icon, label, amount, tone }) {
+  const bg = tone === "in" ? C.sberSoft : C.dangerSoft;
+  const fg = tone === "in" ? C.sber : C.danger;
+  const sign = tone === "in" ? "+" : "−";
+  return (
+    <div className="rounded-lg p-3 flex items-center gap-2.5" style={{ background: bg }}>
+      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: C.surface }}>
+        <Icon size={15} style={{ color: fg }} />
+      </div>
+      <div className="min-w-0">
+        <div className="text-xs" style={{ color: C.inkMuted }}>{label}:</div>
+        <div className="font-mono text-sm font-semibold truncate" style={{ color: fg }}>{sign}{formatMoney(Math.abs(amount))}</div>
+      </div>
+    </div>
+  );
+}
+
+function AddBigButton({ label, color, onClick }) {
   return (
     <button onClick={onClick}
-      className="rounded-xl border flex flex-col items-center gap-1.5 py-3 px-2 relative"
-      style={{ borderColor: C.border, background: C.surface }}>
-      {amount != null && (
-        <span className="absolute top-1.5 right-1.5 font-mono px-1.5 py-0.5 rounded-full"
-          style={{ fontSize: 10, background: C.bg, color: C.inkMuted }}>
-          {formatMoney(amount)}
-        </span>
-      )}
-      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: color + "22" }}>
-        <Icon size={19} style={{ color }} />
+      className="w-full rounded-xl border-2 flex flex-col items-center justify-center gap-2 py-6 mb-5"
+      style={{ borderColor: C.border, borderStyle: "dashed", background: C.surface }}>
+      <div className="w-11 h-11 rounded-full flex items-center justify-center" style={{ background: C.bg }}>
+        <Plus size={22} style={{ color }} />
       </div>
-      <span className="text-xs font-medium text-center leading-tight">{name}</span>
+      <span className="text-sm font-medium" style={{ color }}>{label}</span>
     </button>
   );
 }
 
-function CategoryPanel({ title, accentColor, card, categories, transactions, onOpenFull }) {
+function ListTile({ icon: Icon, color, name, amount, onClick }) {
+  return (
+    <button onClick={onClick}
+      className="rounded-xl border flex items-center gap-2.5 p-3" style={{ borderColor: C.border, background: C.surface }}>
+      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style={{ background: color + "22" }}>
+        <Icon size={18} style={{ color }} />
+      </div>
+      <div className="flex-1 min-w-0 text-left">
+        <div className="text-xs font-medium truncate">{name}</div>
+        <div className="font-mono text-xs" style={{ color: C.inkMuted }}>{amount != null ? formatMoney(amount) : "—"}</div>
+      </div>
+      <ChevronRight size={14} style={{ color: C.inkMuted, flexShrink: 0 }} />
+    </button>
+  );
+}
+
+function CategoryPanel({ title, accentColor, card, categories, transactions, settings, onOpenFull }) {
   const stats = useMemo(() => categoryStats(transactions, card), [transactions, card]);
   const ordered = useMemo(
     () => [...categories].sort((a, b) => (stats[b.name]?.count || 0) - (stats[a.name]?.count || 0)),
     [categories, stats]
   );
+  const agg = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
+  const inflow = card === "sber" ? agg.sberInflow : agg.alfaInflow;
+  const spent = card === "sber" ? agg.sberSpent : agg.alfaSpent;
 
   return (
     <div>
-      <div className="text-sm font-semibold mb-3 text-center" style={{ color: accentColor }}>{title}</div>
+      <div className="grid grid-cols-2 gap-2.5 mb-5">
+        <SummaryMini icon={ArrowUp} label="Пришло" amount={inflow} tone="in" />
+        <SummaryMini icon={ArrowDown} label="Ушло" amount={spent} tone="out" />
+      </div>
+
+      <div className="text-center mb-4">
+        <div className="text-base font-semibold" style={{ color: accentColor }}>{title}</div>
+        <div className="font-mono text-2xl font-bold mt-1">{formatMoney(spent)}</div>
+      </div>
+
+      <AddBigButton label="Добавить расход" color={accentColor} onClick={() => onOpenFull({ type: "expense", card })} />
+
       <div className="grid grid-cols-2 gap-2.5">
-        <QuickTile isAddNew onClick={() => onOpenFull({ type: "expense", card })} />
         {ordered.map((cat) => {
           const s = stats[cat.name];
           const Icon = getIcon(cat.icon);
           return (
-            <QuickTile key={cat.name} icon={Icon} color={cat.color} name={cat.name} amount={s?.modalAmount ?? null}
+            <ListTile key={cat.name} icon={Icon} color={cat.color} name={cat.name} amount={s?.modalAmount ?? null}
               onClick={() => {
                 if (s?.modalAmount != null) {
                   onOpenFull({ type: "expense", card, category: cat.name, amount: s.modalAmount });
@@ -545,6 +575,7 @@ function CategoryPanel({ title, accentColor, card, categories, transactions, onO
 function OzonPanel({ settings, transactions, onOpenFull }) {
   const dayStats = useMemo(() => ozonDayStats(transactions), [transactions]);
   const days = settings.reminderDays.length ? settings.reminderDays : [5, 15, 30];
+  const agg = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
 
   // detailed savings info (previously a separate "Подушка" tab, now folded into this panel)
   const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
@@ -564,13 +595,23 @@ function OzonPanel({ settings, transactions, onOpenFull }) {
 
   return (
     <div>
-      <div className="text-sm font-semibold mb-3 text-center" style={{ color: C.ozon }}>Подушка</div>
       <div className="grid grid-cols-2 gap-2.5 mb-5">
-        <QuickTile isAddNew onClick={() => onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon" })} />
+        <SummaryMini icon={ArrowUp} label="Пришло" amount={agg.ozonInflow} tone="in" />
+        <SummaryMini icon={ArrowDown} label="Ушло" amount={agg.ozonOutflow} tone="out" />
+      </div>
+
+      <div className="text-center mb-4">
+        <div className="text-base font-semibold" style={{ color: C.ozon }}>Подушка</div>
+        <div className="font-mono text-2xl font-bold mt-1">{formatMoney(agg.ozonOutflow)}</div>
+      </div>
+
+      <AddBigButton label="Добавить перевод" color={C.ozon} onClick={() => onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon" })} />
+
+      <div className="grid grid-cols-2 gap-2.5 mb-5">
         {days.map((d) => {
           const s = dayStats[d];
           return (
-            <QuickTile key={d} icon={PiggyBank} color={C.ozon} name={`${d} числа`} amount={s?.modalAmount ?? null}
+            <ListTile key={d} icon={PiggyBank} color={C.ozon} name={`${d} числа`} amount={s?.modalAmount ?? null}
               onClick={() => {
                 if (s?.modalAmount != null) {
                   onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon", amount: s.modalAmount });
@@ -962,8 +1003,8 @@ function AddView({ settings, transactions, onAdd }) {
   }
 
   const panelDefs = [
-    { key: "need", render: () => <CategoryPanel title="Нужды" accentColor={C.sber} card="sber" categories={settings.needCats} transactions={transactions} onOpenFull={openFull} /> },
-    { key: "want", render: () => <CategoryPanel title="Развлечения" accentColor={C.alfa} card="alfa" categories={settings.wantCats} transactions={transactions} onOpenFull={openFull} /> },
+    { key: "need", render: () => <CategoryPanel title="Нужды" accentColor={C.sber} card="sber" categories={settings.needCats} transactions={transactions} settings={settings} onOpenFull={openFull} /> },
+    { key: "want", render: () => <CategoryPanel title="Развлечения" accentColor={C.alfa} card="alfa" categories={settings.wantCats} transactions={transactions} settings={settings} onOpenFull={openFull} /> },
     { key: "ozon", render: () => <OzonPanel settings={settings} transactions={transactions} onOpenFull={openFull} /> },
   ];
 
@@ -1449,4 +1490,3 @@ export default function App() {
     </div>
   );
 }
- 
