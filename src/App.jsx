@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Home, Plus, PiggyBank, BarChart3, Settings as SettingsIcon,
   ChevronLeft, ChevronRight, Trash2, Check, AlertTriangle, Wallet, X, ArrowUp, ArrowDown,
@@ -295,6 +295,13 @@ function estimateMonthlyRate(transactions, settings, fromMonthKey) {
   return count > 0 ? sum / count : 0;
 }
 
+function getAllMonthKeys(transactions) {
+  const set = new Set(transactions.map((t) => monthKeyOf(t.date)));
+  set.add(todayMonthKey());
+  return Array.from(set).sort();
+}
+
+/* ============================================================ migration (old data shapes) */
 function migrateCategoryList(list, defaults) {
   if (!Array.isArray(list) || list.length === 0) return defaults;
   return list.map((item, i) => {
@@ -630,6 +637,12 @@ function AppStyles() {
         font-weight: 800;
         font-variant-numeric: tabular-nums;
         color: ${C.ink};
+      }
+
+      .limit-status {
+        font-size: 12px;
+        margin-top: 4px;
+        font-weight: 600;
       }
 
       .hero-row {
@@ -989,6 +1002,7 @@ function AppStyles() {
         background: ${C.surface2};
         color: ${C.ink};
         font-weight: 800;
+        cursor: pointer;
       }
 
       .btn.primary {
@@ -1194,6 +1208,7 @@ function AppStyles() {
         align-items: center;
         justify-content: center;
         flex: 0 0 auto;
+        cursor: pointer;
       }
 
       .empty-state {
@@ -1238,6 +1253,7 @@ function AppStyles() {
         gap: 4px;
         font-size: 11px;
         font-weight: 700;
+        cursor: pointer;
       }
 
       .nav-btn svg {
@@ -1289,6 +1305,34 @@ function AppStyles() {
         border-radius: 18px;
         background: ${C.surface};
         padding: 4px 12px;
+      }
+
+      /* Modal */
+      .modal-overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(22, 32, 27, 0.6);
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        backdrop-filter: blur(4px);
+      }
+      
+      .modal-card {
+        background: ${C.surface};
+        border-radius: 28px;
+        padding: 24px;
+        width: 100%;
+        max-width: 360px;
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+        animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      @keyframes modalSlideUp {
+        from { opacity: 0; transform: translateY(20px) scale(0.95); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
       }
 
       @media (max-width: 360px) {
@@ -1434,8 +1478,6 @@ function PaydayReminder({ settings, transactions }) {
     .filter((t) => t.type === "income" && t.date === today)
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const needPct = needPctOf(settings);
-
   if (todayIncome <= 0) {
     return (
       <div className="notice">
@@ -1447,8 +1489,10 @@ function PaydayReminder({ settings, transactions }) {
     );
   }
 
+  // При наличии авто-распределения это напоминание можно оставить для информативности
   const split = computeIncomeSplit(todayIncome, settings);
-
+  const needPct = needPctOf(settings);
+  
   return (
     <div className="notice">
       <div style={{ fontWeight: 800, marginBottom: 4 }}>Не забудьте сделать переводы</div>
@@ -1577,6 +1621,67 @@ function Toast({ text }) {
   );
 }
 
+/* ============================================================ NEW: Income Modal & Limit Status */
+function IncomeDistributionModal({ incomeTx, settings, onDistribute, onClose }) {
+  if (!incomeTx) return null;
+  
+  const split = computeIncomeSplit(incomeTx.amount, settings);
+  const needPct = needPctOf(settings);
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-card">
+        <div style={{ textAlign: "center", marginBottom: 16 }}>
+          <div style={{ width: 48, height: 48, background: C.sberSoft, color: C.sber, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+            <ArrowUp size={24} />
+          </div>
+          <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 8px", color: C.ink }}>
+            Поступило {formatMoney(incomeTx.amount)}
+          </h3>
+          <p style={{ fontSize: 13, color: C.inkMuted, margin: 0 }}>Рекомендуем распределить:</p>
+        </div>
+
+        <div style={{ background: C.bg, borderRadius: 16, padding: 16, marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В Нужды ({needPct}%)</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: C.sber }}>{formatMoney(split.toSber)}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В Желания ({settings.wantPct}%)</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: C.alfa }}>{formatMoney(split.toAlfa)}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В Сбережения ({settings.savePct}%)</span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: C.ozon }}>{formatMoney(split.toOzon)}</span>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <button className="btn primary" onClick={onDistribute}>Распределить автоматически</button>
+          <button className="btn" style={{ background: "transparent", border: "none" }} onClick={onClose}>Сделаю сам</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LimitStatus({ target, avail }) {
+  const diff = Math.round(target - avail);
+  
+  if (target === 0 && avail === 0) {
+    return <div className="limit-status muted">Лимит: 0 ₽</div>;
+  }
+
+  if (diff === 0) {
+    return <div className="limit-status" style={{ color: C.inkMuted }}>Лимит выполнен</div>;
+  } else if (diff > 0) {
+    return <div className="limit-status" style={{ color: C.inkMuted }}>Можно доложить: {formatMoney(diff)}</div>;
+  } else {
+    // Если Перебор
+    return <div className="limit-status" style={{ color: C.danger }}>Перебор: {formatMoney(Math.abs(diff))}</div>;
+  }
+}
+
 /* ============================================================ Add carousel parts */
 function BankBadge({ label, accentColor }) {
   return (
@@ -1644,6 +1749,7 @@ function CategoryPanel({
   categories,
   transactions,
   settings,
+  balances,
   canPrev,
   canNext,
   onPrev,
@@ -1656,10 +1762,16 @@ function CategoryPanel({
     [categories, stats]
   );
 
+  const balance = balances[card] || 0;
   const agg = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
   const inflow = card === "sber" ? agg.sberInflow : agg.alfaInflow;
   const spent = card === "sber" ? agg.sberSpent : agg.alfaSpent;
   const monthlyTotals = card === "sber" ? agg.needCatTotals : agg.wantCatTotals;
+
+  // Логика лимитов
+  const pct = card === "sber" ? needPctOf(settings) : settings.wantPct;
+  const target = agg.incomeTotal * (pct / 100);
+  const avail = card === "sber" ? agg.sberAvail : agg.alfaAvail;
 
   const visible = ordered.slice(0, 8);
   while (visible.length < 8) visible.push(null);
@@ -1670,7 +1782,10 @@ function CategoryPanel({
 
       <div className="carousel-heading">
         <h2>{title}</h2>
-        <div className="sum">{formatMoney(spent)}</div>
+        {/* Баланс вместо потраченного */}
+        <div className="sum">{formatMoney(balance)}</div>
+        {/* Лимит */}
+        <LimitStatus target={target} avail={avail} />
       </div>
 
       <div className="hero-row">
@@ -1720,6 +1835,7 @@ function CategoryPanel({
 function OzonPanel({
   settings,
   transactions,
+  balances,
   canPrev,
   canNext,
   onPrev,
@@ -1730,10 +1846,12 @@ function OzonPanel({
   const days = settings.reminderDays.length ? settings.reminderDays : [5, 15, 30];
   const agg = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
 
-  const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
-  const totalSaved = balances.ozon;
-  const pct = settings.goal > 0 ? totalSaved / settings.goal : 0;
-  const left = settings.goal - totalSaved;
+  const balance = balances.ozon || 0;
+  const target = agg.incomeTotal * (settings.savePct / 100);
+  const avail = agg.ozonAvail;
+
+  const pct = settings.goal > 0 ? balance / settings.goal : 0;
+  const left = settings.goal - balance;
   const rate = useMemo(() => estimateMonthlyRate(transactions, settings, todayMonthKey()), [transactions, settings]);
   const monthsLeft = left <= 0 ? 0 : (rate > 0 ? Math.ceil(left / rate) : null);
   const thisMonth = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
@@ -1755,7 +1873,8 @@ function OzonPanel({
 
       <div className="carousel-heading">
         <h2>Подушка</h2>
-        <div className="sum">{formatMoney(totalSaved)}</div>
+        <div className="sum">{formatMoney(balance)}</div>
+        <LimitStatus target={target} avail={avail} />
       </div>
 
       <div className="hero-row">
@@ -1803,7 +1922,7 @@ function OzonPanel({
         <div className="soft-card" style={{ padding: 14, textAlign: "center" }}>
           <div style={{ fontSize: 12, color: C.inkMuted, marginBottom: 4 }}>Баланс на Озон</div>
           <div className="mono" style={{ fontSize: 27, lineHeight: 1.1, fontWeight: 900, color: C.ozon }}>
-            {formatMoney(totalSaved)}
+            {formatMoney(balance)}
           </div>
           <div style={{ fontSize: 12, color: C.inkMuted, marginTop: 4, marginBottom: 11 }}>
             из цели {formatMoney(settings.goal)}
@@ -2152,6 +2271,9 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
 function AddView({ settings, transactions, onAdd }) {
   const [slide, setSlide] = useState(0);
   const [formInitial, setFormInitial] = useState(null);
+  const [newIncomeTx, setNewIncomeTx] = useState(null); // Стейт для модалки дохода
+
+  const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
 
   const slides = [
     {
@@ -2170,6 +2292,7 @@ function AddView({ settings, transactions, onAdd }) {
           categories={settings.needCats}
           transactions={transactions}
           settings={settings}
+          balances={balances}
           onOpenFull={openForm}
           {...navProps}
         />
@@ -2191,6 +2314,7 @@ function AddView({ settings, transactions, onAdd }) {
           categories={settings.wantCats}
           transactions={transactions}
           settings={settings}
+          balances={balances}
           onOpenFull={openForm}
           {...navProps}
         />
@@ -2206,6 +2330,7 @@ function AddView({ settings, transactions, onAdd }) {
         <OzonPanel
           settings={settings}
           transactions={transactions}
+          balances={balances}
           onOpenFull={openForm}
           {...navProps}
         />
@@ -2223,7 +2348,31 @@ function AddView({ settings, transactions, onAdd }) {
 
   function submit(tx) {
     onAdd(tx);
+    // Если это доход — показываем модалку автоматического распределения
+    if (tx.type === "income") {
+      setNewIncomeTx(tx);
+    }
     setFormInitial(null);
+  }
+
+  function handleAutoDistribute() {
+    if (!newIncomeTx) return;
+    const split = computeIncomeSplit(newIncomeTx.amount, settings);
+    const sourceCard = newIncomeTx.card;
+    const date = newIncomeTx.date;
+
+    // Авто-создание переводов на нужные суммы (из той карты, куда зачислили доход)
+    if (sourceCard !== "sber" && split.toSber > 0) {
+      onAdd({ type: "transfer", date, amount: Math.round(split.toSber), fromCard: sourceCard, toCard: "sber", note: "Авто-распределение" });
+    }
+    if (sourceCard !== "alfa" && split.toAlfa > 0) {
+      onAdd({ type: "transfer", date, amount: Math.round(split.toAlfa), fromCard: sourceCard, toCard: "alfa", note: "Авто-распределение" });
+    }
+    if (sourceCard !== "ozon" && split.toOzon > 0) {
+      onAdd({ type: "transfer", date, amount: Math.round(split.toOzon), fromCard: sourceCard, toCard: "ozon", note: "Авто-распределение" });
+    }
+
+    setNewIncomeTx(null);
   }
 
   const current = slides[slide];
@@ -2250,6 +2399,16 @@ function AddView({ settings, transactions, onAdd }) {
 
   return (
     <div className="screen-stack">
+      {/* Модальное окно распределения дохода */}
+      {newIncomeTx && (
+        <IncomeDistributionModal 
+          incomeTx={newIncomeTx}
+          settings={settings}
+          onDistribute={handleAutoDistribute}
+          onClose={() => setNewIncomeTx(null)}
+        />
+      )}
+
       {current.render({
         canPrev,
         canNext,
@@ -2821,3 +2980,4 @@ export default function App() {
     </>
   );
 }
+```
