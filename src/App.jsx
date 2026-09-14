@@ -5,7 +5,7 @@ import {
   ShoppingCart, ShoppingBag, UtensilsCrossed, Coffee, Zap, Droplet, Wifi, Phone,
   Car, Bus, Fuel, Plane, Train, HeartPulse, Pill, Stethoscope, Dumbbell, GraduationCap,
   Baby, PawPrint, Gift, Film, Tv, Music, Gamepad2, Book, Shirt, Smartphone, Laptop,
-  Wrench, Scissors, Coins, Users, User, HelpCircle, MoreHorizontal, Sparkles, фUmbrella, Wine,
+  Wrench, Scissors, Coins, Users, User, HelpCircle, MoreHorizontal, Sparkles, Umbrella, Wine,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -75,7 +75,6 @@ const DEFAULT_SETTINGS = {
   includeInTotal: { sber: true, alfa: true, ozon: true },
   needCats: DEFAULT_NEED_CATS,
   wantCats: DEFAULT_WANT_CATS,
-  closedMonths: [],
 };
 
 /* ============================================================ helpers */
@@ -173,9 +172,8 @@ function aggregateMonth(mk, transactions, settings) {
       incomeTotal += t.amount;
     } else if (t.type === "expense") {
       acc[t.card].spent += t.amount;
-      const bucket = t.bucket || (t.card === "alfa" ? "wants" : "needs");
-      if (bucket === "needs") needCatTotals[t.category] = (needCatTotals[t.category] || 0) + t.amount;
-      else if (bucket === "wants") wantCatTotals[t.category] = (wantCatTotals[t.category] || 0) + t.amount;
+      if (t.card === "sber") needCatTotals[t.category] = (needCatTotals[t.category] || 0) + t.amount;
+      else if (t.card === "alfa") wantCatTotals[t.category] = (wantCatTotals[t.category] || 0) + t.amount;
     } else if (t.type === "adjustment") {
       acc[t.card].adj += t.amount;
     } else if (t.type === "transfer") {
@@ -220,104 +218,13 @@ function aggregateMonth(mk, transactions, settings) {
     ozonNet: ozonD.net,
     needCatTotals,
     wantCatTotals,
-    needsSpent: Object.values(needCatTotals).reduce((a, b) => a + b, 0),
-    wantsSpent: Object.values(wantCatTotals).reduce((a, b) => a + b, 0),
-    needsLimit: incomeTotal * (needPctOf(settings) / 100),
-    wantsLimit: incomeTotal * (settings.wantPct / 100),
     items,
   };
 }
 
-/* ============================================================ Smart Notes engine (50/30/20 cross-card control) */
-function computeCumulativeAllocation(transactions, settings) {
-  let incomeTotal = 0;
-  transactions.forEach((t) => { if (t.type === "income") incomeTotal += t.amount; });
-
-  let needsSpent = 0;
-  let wantsSpent = 0;
-  transactions.forEach((t) => {
-    if (t.type !== "expense") return;
-    const bucket = t.bucket || (t.card === "alfa" ? "wants" : "needs");
-    if (bucket === "needs") needsSpent += t.amount;
-    else if (bucket === "wants") wantsSpent += t.amount;
-  });
-
-  let saveSpent = 0;
-  transactions.forEach((t) => {
-    if (t.type === "adjustment" && t.card === "ozon" && t.amount < 0) saveSpent += -t.amount;
-    if (t.type === "transfer" && t.fromCard === "ozon") saveSpent += t.amount;
-  });
-
-  const needPct = needPctOf(settings);
-  const needsAllocated = incomeTotal * (needPct / 100);
-  const wantsAllocated = incomeTotal * (settings.wantPct / 100);
-  const saveAllocated = incomeTotal * (settings.savePct / 100);
-
-  return {
-    needsTarget: needsAllocated - needsSpent,
-    wantsTarget: wantsAllocated - wantsSpent,
-    saveTarget: saveAllocated - saveSpent,
-  };
-}
-
-const SMART_NOTE_THRESHOLD = 50;
-
-function smartNoteFor(bucketLabel, card, balance, target, overspend) {
-  if (overspend > 0) {
-    return {
-      type: "over",
-      color: C.danger,
-      soft: C.dangerSoft,
-      text: `Внимание! По категории «${bucketLabel}» расходы превышают план на ${formatMoney(overspend)}. Сократите траты или компенсируйте из другой категории.`,
-    };
-  }
-
-  const diff = balance - Math.max(0, target);
-
-  if (diff < -SMART_NOTE_THRESHOLD) {
-    return {
-      type: "under",
-      color: C.amber,
-      soft: C.amberSoft,
-      text: `Вы забыли перевести деньги! На карте ${cardLabel(card)} на ${formatMoney(-diff)} меньше, чем запланировано по бюджету «${bucketLabel}».`,
-    };
-  }
-
-  if (diff > SMART_NOTE_THRESHOLD) {
-    return {
-      type: "excess",
-      color: "#2D8C6F",
-      soft: "#E4F2EC",
-      text: `Баланс карты ${cardLabel(card)} выше плана «${bucketLabel}» на ${formatMoney(diff)}. Возможно, вы забыли распределить эти деньги по другим картам.`,
-    };
-  }
-
-  return {
-    type: "ok",
-    color: C.inkMuted,
-    soft: C.surface2,
-    text: `Баланс ${cardLabel(card)} соответствует плану «${bucketLabel}».`,
-  };
-}
-
-function computeSmartNotes(transactions, settings) {
-  const alloc = computeCumulativeAllocation(transactions, settings);
-  const balances = computeBalances(transactions, settings, null);
-
-  const needsOver = alloc.needsTarget < 0 ? -alloc.needsTarget : 0;
-  const wantsOver = alloc.wantsTarget < 0 ? -alloc.wantsTarget : 0;
-  const saveOver = alloc.saveTarget < 0 ? -alloc.saveTarget : 0;
-
-  return {
-    sber: smartNoteFor("Нужды", "sber", balances.sber, alloc.needsTarget, needsOver),
-    alfa: smartNoteFor("Желания", "alfa", balances.alfa, alloc.wantsTarget, wantsOver),
-    ozon: smartNoteFor("Сбережения", "ozon", balances.ozon, alloc.saveTarget, saveOver),
-  };
-}
-
-function categoryStats(transactions, bucket) {
+function categoryStats(transactions, card) {
   const byName = {};
-  transactions.filter((t) => t.type === "expense" && (t.bucket || bucketOf(t.card)) === bucket).forEach((t) => {
+  transactions.filter((t) => t.type === "expense" && t.card === card).forEach((t) => {
     if (!byName[t.category]) byName[t.category] = {};
     byName[t.category][t.amount] = (byName[t.category][t.amount] || 0) + 1;
   });
@@ -431,7 +338,6 @@ function migrateSettings(raw) {
     wantCats: migrateCategoryList(raw.wantCats, DEFAULT_WANT_CATS),
     openingBalance: { ...DEFAULT_SETTINGS.openingBalance, ...(raw.openingBalance || {}) },
     includeInTotal: { ...DEFAULT_SETTINGS.includeInTotal, ...(raw.includeInTotal || {}) },
-    closedMonths: Array.isArray(raw.closedMonths) ? raw.closedMonths : [],
   };
 }
 
@@ -475,11 +381,6 @@ function migrateTransactions(list, settings) {
         });
       }
 
-      return;
-    }
-
-    if (t.type === "expense" && !t.bucket) {
-      out.push({ ...t, bucket: t.card === "alfa" ? "wants" : "needs" });
       return;
     }
 
@@ -1630,7 +1531,7 @@ function TotalBalanceCard({ total, settings, onToggle }) {
   );
 }
 
-function BankCard({ stripe, soft, name, role, bigLabel, bigValue, pct, sub, footnote, note }) {
+function BankCard({ stripe, soft, name, role, bigLabel, bigValue, pct, sub, footnote }) {
   return (
     <div className="bank-card">
       <div className="bank-stripe" style={{ background: stripe }} />
@@ -1648,11 +1549,6 @@ function BankCard({ stripe, soft, name, role, bigLabel, bigValue, pct, sub, foot
         </div>
         <div className="small-note mono">{sub}</div>
         {footnote && <div className="small-note" style={{ marginTop: 4 }}>{footnote}</div>}
-        {note && note.type !== "ok" && (
-          <div className="small-note" style={{ marginTop: 4, fontWeight: 700, color: note.color }}>
-            {note.type === "over" ? "🔴" : note.type === "under" ? "🟡" : "🟢"} {note.text}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1786,32 +1682,6 @@ function LimitStatus({ target, avail }) {
   }
 }
 
-function SmartNoteBanner({ note, compact }) {
-  if (!note || note.type === "ok") return null;
-
-  const icon = note.type === "over" ? "🔴" : note.type === "under" ? "🟡" : "🟢";
-
-  return (
-    <div
-      style={{
-        borderRadius: compact ? 14 : 16,
-        padding: compact ? "9px 11px" : 12,
-        fontSize: compact ? 11 : 12,
-        lineHeight: 1.4,
-        border: `1px solid ${note.color}`,
-        background: note.soft,
-        color: note.type === "over" ? "#7A241C" : note.type === "under" ? "#8A5A15" : "#1F5C46",
-        display: "flex",
-        gap: 7,
-        alignItems: "flex-start",
-      }}
-    >
-      <span>{icon}</span>
-      <span>{note.text}</span>
-    </div>
-  );
-}
-
 /* ============================================================ Add carousel parts */
 function BankBadge({ label, accentColor }) {
   return (
@@ -1880,14 +1750,13 @@ function CategoryPanel({
   transactions,
   settings,
   balances,
-  note,
   canPrev,
   canNext,
   onPrev,
   onNext,
   onOpenFull,
 }) {
-  const stats = useMemo(() => categoryStats(transactions, bucketOf(card)), [transactions, card]);
+  const stats = useMemo(() => categoryStats(transactions, card), [transactions, card]);
   const ordered = useMemo(
     () => [...categories].sort((a, b) => (stats[b.name]?.count || 0) - (stats[a.name]?.count || 0)),
     [categories, stats]
@@ -1919,14 +1788,12 @@ function CategoryPanel({
         <LimitStatus target={target} avail={avail} />
       </div>
 
-      <SmartNoteBanner note={note} compact />
-
       <div className="hero-row">
         <button className="side-arrow" disabled={!canPrev} onClick={onPrev} type="button">
           <ChevronLeft size={30} />
         </button>
 
-        <AddBigButton label="Новое" onClick={() => onOpenFull({ type: "expense", card, bucket: bucketOf(card) })} />
+        <AddBigButton label="Новое" onClick={() => onOpenFull({ type: "expense", card })} />
 
         <button className="side-arrow" disabled={!canNext} onClick={onNext} type="button">
           <ChevronRight size={30} />
@@ -1953,7 +1820,6 @@ function CategoryPanel({
                 onOpenFull({
                   type: "expense",
                   card,
-                  bucket: bucketOf(card),
                   category: cat.name,
                   amount: s?.modalAmount ?? "",
                 });
@@ -1970,7 +1836,6 @@ function OzonPanel({
   settings,
   transactions,
   balances,
-  note,
   canPrev,
   canNext,
   onPrev,
@@ -2011,8 +1876,6 @@ function OzonPanel({
         <div className="sum">{formatMoney(balance)}</div>
         <LimitStatus target={target} avail={avail} />
       </div>
-
-      <SmartNoteBanner note={note} compact />
 
       <div className="hero-row">
         <button className="side-arrow" disabled={!canPrev} onClick={onPrev} type="button">
@@ -2141,6 +2004,11 @@ function OzonPanel({
 }
 
 /* ============================================================ Add form */
+const EXPENSE_CARDS = [
+  { id: "sber", label: "Сбер", sub: "нужды", color: C.sber, soft: C.sberSoft },
+  { id: "alfa", label: "Альфа", sub: "развлечения", color: C.alfa, soft: C.alfaSoft },
+];
+
 const ALL_CARDS = [
   { id: "sber", label: "Сбер", color: C.sber, soft: C.sberSoft },
   { id: "alfa", label: "Альфа", color: C.alfa, soft: C.alfaSoft },
@@ -2190,77 +2058,45 @@ function OperationTabs({ value, onChange }) {
   );
 }
 
-const BUCKET_OPTIONS = [
-  { id: "needs", label: "Нужды", color: C.sber, soft: C.sberSoft },
-  { id: "wants", label: "Желания", color: C.alfa, soft: C.alfaSoft },
-];
-
-function homeCardOf(bucket) { return bucket === "wants" ? "alfa" : "sber"; }
-function bucketOf(card) { return card === "alfa" ? "wants" : "needs"; }
-function catListOf(settings, bucket) { return bucket === "wants" ? settings.wantCats : settings.needCats; }
-
 function FullAddForm({ settings, initial, onSubmit, onCancel }) {
-  const defaultCategoryFor = (bucket) => catListOf(settings, bucket)[0]?.name || "";
-  const initialBucket = initial?.bucket || bucketOf(initial?.card || "sber");
+  const defaultCategoryFor = (card) => {
+    const list = card === "alfa" ? settings.wantCats : settings.needCats;
+    return list[0]?.name || "";
+  };
 
   const [type, setType] = useState(initial?.type || "expense");
   const [date, setDate] = useState(initial?.date || todayStr());
   const [amount, setAmount] = useState(initial?.amount ?? "");
-  const [card, setCard] = useState(initial?.card || homeCardOf(initialBucket));
-  const [bucket, setBucket] = useState(initialBucket);
+  const [card, setCard] = useState(initial?.card || "sber");
   const [fromCard, setFromCard] = useState(initial?.fromCard || "sber");
   const [toCard, setToCard] = useState(initial?.toCard || "alfa");
-  const [category, setCategory] = useState(initial?.category || defaultCategoryFor(initialBucket));
+  const [category, setCategory] = useState(initial?.category || defaultCategoryFor(initial?.card || "sber"));
   const [note, setNote] = useState(initial?.note || "");
   const [adjustSign, setAdjustSign] = useState("plus");
 
-  const [split, setSplit] = useState(false);
-  const [splitAmount2, setSplitAmount2] = useState("");
-  const [splitCategory2, setSplitCategory2] = useState("");
-
   useEffect(() => {
-    const b = initial?.bucket || bucketOf(initial?.card || "sber");
     setType(initial?.type || "expense");
     setDate(initial?.date || todayStr());
     setAmount(initial?.amount ?? "");
-    setCard(initial?.card || homeCardOf(b));
-    setBucket(b);
+    setCard(initial?.card || "sber");
     setFromCard(initial?.fromCard || "sber");
     setToCard(initial?.toCard || "alfa");
-    setCategory(initial?.category || defaultCategoryFor(b));
+    setCategory(initial?.category || defaultCategoryFor(initial?.card || "sber"));
     setNote(initial?.note || "");
     setAdjustSign("plus");
-    setSplit(false);
-    setSplitAmount2("");
-    setSplitCategory2("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
   useEffect(() => {
     if (type !== "expense") return;
-    const list = catListOf(settings, bucket);
+    const list = card === "alfa" ? settings.wantCats : settings.needCats;
     if (!list.some((c) => c.name === category)) {
       setCategory(list[0]?.name || "");
     }
-  }, [type, bucket, category, settings.needCats, settings.wantCats]);
-
-  useEffect(() => {
-    const otherBucket = bucket === "wants" ? "needs" : "wants";
-    const list = catListOf(settings, otherBucket);
-    if (!list.some((c) => c.name === splitCategory2)) {
-      setSplitCategory2(list[0]?.name || "");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bucket, split, settings.needCats, settings.wantCats]);
+  }, [type, card, category, settings.needCats, settings.wantCats]);
 
   const amountNum = Number(amount || 0);
-  const splitAmountNum = Number(splitAmount2 || 0);
-  const categories = catListOf(settings, bucket);
-  const otherBucket = bucket === "wants" ? "needs" : "wants";
-  const otherCategories = catListOf(settings, otherBucket);
-
-  const homeCard = homeCardOf(bucket);
-  const isAnomaly = type === "expense" && card !== homeCard;
+  const categories = card === "alfa" ? settings.wantCats : settings.needCats;
 
   function submit(e) {
     e.preventDefault();
@@ -2272,37 +2108,6 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
 
     if (type === "transfer" && fromCard === toCard) {
       window.alert("Выберите разные карты для перевода");
-      return;
-    }
-
-    if (type === "expense" && split) {
-      if (!splitAmountNum || splitAmountNum <= 0) {
-        window.alert("Укажите сумму второй части разбивки");
-        return;
-      }
-      const groupId = uid();
-      onSubmit([
-        {
-          type: "expense",
-          date,
-          amount: amountNum,
-          card,
-          bucket,
-          category,
-          note: note.trim(),
-          splitGroup: groupId,
-        },
-        {
-          type: "expense",
-          date,
-          amount: splitAmountNum,
-          card,
-          bucket: otherBucket,
-          category: splitCategory2,
-          note: note.trim(),
-          splitGroup: groupId,
-        },
-      ]);
       return;
     }
 
@@ -2320,7 +2125,6 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
         date,
         amount: amountNum,
         card,
-        bucket,
         category,
         note: note.trim(),
       });
@@ -2356,7 +2160,7 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
       <OperationTabs value={type} onChange={setType} />
 
       <div className="field">
-        <label>{type === "expense" && split ? "Сумма (часть 1)" : "Сумма"}</label>
+        <label>Сумма</label>
         <input
           className="amount-input mono"
           inputMode="numeric"
@@ -2377,69 +2181,18 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
       {type === "expense" && (
         <>
           <div className="field">
-            <label>Категория бюджета</label>
-            <CardPicker options={BUCKET_OPTIONS} value={bucket} onChange={setBucket} />
+            <label>Карта</label>
+            <CardPicker options={EXPENSE_CARDS} value={card} onChange={setCard} />
           </div>
 
           <div className="field">
-            <label>{split ? "Категория (часть 1)" : "Категория"}</label>
+            <label>Категория</label>
             <select value={category} onChange={(e) => setCategory(e.target.value)}>
               {categories.map((c) => (
                 <option key={c.name} value={c.name}>{c.name}</option>
               ))}
             </select>
           </div>
-
-          <div className="field">
-            <label>Карта списания</label>
-            <CardPicker options={ALL_CARDS} value={card} onChange={setCard} />
-          </div>
-
-          {isAnomaly && (
-            <div
-              className="notice"
-              style={{ borderColor: C.amber, background: C.amberSoft, marginBottom: 11 }}
-            >
-              ⚠️ Вы платите за «{bucket === "wants" ? "Желания" : "Нужды"}» картой {cardLabel(card)}, а не {cardLabel(homeCard)}.
-              После сохранения баланс карт разойдётся с планом — приложение подскажет, сколько перевести для выравнивания.
-            </div>
-          )}
-
-          <div className="field" style={{ marginBottom: split ? 11 : 0 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-              <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} style={{ width: "auto" }} />
-              <span style={{ textTransform: "none", letterSpacing: 0 }}>Разбить между Нуждами и Желаниями</span>
-            </label>
-          </div>
-
-          {split && (
-            <>
-              <div className="field">
-                <label>Сумма (часть 2, «{otherBucket === "wants" ? "Желания" : "Нужды"}»)</label>
-                <input
-                  className="mono"
-                  inputMode="numeric"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="0"
-                  value={splitAmount2}
-                  onChange={(e) => setSplitAmount2(e.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label>Категория (часть 2)</label>
-                <select value={splitCategory2} onChange={(e) => setSplitCategory2(e.target.value)}>
-                  {otherCategories.map((c) => (
-                    <option key={c.name} value={c.name}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="small-note" style={{ marginBottom: 11 }}>
-                Итого спишется с {cardLabel(card)}: {formatMoney(amountNum + splitAmountNum)}
-              </div>
-            </>
-          )}
         </>
       )}
 
@@ -2521,7 +2274,6 @@ function AddView({ settings, transactions, onAdd }) {
   const [newIncomeTx, setNewIncomeTx] = useState(null); // Стейт для модалки дохода
 
   const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
-  const smartNotes = useMemo(() => computeSmartNotes(transactions, settings), [transactions, settings]);
 
   const slides = [
     {
@@ -2541,7 +2293,6 @@ function AddView({ settings, transactions, onAdd }) {
           transactions={transactions}
           settings={settings}
           balances={balances}
-          note={smartNotes.sber}
           onOpenFull={openForm}
           {...navProps}
         />
@@ -2564,7 +2315,6 @@ function AddView({ settings, transactions, onAdd }) {
           transactions={transactions}
           settings={settings}
           balances={balances}
-          note={smartNotes.alfa}
           onOpenFull={openForm}
           {...navProps}
         />
@@ -2581,7 +2331,6 @@ function AddView({ settings, transactions, onAdd }) {
           settings={settings}
           transactions={transactions}
           balances={balances}
-          note={smartNotes.ozon}
           onOpenFull={openForm}
           {...navProps}
         />
@@ -2590,7 +2339,7 @@ function AddView({ settings, transactions, onAdd }) {
   ];
 
   function openForm(initial) {
-    setFormInitial(initial || { type: "expense", card: "sber", bucket: "needs" });
+    setFormInitial(initial || { type: "expense", card: "sber" });
   }
 
   function closeForm() {
@@ -2598,12 +2347,6 @@ function AddView({ settings, transactions, onAdd }) {
   }
 
   function submit(tx) {
-    if (Array.isArray(tx)) {
-      tx.forEach(onAdd);
-      setFormInitial(null);
-      return;
-    }
-
     onAdd(tx);
     // Если это доход — показываем модалку автоматического распределения
     if (tx.type === "income") {
@@ -2699,7 +2442,6 @@ function AnalysisView({
   setSelectedMonth,
   onDelete,
   onToggleInclude,
-  onCloseMonth,
   goToAdd,
 }) {
   const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
@@ -2707,14 +2449,6 @@ function AnalysisView({
     () => computeBalances(transactions, settings, endOfMonthStr(selectedMonth)),
     [transactions, settings, selectedMonth]
   );
-  const smartNotes = useMemo(() => computeSmartNotes(transactions, settings), [transactions, settings]);
-  const isPastMonth = selectedMonth < todayMonthKey();
-  const monthNeedsLeftover = agg.needsLimit - agg.needsSpent;
-  const monthWantsLeftover = agg.wantsLimit - agg.wantsSpent;
-  const showCloseBanner =
-    isPastMonth &&
-    !(settings.closedMonths || []).includes(selectedMonth) &&
-    (monthNeedsLeftover > 1 || monthWantsLeftover > 1);
 
   const totalBalance = ["sber", "alfa", "ozon"].reduce((sum, key) => {
     if (!settings.includeInTotal?.[key]) return sum;
@@ -2722,8 +2456,8 @@ function AnalysisView({
   }, 0);
 
   const chartData = [
-    { name: "Нужды", value: agg.needsSpent, fill: C.sber },
-    { name: "Развлеч.", value: agg.wantsSpent, fill: C.alfa },
+    { name: "Нужды", value: agg.sberSpent, fill: C.sber },
+    { name: "Развлеч.", value: agg.alfaSpent, fill: C.alfa },
     { name: "Подушка", value: Math.max(0, agg.ozonNet), fill: C.ozon },
   ];
 
@@ -2734,37 +2468,11 @@ function AnalysisView({
       <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
       <PaydayReminder settings={settings} transactions={transactions} />
 
-      {showCloseBanner && (
-        <div className="notice" style={{ borderColor: C.ozon, background: C.ozonSoft, color: "#0F3E70" }}>
-          <div style={{ fontWeight: 800, marginBottom: 4 }}>{monthLabel(selectedMonth)} завершён</div>
-          <div style={{ marginBottom: 10 }}>
-            Остаток: Нужды {formatMoney(Math.max(0, monthNeedsLeftover))}, Желания {formatMoney(Math.max(0, monthWantsLeftover))}.
-            Перенести на текущий месяц или отправить в Сбережения?
-          </div>
-          <div className="button-row" style={{ marginTop: 0 }}>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => onCloseMonth(selectedMonth, "keep", monthNeedsLeftover, monthWantsLeftover)}
-            >
-              Перенести
-            </button>
-            <button
-              type="button"
-              className="btn primary"
-              onClick={() => onCloseMonth(selectedMonth, "toSavings", monthNeedsLeftover, monthWantsLeftover)}
-            >
-              В сбережения
-            </button>
-          </div>
-        </div>
-      )}
-
       <TotalBalanceCard total={totalBalance} settings={settings} onToggle={onToggleInclude} />
 
       <div className="stat-grid">
         <StatBox label="Доход" value={`+${formatMoney(agg.incomeTotal)}`} color={C.sber} />
-        <StatBox label="Расходы" value={`−${formatMoney(agg.sberSpent + agg.alfaSpent + agg.ozonSpent)}`} color={C.danger} />
+        <StatBox label="Расходы" value={`−${formatMoney(agg.sberSpent + agg.alfaSpent)}`} color={C.danger} />
       </div>
 
       <BankCard
@@ -2776,7 +2484,6 @@ function AnalysisView({
         bigValue={balances.sber}
         pct={agg.sberAvail > 0 ? agg.sberSpent / agg.sberAvail : 0}
         sub={`Потрачено ${formatMoney(agg.sberSpent)} из ${formatMoney(Math.max(0, agg.sberAvail))}`}
-        note={smartNotes.sber}
       />
 
       <BankCard
@@ -2788,7 +2495,6 @@ function AnalysisView({
         bigValue={balances.alfa}
         pct={agg.alfaAvail > 0 ? agg.alfaSpent / agg.alfaAvail : 0}
         sub={`Потрачено ${formatMoney(agg.alfaSpent)} из ${formatMoney(Math.max(0, agg.alfaAvail))}`}
-        note={smartNotes.alfa}
       />
 
       <BankCard
@@ -2800,7 +2506,6 @@ function AnalysisView({
         bigValue={balances.ozon}
         pct={settings.goal > 0 ? balances.ozon / settings.goal : 0}
         sub={`Цель: ${formatMoney(settings.goal)}`}
-        note={smartNotes.ozon}
       />
 
       <div className="panel">
@@ -3185,24 +2890,6 @@ export default function App() {
     setTimeout(() => setToast(null), 1200);
   }
 
-  function closeMonth(mk, mode, leftoverNeeds, leftoverWants) {
-    if (mode === "toSavings") {
-      const date = endOfMonthStr(mk);
-      const extra = [];
-      if (leftoverNeeds > 1) {
-        extra.push({ type: "transfer", date, amount: Math.round(leftoverNeeds), fromCard: "sber", toCard: "ozon", note: `Остаток «Нужды» за ${monthLabel(mk)}`, id: uid() });
-      }
-      if (leftoverWants > 1) {
-        extra.push({ type: "transfer", date, amount: Math.round(leftoverWants), fromCard: "alfa", toCard: "ozon", note: `Остаток «Желания» за ${monthLabel(mk)}`, id: uid() });
-      }
-      if (extra.length) persistTransactions([...transactions, ...extra]);
-    }
-
-    persistSettings({ ...settings, closedMonths: [...(settings.closedMonths || []), mk] });
-    setToast("Месяц закрыт");
-    setTimeout(() => setToast(null), 1200);
-  }
-
   function toggleIncludeInTotal(key) {
     const next = {
       ...settings,
@@ -3273,7 +2960,6 @@ export default function App() {
                 setSelectedMonth={setSelectedMonth}
                 onDelete={deleteTransaction}
                 onToggleInclude={toggleIncludeInTotal}
-                onCloseMonth={closeMonth}
                 goToAdd={() => setTab("add")}
               />
             )}
