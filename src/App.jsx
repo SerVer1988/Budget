@@ -888,6 +888,68 @@ function AppStyles() {
         gap: 9px;
       }
 
+      .cat-list {
+        width: 100%;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+
+      .cat-row {
+        width: 100%;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid color-mix(in srgb, var(--accent) 16%, ${C.border});
+        background: rgba(255,255,255,0.92);
+        border-radius: 14px;
+        padding: 8px 10px;
+        color: ${C.ink};
+        box-shadow: 0 3px 8px rgba(22, 32, 27, 0.03);
+      }
+
+      .cat-row-icon {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 auto;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .cat-row-main {
+        flex: 1;
+        min-width: 0;
+        text-align: left;
+      }
+
+      .cat-row-name {
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .cat-row-amount {
+        font-size: 11px;
+        color: ${C.inkMuted};
+        font-variant-numeric: tabular-nums;
+        margin-top: 1px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .cat-row-chevron {
+        flex: 0 0 auto;
+        color: ${C.inkMuted};
+      }
+
       .quick-tile {
         min-width: 0;
         min-height: 104px;
@@ -1944,7 +2006,22 @@ function ListTile({ icon: Icon, color, name, amount, onClick, empty }) {
   );
 }
 
-function CategoryDonut({ categories, totals }) {
+function CategoryQuickRow({ icon: Icon, color, name, amount, onClick }) {
+  return (
+    <button onClick={onClick} className="cat-row" type="button">
+      <div className="cat-row-icon" style={{ background: color + "22" }}>
+        <Icon size={18} style={{ color }} />
+      </div>
+      <div className="cat-row-main">
+        <div className="cat-row-name">{name}</div>
+        <div className="cat-row-amount">{amount != null ? formatMoney(amount) : "Нет трат"}</div>
+      </div>
+      <ChevronRight size={16} className="cat-row-chevron" />
+    </button>
+  );
+}
+
+function CategoryDonut({ categories, totals, bucketLabel }) {
   const data = useMemo(
     () =>
       categories
@@ -1969,7 +2046,7 @@ function CategoryDonut({ categories, totals }) {
   return (
     <div className="soft-card" style={{ padding: 14, marginTop: 12 }}>
       <div className="section-title" style={{ margin: "0 0 8px" }}>Структура расходов за месяц</div>
-      <div className="chart-box" style={{ height: 190 }}>
+      <div className="chart-box" style={{ height: 190, position: "relative" }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -1988,6 +2065,24 @@ function CategoryDonut({ categories, totals }) {
             <Tooltip formatter={(v) => formatMoney(v)} />
           </PieChart>
         </ResponsiveContainer>
+
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            textAlign: "center",
+            pointerEvents: "none",
+          }}
+        >
+          {bucketLabel && (
+            <div style={{ fontSize: 11, color: C.inkMuted, marginBottom: 2 }}>{bucketLabel}</div>
+          )}
+          <div className="mono" style={{ fontSize: 16, fontWeight: 900, color: C.ink, lineHeight: 1.1 }}>
+            {formatMoney(total)}
+          </div>
+        </div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 4 }}>
         {data.map((d) => (
@@ -2041,9 +2136,6 @@ function CategoryPanel({
     [transactions, settings, prevMonthEnd, card]
   );
 
-  const visible = ordered.slice(0, 8);
-  while (visible.length < 8) visible.push(null);
-
   return (
     <div className="add-panel" style={{ "--accent": accentColor, "--soft": softColor }}>
       <TopAmounts inflow={inflow} outflow={outflow} logo={logo} accentColor={accentColor} />
@@ -2072,17 +2164,15 @@ function CategoryPanel({
         </button>
       </div>
 
-      <div className="quick-grid">
-        {visible.map((cat, i) => {
-          if (!cat) return <ListTile key={`empty-${i}`} empty />;
-
+      <div className="cat-list">
+        {ordered.map((cat) => {
           const s = stats[cat.name];
           const Icon = getIcon(cat.icon);
           const monthAmount = monthlyTotals[cat.name] || 0;
           const showAmount = monthAmount > 0 ? monthAmount : (s?.modalAmount ?? null);
 
           return (
-            <ListTile
+            <CategoryQuickRow
               key={cat.name}
               icon={Icon}
               color={cat.color}
@@ -2102,7 +2192,7 @@ function CategoryPanel({
         })}
       </div>
 
-      <CategoryDonut categories={categories} totals={monthlyTotals} />
+      <CategoryDonut categories={categories} totals={monthlyTotals} bucketLabel={title} />
     </div>
   );
 }
