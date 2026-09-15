@@ -114,6 +114,84 @@ function formatMoney(n) {
   const v = Math.round(n || 0);
   return v.toLocaleString("ru-RU") + " ₽";
 }
+
+/* Safe calculator: lets the amount field accept expressions like "500+230" or "1200*2-100" */
+function evalMoneyExpr(raw) {
+  if (raw == null) return NaN;
+  const s = String(raw).trim().replace(/,/g, ".");
+  if (s === "") return NaN;
+  if (!/^[0-9+\-*/().\s]+$/.test(s)) return NaN;
+
+  let i = 0;
+
+  function skipSpace() { while (s[i] === " ") i++; }
+
+  function parseNumber() {
+    skipSpace();
+    const start = i;
+    let hasDigits = false;
+    while (i < s.length && /[0-9]/.test(s[i])) { i++; hasDigits = true; }
+    if (s[i] === ".") {
+      i++;
+      while (i < s.length && /[0-9]/.test(s[i])) { i++; hasDigits = true; }
+    }
+    if (!hasDigits) throw new Error("bad number");
+    return Number(s.slice(start, i));
+  }
+
+  function parseFactor() {
+    skipSpace();
+    if (s[i] === "(") {
+      i++;
+      const v = parseExpr();
+      skipSpace();
+      if (s[i] !== ")") throw new Error("expected )");
+      i++;
+      return v;
+    }
+    if (s[i] === "-") { i++; return -parseFactor(); }
+    if (s[i] === "+") { i++; return parseFactor(); }
+    return parseNumber();
+  }
+
+  function parseTerm() {
+    let v = parseFactor();
+    skipSpace();
+    while (s[i] === "*" || s[i] === "/") {
+      const op = s[i]; i++;
+      const rhs = parseFactor();
+      v = op === "*" ? v * rhs : v / rhs;
+      skipSpace();
+    }
+    return v;
+  }
+
+  function parseExpr() {
+    let v = parseTerm();
+    skipSpace();
+    while (s[i] === "+" || s[i] === "-") {
+      const op = s[i]; i++;
+      const rhs = parseTerm();
+      v = op === "+" ? v + rhs : v - rhs;
+      skipSpace();
+    }
+    return v;
+  }
+
+  try {
+    const result = parseExpr();
+    skipSpace();
+    if (i !== s.length) return NaN;
+    return Number.isFinite(result) ? result : NaN;
+  } catch {
+    return NaN;
+  }
+}
+
+function moneyNum(raw) {
+  const v = evalMoneyExpr(raw);
+  return Number.isFinite(v) ? v : 0;
+}
 function clampPct(p) { return Math.max(0, Math.min(1, p || 0)); }
 function cardLabel(card) {
   return card === "sber" ? "Сбер" : card === "alfa" ? "Альфа" : card === "ozon" ? "Озон" : card;
@@ -2199,7 +2277,33 @@ function homeCardOf(bucket) { return bucket === "wants" ? "alfa" : "sber"; }
 function bucketOf(card) { return card === "alfa" ? "wants" : "needs"; }
 function catListOf(settings, bucket) { return bucket === "wants" ? settings.wantCats : settings.needCats; }
 
-function FullAddForm({ settings, initial, onSubmit, onCancel }) {
+function AmountField({ label, value, onChange, big }) {
+  const evaluated = evalMoneyExpr(value);
+  const stripped = String(value ?? "").trim().replace(/^-/, "");
+  const hasOp = /[+\-*/]/.test(stripped);
+  const showPreview = String(value ?? "") !== "" && hasOp && Number.isFinite(evaluated);
+
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <input
+        className={big ? "amount-input mono" : "mono"}
+        inputMode="decimal"
+        type="text"
+        placeholder="0"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {showPreview && (
+        <div className="small-note" style={{ marginTop: -1 }}>
+          = {formatMoney(evaluated)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
   const defaultCategoryFor = (bucket) => catListOf(settings, bucket)[0]?.name || "";
   const initialBucket = initial?.bucket || bucketOf(initial?.card || "sber");
 
@@ -2212,7 +2316,6 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
   const [toCard, setToCard] = useState(initial?.toCard || "alfa");
   const [category, setCategory] = useState(initial?.category || defaultCategoryFor(initialBucket));
   const [note, setNote] = useState(initial?.note || "");
-  const [adjustSign, setAdjustSign] = useState("plus");
 
   const [split, setSplit] = useState(false);
   const [splitAmount2, setSplitAmount2] = useState("");
@@ -2229,7 +2332,6 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
     setToCard(initial?.toCard || "alfa");
     setCategory(initial?.category || defaultCategoryFor(b));
     setNote(initial?.note || "");
-    setAdjustSign("plus");
     setSplit(false);
     setSplitAmount2("");
     setSplitCategory2("");
@@ -2253,8 +2355,8 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bucket, split, settings.needCats, settings.wantCats]);
 
-  const amountNum = Number(amount || 0);
-  const splitAmountNum = Number(splitAmount2 || 0);
+  const amountNum = moneyNum(amount);
+  const splitAmountNum = moneyNum(splitAmount2);
   const categories = catListOf(settings, bucket);
   const otherBucket = bucket === "wants" ? "needs" : "wants";
   const otherCategories = catListOf(settings, otherBucket);
@@ -2262,10 +2364,17 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
   const homeCard = homeCardOf(bucket);
   const isAnomaly = type === "expense" && card !== homeCard;
 
+  const computedBalance = useMemo(
+    () => computeBalances(transactions || [], settings, date)[card],
+    [transactions, settings, date, card]
+  );
+  const hasRealBalanceInput = amount !== "" && Number.isFinite(evalMoneyExpr(amount));
+  const balanceDiff = Math.round(amountNum - computedBalance);
+
   function submit(e) {
     e.preventDefault();
 
-    if (!amountNum || amountNum <= 0) {
+    if (type !== "adjustment" && (!amountNum || amountNum <= 0)) {
       window.alert("Введите сумму больше 0");
       return;
     }
@@ -2334,12 +2443,20 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
         note: note.trim(),
       });
     } else if (type === "adjustment") {
+      if (!hasRealBalanceInput) {
+        window.alert("Введите реальный баланс карты");
+        return;
+      }
+      if (balanceDiff === 0) {
+        onCancel();
+        return;
+      }
       onSubmit({
         type: "adjustment",
         date,
-        amount: adjustSign === "minus" ? -amountNum : amountNum,
+        amount: balanceDiff,
         card,
-        note: note.trim(),
+        note: note.trim() || "Сверка баланса",
       });
     }
   }
@@ -2355,19 +2472,18 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
 
       <OperationTabs value={type} onChange={setType} />
 
-      <div className="field">
-        <label>{type === "expense" && split ? "Сумма (часть 1)" : "Сумма"}</label>
-        <input
-          className="amount-input mono"
-          inputMode="numeric"
-          type="number"
-          min="0"
-          step="1"
-          placeholder="0"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-      </div>
+      <AmountField
+        label={
+          type === "adjustment"
+            ? "Реальный баланс карты сейчас"
+            : type === "expense" && split
+            ? "Сумма (часть 1)"
+            : "Сумма"
+        }
+        value={amount}
+        onChange={setAmount}
+        big
+      />
 
       <div className="field">
         <label>Дата</label>
@@ -2414,19 +2530,11 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
 
           {split && (
             <>
-              <div className="field">
-                <label>Сумма (часть 2, «{otherBucket === "wants" ? "Желания" : "Нужды"}»)</label>
-                <input
-                  className="mono"
-                  inputMode="numeric"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="0"
-                  value={splitAmount2}
-                  onChange={(e) => setSplitAmount2(e.target.value)}
-                />
-              </div>
+              <AmountField
+                label={`Сумма (часть 2, «${otherBucket === "wants" ? "Желания" : "Нужды"}»)`}
+                value={splitAmount2}
+                onChange={setSplitAmount2}
+              />
               <div className="field">
                 <label>Категория (часть 2)</label>
                 <select value={splitCategory2} onChange={(e) => setSplitCategory2(e.target.value)}>
@@ -2477,26 +2585,37 @@ function FullAddForm({ settings, initial, onSubmit, onCancel }) {
             <label>Карта</label>
             <CardPicker options={ALL_CARDS} value={card} onChange={setCard} />
           </div>
-          <div className="field">
-            <label>Тип коррекции</label>
-            <div className="card-picker">
-              <button
-                type="button"
-                className={`card-picker-item ${adjustSign === "plus" ? "active" : ""}`}
-                style={{ "--pick-color": C.sber, "--pick-soft": C.sberSoft }}
-                onClick={() => setAdjustSign("plus")}
-              >
-                <div className="main">Пополнение</div>
-              </button>
-              <button
-                type="button"
-                className={`card-picker-item ${adjustSign === "minus" ? "active" : ""}`}
-                style={{ "--pick-color": C.danger, "--pick-soft": C.dangerSoft }}
-                onClick={() => setAdjustSign("minus")}
-              >
-                <div className="main">Списание</div>
-              </button>
+
+          <div
+            className="notice"
+            style={
+              !hasRealBalanceInput
+                ? {}
+                : balanceDiff === 0
+                ? { borderColor: "#2D8C6F", background: "#E4F2EC", color: "#1F5C46" }
+                : balanceDiff > 0
+                ? { borderColor: C.sber, background: C.sberSoft, color: "#1E5C39" }
+                : { borderColor: C.danger, background: C.dangerSoft, color: "#7A241C" }
+            }
+          >
+            <div style={{ marginBottom: 4 }}>
+              В приложении на {date}: <b className="mono">{formatMoney(computedBalance)}</b>
             </div>
+            {!hasRealBalanceInput ? (
+              <div>Введите баланс, который видите в банке — сравним с расчётом приложения.</div>
+            ) : balanceDiff === 0 ? (
+              <div>Совпадает с приложением. Корректировка не нужна — просто закройте форму.</div>
+            ) : balanceDiff > 0 ? (
+              <div>
+                На карте на {formatMoney(balanceDiff)} больше, чем в приложении. «Сохранить» внесёт пополнение
+                на эту сумму в историю.
+              </div>
+            ) : (
+              <div>
+                На карте на {formatMoney(Math.abs(balanceDiff))} меньше, чем в приложении. «Сохранить» внесёт
+                списание на эту сумму в историю.
+              </div>
+            )}
           </div>
         </>
       )}
@@ -2646,6 +2765,7 @@ function AddView({ settings, transactions, onAdd }) {
       <div className="screen-stack">
         <FullAddForm
           settings={settings}
+          transactions={transactions}
           initial={formInitial}
           onSubmit={submit}
           onCancel={closeForm}
