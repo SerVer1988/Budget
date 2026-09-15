@@ -3060,6 +3060,7 @@ function AnalysisView({
     [transactions, settings, selectedMonth]
   );
   const smartNotes = useMemo(() => computeSmartNotes(transactions, settings), [transactions, settings]);
+  const hasSmartNotes = [smartNotes.sber, smartNotes.alfa, smartNotes.ozon].some((n) => n.type !== "ok");
   const isPastMonth = selectedMonth < todayMonthKey();
   const monthNeedsLeftover = agg.needsLimit - agg.needsSpent;
   const monthWantsLeftover = agg.wantsLimit - agg.wantsSpent;
@@ -3085,6 +3086,14 @@ function AnalysisView({
     <div className="screen-stack">
       <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
       <PaydayReminder settings={settings} transactions={transactions} />
+
+      {hasSmartNotes && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <SmartNoteBanner note={smartNotes.sber} />
+          <SmartNoteBanner note={smartNotes.alfa} />
+          <SmartNoteBanner note={smartNotes.ozon} />
+        </div>
+      )}
 
       {showCloseBanner && (
         <div className="notice" style={{ borderColor: C.ozon, background: C.ozonSoft, color: "#0F3E70" }}>
@@ -3128,7 +3137,6 @@ function AnalysisView({
         bigValue={balances.sber}
         pct={agg.sberAvail > 0 ? agg.sberSpent / agg.sberAvail : 0}
         sub={`Потрачено ${formatMoney(agg.sberSpent)} из ${formatMoney(Math.max(0, agg.sberAvail))}`}
-        note={smartNotes.sber}
       />
 
       <BankCard
@@ -3140,7 +3148,6 @@ function AnalysisView({
         bigValue={balances.alfa}
         pct={agg.alfaAvail > 0 ? agg.alfaSpent / agg.alfaAvail : 0}
         sub={`Потрачено ${formatMoney(agg.alfaSpent)} из ${formatMoney(Math.max(0, agg.alfaAvail))}`}
-        note={smartNotes.alfa}
       />
 
       <BankCard
@@ -3152,7 +3159,6 @@ function AnalysisView({
         bigValue={balances.ozon}
         pct={settings.goal > 0 ? balances.ozon / settings.goal : 0}
         sub={`Цель: ${formatMoney(settings.goal)}`}
-        note={smartNotes.ozon}
       />
 
       <div className="panel">
