@@ -395,6 +395,45 @@ function computeSmartNotes(transactions, settings) {
   };
 }
 
+/* Derives a per-category monthly limit: each category's historical share (last 3
+   completed months, i.e. excluding the current in-progress one) of its bucket's total
+   spend, applied to this month's bucket plan. Cold start (no history yet) splits the
+   bucket plan evenly across the bucket's configured categories. */
+function computeCategoryLimits(transactions, settings, categories, bucket, currentMonthKey, bucketLimitThisMonth) {
+  const limits = {};
+  if (!categories.length || bucketLimitThisMonth <= 0) {
+    categories.forEach((c) => { limits[c.name] = 0; });
+    return limits;
+  }
+
+  const catTotals = {};
+  categories.forEach((c) => { catTotals[c.name] = 0; });
+  let bucketHistTotal = 0;
+
+  let mk = shiftMonth(currentMonthKey, -1);
+  for (let i = 0; i < 3; i++) {
+    const agg = aggregateMonth(mk, transactions, settings);
+    const totals = bucket === "wants" ? agg.wantCatTotals : agg.needCatTotals;
+    categories.forEach((c) => {
+      const v = totals[c.name] || 0;
+      catTotals[c.name] += v;
+      bucketHistTotal += v;
+    });
+    mk = shiftMonth(mk, -1);
+  }
+
+  if (bucketHistTotal > 0) {
+    categories.forEach((c) => {
+      limits[c.name] = bucketLimitThisMonth * (catTotals[c.name] / bucketHistTotal);
+    });
+  } else {
+    const evenShare = bucketLimitThisMonth / categories.length;
+    categories.forEach((c) => { limits[c.name] = evenShare; });
+  }
+
+  return limits;
+}
+
 function categoryStats(transactions, bucket) {
   const byName = {};
   transactions.filter((t) => t.type === "expense" && (t.bucket || bucketOf(t.card)) === bucket).forEach((t) => {
@@ -945,14 +984,41 @@ function AppStyles() {
         width: 100%;
         min-width: 0;
         display: flex;
-        align-items: center;
-        gap: 10px;
+        flex-direction: column;
+        gap: 7px;
         border: 1px solid color-mix(in srgb, var(--accent) 16%, ${C.border});
         background: rgba(255,255,255,0.92);
         border-radius: 14px;
         padding: 8px 10px;
         color: ${C.ink};
         box-shadow: 0 3px 8px rgba(22, 32, 27, 0.03);
+      }
+
+      .cat-row-top {
+        width: 100%;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .cat-row-bar {
+        width: 100%;
+        height: 5px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: ${C.border};
+        display: flex;
+      }
+
+      .cat-row-bar-green {
+        height: 100%;
+        background: ${C.sber};
+      }
+
+      .cat-row-bar-red {
+        height: 100%;
+        background: ${C.danger};
       }
 
       .cat-row-icon {
@@ -2073,17 +2139,50 @@ function ListTile({ icon: Icon, color, name, amount, onClick, empty }) {
   );
 }
 
-function CategoryQuickRow({ icon: Icon, color, name, amount, onClick }) {
+function CategoryQuickRow({ icon: Icon, color, name, spent, limit, fallbackAmount, onClick }) {
+  const hasLimit = limit > 0;
+  const over = hasLimit && spent > limit;
+
+  let greenPct = 0;
+  let redPct = 0;
+  if (hasLimit) {
+    const total = Math.max(spent, limit, 1);
+    greenPct = (Math.min(spent, limit) / total) * 100;
+    redPct = over ? ((spent - limit) / total) * 100 : 0;
+  }
+
   return (
     <button onClick={onClick} className="cat-row" type="button">
-      <div className="cat-row-icon" style={{ background: color + "22" }}>
-        <Icon size={18} style={{ color }} />
+      <div className="cat-row-top">
+        <div className="cat-row-icon" style={{ background: color + "22" }}>
+          <Icon size={18} style={{ color }} />
+        </div>
+        <div className="cat-row-main">
+          <div className="cat-row-name">{name}</div>
+          <div className="cat-row-amount">
+            {hasLimit ? (
+              <>
+                <span style={over ? { color: C.danger, fontWeight: 800 } : undefined}>
+                  {formatMoney(spent)}
+                </span>
+                {" из "}
+                {formatMoney(limit)}
+              </>
+            ) : fallbackAmount != null ? (
+              formatMoney(fallbackAmount)
+            ) : (
+              "Нет трат"
+            )}
+          </div>
+        </div>
+        <ChevronRight size={16} className="cat-row-chevron" />
       </div>
-      <div className="cat-row-main">
-        <div className="cat-row-name">{name}</div>
-        <div className="cat-row-amount">{amount != null ? formatMoney(amount) : "Нет трат"}</div>
-      </div>
-      <ChevronRight size={16} className="cat-row-chevron" />
+      {hasLimit && (
+        <div className="cat-row-bar">
+          <div className="cat-row-bar-green" style={{ width: `${greenPct}%` }} />
+          {redPct > 0 && <div className="cat-row-bar-red" style={{ width: `${redPct}%` }} />}
+        </div>
+      )}
     </button>
   );
 }
@@ -2203,6 +2302,12 @@ function CategoryPanel({
     [transactions, settings, prevMonthEnd, card]
   );
 
+  const bucketLimitThisMonth = card === "sber" ? agg.needsLimit : agg.wantsLimit;
+  const categoryLimits = useMemo(
+    () => computeCategoryLimits(transactions, settings, categories, bucketOf(card), todayMonthKey(), bucketLimitThisMonth),
+    [transactions, settings, categories, card, bucketLimitThisMonth]
+  );
+
   return (
     <div className="add-panel" style={{ "--accent": accentColor, "--soft": softColor }}>
       <TopAmounts inflow={inflow} outflow={outflow} logo={logo} accentColor={accentColor} />
@@ -2236,7 +2341,7 @@ function CategoryPanel({
           const s = stats[cat.name];
           const Icon = getIcon(cat.icon);
           const monthAmount = monthlyTotals[cat.name] || 0;
-          const showAmount = monthAmount > 0 ? monthAmount : (s?.modalAmount ?? null);
+          const limit = categoryLimits[cat.name] || 0;
 
           return (
             <CategoryQuickRow
@@ -2244,7 +2349,9 @@ function CategoryPanel({
               icon={Icon}
               color={cat.color}
               name={cat.name}
-              amount={showAmount}
+              spent={monthAmount}
+              limit={limit}
+              fallbackAmount={s?.modalAmount ?? null}
               onClick={() => {
                 onOpenFull({
                   type: "expense",
