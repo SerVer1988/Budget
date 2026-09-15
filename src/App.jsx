@@ -8,7 +8,7 @@ import {
   Wrench, Scissors, Coins, Users, User, HelpCircle, MoreHorizontal, Sparkles, Umbrella, Wine,
 } from "lucide-react";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { storage } from "./storage.js";
 
@@ -1948,6 +1948,68 @@ function ListTile({ icon: Icon, color, name, amount, onClick, empty }) {
   );
 }
 
+function CategoryDonut({ categories, totals }) {
+  const data = useMemo(
+    () =>
+      categories
+        .map((c) => ({ name: c.name, value: totals[c.name] || 0, color: c.color }))
+        .filter((d) => d.value > 0)
+        .sort((a, b) => b.value - a.value),
+    [categories, totals]
+  );
+
+  const total = data.reduce((sum, d) => sum + d.value, 0);
+
+  if (data.length === 0) {
+    return (
+      <div className="soft-card" style={{ padding: 16, textAlign: "center", marginTop: 12 }}>
+        <div className="muted" style={{ fontSize: 12 }}>
+          В этом месяце трат по категориям ещё нет — здесь появится диаграмма.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="soft-card" style={{ padding: 14, marginTop: 12 }}>
+      <div className="section-title" style={{ margin: "0 0 8px" }}>Структура расходов за месяц</div>
+      <div className="chart-box" style={{ height: 190 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={48}
+              outerRadius={78}
+              paddingAngle={2}
+              stroke="none"
+            >
+              {data.map((d) => (
+                <Cell key={d.name} fill={d.color} />
+              ))}
+            </Pie>
+            <Tooltip formatter={(v) => formatMoney(v)} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 4 }}>
+        {data.map((d) => (
+          <div key={d.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}>
+              <span style={{ width: 8, height: 8, borderRadius: 999, background: d.color, flex: "0 0 auto" }} />
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
+            </span>
+            <span className="mono" style={{ fontWeight: 700, flex: "0 0 auto" }}>
+              {formatMoney(d.value)} · {Math.round((d.value / total) * 100)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CategoryPanel({
   title,
   accentColor,
@@ -2040,6 +2102,8 @@ function CategoryPanel({
           );
         })}
       </div>
+
+      <CategoryDonut categories={categories} totals={monthlyTotals} />
     </div>
   );
 }
