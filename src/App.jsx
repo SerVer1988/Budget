@@ -1848,20 +1848,14 @@ function IncomeDistributionModal({ incomeTx, settings, onDistribute, onClose }) 
 }
 
 function LimitStatus({ target, avail }) {
+  // Больше не используется в интерфейсе: заменён единым индикатором SmartNoteBanner
+  // (LimitStatus считал по притоку текущего месяца, SmartNoteBanner — по факту на карте
+  // с учётом всей истории, и одновременный показ обоих вводил в заблуждение).
   const diff = Math.round(target - avail);
-  
-  if (target === 0 && avail === 0) {
-    return <div className="limit-status muted">Лимит: 0 ₽</div>;
-  }
-
-  if (diff === 0) {
-    return <div className="limit-status" style={{ color: C.inkMuted }}>Лимит выполнен</div>;
-  } else if (diff > 0) {
-    return <div className="limit-status" style={{ color: C.inkMuted }}>Можно доложить: {formatMoney(diff)}</div>;
-  } else {
-    // Если Перебор
-    return <div className="limit-status" style={{ color: C.danger }}>Перебор: {formatMoney(Math.abs(diff))}</div>;
-  }
+  if (diff === 0) return null;
+  return diff > 0
+    ? <div className="limit-status" style={{ color: C.inkMuted }}>Можно доложить: {formatMoney(diff)}</div>
+    : <div className="limit-status" style={{ color: C.danger }}>Перебор: {formatMoney(Math.abs(diff))}</div>;
 }
 
 function SmartNoteBanner({ note, compact }) {
@@ -2039,11 +2033,6 @@ function CategoryPanel({
   const spent = card === "sber" ? agg.sberSpent : agg.alfaSpent;
   const monthlyTotals = card === "sber" ? agg.needCatTotals : agg.wantCatTotals;
 
-  // Логика лимитов
-  const pct = card === "sber" ? needPctOf(settings) : settings.wantPct;
-  const target = agg.incomeTotal * (pct / 100);
-  const avail = card === "sber" ? agg.sberAvail : agg.alfaAvail;
-
   const visible = ordered.slice(0, 8);
   while (visible.length < 8) visible.push(null);
 
@@ -2055,8 +2044,6 @@ function CategoryPanel({
         <h2>{title}</h2>
         {/* Баланс вместо потраченного */}
         <div className="sum">{formatMoney(balance)}</div>
-        {/* Лимит */}
-        <LimitStatus target={target} avail={avail} />
       </div>
 
       <SmartNoteBanner note={note} compact />
@@ -2124,8 +2111,6 @@ function OzonPanel({
   const agg = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
 
   const balance = balances.ozon || 0;
-  const target = agg.incomeTotal * (settings.savePct / 100);
-  const avail = agg.ozonAvail;
 
   const pct = settings.goal > 0 ? balance / settings.goal : 0;
   const left = settings.goal - balance;
@@ -2151,7 +2136,6 @@ function OzonPanel({
       <div className="carousel-heading">
         <h2>Подушка</h2>
         <div className="sum">{formatMoney(balance)}</div>
-        <LimitStatus target={target} avail={avail} />
       </div>
 
       <SmartNoteBanner note={note} compact />
@@ -2732,13 +2716,13 @@ function AddView({ settings, transactions, onAdd }) {
     },
     {
       id: "wants",
-      title: "Развлечения",
+      title: "Желания",
       accent: C.alfa,
       soft: C.alfaSoft,
       logo: "A",
       render: (navProps) => (
         <CategoryPanel
-          title="Развлечения"
+          title="Желания"
           accentColor={C.alfa}
           softColor={C.alfaSoft}
           logo="A"
@@ -2907,7 +2891,7 @@ function AnalysisView({
 
   const chartData = [
     { name: "Нужды", value: agg.needsSpent, fill: C.sber },
-    { name: "Развлеч.", value: agg.wantsSpent, fill: C.alfa },
+    { name: "Желания", value: agg.wantsSpent, fill: C.alfa },
     { name: "Подушка", value: Math.max(0, agg.ozonNet), fill: C.ozon },
   ];
 
@@ -2967,7 +2951,7 @@ function AnalysisView({
         stripe={C.alfa}
         soft={C.alfaSoft}
         name="Альфа"
-        role={`Развлечения · ${settings.wantPct}%`}
+        role={`Желания · ${settings.wantPct}%`}
         bigLabel="баланс"
         bigValue={balances.alfa}
         pct={agg.alfaAvail > 0 ? agg.alfaSpent / agg.alfaAvail : 0}
@@ -3114,7 +3098,7 @@ function SettingsView({ settings, onSave, onWipeAll }) {
 
         <div className="form-grid-2">
           <div className="field">
-            <label>Развлечения, %</label>
+            <label>Желания, %</label>
             <input
               type="number"
               value={draft.wantPct}
@@ -3221,7 +3205,7 @@ function SettingsView({ settings, onSave, onWipeAll }) {
       </div>
 
       <div className="panel">
-        <SectionTitle>Категории развлечений</SectionTitle>
+        <SectionTitle>Категории Желаний</SectionTitle>
         <div className="history-list">
           {draft.wantCats.map((cat, i) => (
             <CategoryRow
