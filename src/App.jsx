@@ -263,9 +263,11 @@ function aggregateMonth(mk, transactions, settings) {
   });
 
   function derive(x) {
+    const adjIn = x.adj > 0 ? x.adj : 0;
+    const adjOut = x.adj < 0 ? -x.adj : 0;
     const avail = x.income + x.transferIn - x.transferOut;
-    const inflow = x.income + x.transferIn;
-    const outflow = x.spent + x.transferOut;
+    const inflow = x.income + x.transferIn + adjIn;
+    const outflow = x.spent + x.transferOut + adjOut;
     const net = avail - x.spent + x.adj;
     return { avail, inflow, outflow, net, spent: x.spent };
   }
@@ -2030,15 +2032,25 @@ function CategoryPanel({
   const balance = balances[card] || 0;
   const agg = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
   const inflow = card === "sber" ? agg.sberInflow : agg.alfaInflow;
-  const spent = card === "sber" ? agg.sberSpent : agg.alfaSpent;
+  const outflow = card === "sber" ? agg.sberOutflow : agg.alfaOutflow;
   const monthlyTotals = card === "sber" ? agg.needCatTotals : agg.wantCatTotals;
+
+  const prevMonthEnd = useMemo(() => endOfMonthStr(shiftMonth(todayMonthKey(), -1)), []);
+  const opening = useMemo(
+    () => computeBalances(transactions, settings, prevMonthEnd)[card],
+    [transactions, settings, prevMonthEnd, card]
+  );
 
   const visible = ordered.slice(0, 8);
   while (visible.length < 8) visible.push(null);
 
   return (
     <div className="add-panel" style={{ "--accent": accentColor, "--soft": softColor }}>
-      <TopAmounts inflow={inflow} outflow={spent} logo={logo} accentColor={accentColor} />
+      <TopAmounts inflow={inflow} outflow={outflow} logo={logo} accentColor={accentColor} />
+
+      <div className="small-note" style={{ textAlign: "center", marginTop: -4, marginBottom: 6 }}>
+        Было на начало месяца: {formatMoney(opening)} → сейчас:
+      </div>
 
       <div className="carousel-heading">
         <h2>{title}</h2>
@@ -2112,6 +2124,12 @@ function OzonPanel({
 
   const balance = balances.ozon || 0;
 
+  const prevMonthEnd = useMemo(() => endOfMonthStr(shiftMonth(todayMonthKey(), -1)), []);
+  const opening = useMemo(
+    () => computeBalances(transactions, settings, prevMonthEnd).ozon,
+    [transactions, settings, prevMonthEnd]
+  );
+
   const pct = settings.goal > 0 ? balance / settings.goal : 0;
   const left = settings.goal - balance;
   const rate = useMemo(() => estimateMonthlyRate(transactions, settings, todayMonthKey()), [transactions, settings]);
@@ -2132,6 +2150,10 @@ function OzonPanel({
   return (
     <div className="add-panel" style={{ "--accent": C.ozon, "--soft": C.ozonSoft }}>
       <TopAmounts inflow={agg.ozonInflow} outflow={agg.ozonOutflow} logo="ozon" accentColor={C.ozon} />
+
+      <div className="small-note" style={{ textAlign: "center", marginTop: -4, marginBottom: 6 }}>
+        Было на начало месяца: {formatMoney(opening)} → сейчас:
+      </div>
 
       <div className="carousel-heading">
         <h2>Подушка</h2>
