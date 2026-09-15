@@ -891,8 +891,8 @@ function AppStyles() {
       .cat-list {
         width: 100%;
         min-width: 0;
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 7px;
       }
 
@@ -1620,6 +1620,28 @@ function AppStyles() {
         .quick-icon {
           width: 38px;
           height: 38px;
+        }
+
+        .cat-list {
+          gap: 6px;
+        }
+
+        .cat-row {
+          padding: 7px 8px;
+          gap: 8px;
+        }
+
+        .cat-row-icon {
+          width: 34px;
+          height: 34px;
+        }
+
+        .cat-row-name {
+          font-size: 12px;
+        }
+
+        .cat-row-amount {
+          font-size: 10px;
         }
 
         .operation-tabs button {
