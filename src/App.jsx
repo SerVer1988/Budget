@@ -76,6 +76,7 @@ const DEFAULT_SETTINGS = {
   needCats: DEFAULT_NEED_CATS,
   wantCats: DEFAULT_WANT_CATS,
   closedMonths: [],
+  needsWantsResetDate: null,
 };
 
 /* ============================================================ helpers */
@@ -196,6 +197,11 @@ function clampPct(p) { return Math.max(0, Math.min(1, p || 0)); }
 function cardLabel(card) {
   return card === "sber" ? "Сбер" : card === "alfa" ? "Альфа" : card === "ozon" ? "Озон" : card;
 }
+function formatDateRu(dateStr) {
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split("-");
+  return `${d}.${m}.${y}`;
+}
 function needPctOf(settings) { return 100 - (settings.wantPct || 0) - (settings.savePct || 0); }
 
 function computeIncomeSplit(amount, settings) {
@@ -310,45 +316,63 @@ function aggregateMonth(mk, transactions, settings) {
 
 /* ============================================================ Smart Notes engine (50/30/20 cross-card control) */
 function computeCumulativeAllocation(transactions, settings) {
-  let incomeTotal = 0;
-  transactions.forEach((t) => { if (t.type === "income") incomeTotal += t.amount; });
+  // Needs/Wants track since the last reconciliation point (set when the user closes a
+  // month, or manually reset in Settings) instead of since the beginning of time — this
+  // stops long-unclosed surpluses/deficits from piling up into unrealistic numbers.
+  // null = never reconciled yet = behaves exactly as before (full history).
+  const sinceDate = settings.needsWantsResetDate || null;
+  const recent = sinceDate ? transactions.filter((t) => t.date > sinceDate) : transactions;
+
+  let recentIncome = 0;
+  recent.forEach((t) => { if (t.type === "income") recentIncome += t.amount; });
 
   let needsSpent = 0;
   let wantsSpent = 0;
-  transactions.forEach((t) => {
+  recent.forEach((t) => {
     if (t.type !== "expense") return;
     const bucket = t.bucket || (t.card === "alfa" ? "wants" : "needs");
     if (bucket === "needs") needsSpent += t.amount;
     else if (bucket === "wants") wantsSpent += t.amount;
   });
 
+  const needPct = needPctOf(settings);
+  const needsAllocated = recentIncome * (needPct / 100);
+  const wantsAllocated = recentIncome * (settings.wantPct / 100);
+
+  // Savings intentionally stays fully cumulative, all-time — a "подушка" is meant to
+  // keep growing across months, unlike Needs/Wants which should roughly zero out.
+  let allTimeIncome = 0;
+  transactions.forEach((t) => { if (t.type === "income") allTimeIncome += t.amount; });
   let saveSpent = 0;
   transactions.forEach((t) => {
     if (t.type === "adjustment" && t.card === "ozon" && t.amount < 0) saveSpent += -t.amount;
     if (t.type === "transfer" && t.fromCard === "ozon") saveSpent += t.amount;
   });
+  const saveAllocated = allTimeIncome * (settings.savePct / 100);
 
-  const needPct = needPctOf(settings);
-  const needsAllocated = incomeTotal * (needPct / 100);
-  const wantsAllocated = incomeTotal * (settings.wantPct / 100);
-  const saveAllocated = incomeTotal * (settings.savePct / 100);
+  const baseline = sinceDate ? computeBalances(transactions, settings, sinceDate) : { sber: 0, alfa: 0 };
 
   return {
     needsTarget: needsAllocated - needsSpent,
     wantsTarget: wantsAllocated - wantsSpent,
     saveTarget: saveAllocated - saveSpent,
+    baselineSber: baseline.sber,
+    baselineAlfa: baseline.alfa,
+    sinceDate,
   };
 }
 
 const SMART_NOTE_THRESHOLD = 50;
 
-function smartNoteFor(bucketLabel, card, balance, target, overspend) {
+function smartNoteFor(bucketLabel, card, balance, target, overspend, sinceLabel) {
+  const suffix = sinceLabel ? ` (с ${sinceLabel})` : "";
+
   if (overspend > 0) {
     return {
       type: "over",
       color: C.danger,
       soft: C.dangerSoft,
-      text: `Внимание! По категории «${bucketLabel}» расходы превышают план на ${formatMoney(overspend)}. Сократите траты или компенсируйте из другой категории.`,
+      text: `Внимание! По категории «${bucketLabel}» расходы превышают план на ${formatMoney(overspend)}${suffix}. Сократите траты или компенсируйте из другой категории.`,
     };
   }
 
@@ -359,7 +383,7 @@ function smartNoteFor(bucketLabel, card, balance, target, overspend) {
       type: "under",
       color: C.amber,
       soft: C.amberSoft,
-      text: `Вы забыли перевести деньги! На карте ${cardLabel(card)} на ${formatMoney(-diff)} меньше, чем запланировано по бюджету «${bucketLabel}».`,
+      text: `Вы забыли перевести деньги! На карте ${cardLabel(card)} на ${formatMoney(-diff)} меньше, чем запланировано по бюджету «${bucketLabel}»${suffix}.`,
     };
   }
 
@@ -368,7 +392,7 @@ function smartNoteFor(bucketLabel, card, balance, target, overspend) {
       type: "excess",
       color: "#2D8C6F",
       soft: "#E4F2EC",
-      text: `Баланс карты ${cardLabel(card)} выше плана «${bucketLabel}» на ${formatMoney(diff)}. Возможно, вы забыли распределить эти деньги по другим картам.`,
+      text: `Баланс карты ${cardLabel(card)} выше плана «${bucketLabel}» на ${formatMoney(diff)}${suffix}. Возможно, вы забыли распределить эти деньги по другим картам.`,
     };
   }
 
@@ -383,15 +407,16 @@ function smartNoteFor(bucketLabel, card, balance, target, overspend) {
 function computeSmartNotes(transactions, settings) {
   const alloc = computeCumulativeAllocation(transactions, settings);
   const balances = computeBalances(transactions, settings, null);
+  const sinceLabel = alloc.sinceDate ? formatDateRu(alloc.sinceDate) : null;
 
   const needsOver = alloc.needsTarget < 0 ? -alloc.needsTarget : 0;
   const wantsOver = alloc.wantsTarget < 0 ? -alloc.wantsTarget : 0;
   const saveOver = alloc.saveTarget < 0 ? -alloc.saveTarget : 0;
 
   return {
-    sber: smartNoteFor("Нужды", "sber", balances.sber, alloc.needsTarget, needsOver),
-    alfa: smartNoteFor("Желания", "alfa", balances.alfa, alloc.wantsTarget, wantsOver),
-    ozon: smartNoteFor("Сбережения", "ozon", balances.ozon, alloc.saveTarget, saveOver),
+    sber: smartNoteFor("Нужды", "sber", balances.sber - alloc.baselineSber, alloc.needsTarget, needsOver, sinceLabel),
+    alfa: smartNoteFor("Желания", "alfa", balances.alfa - alloc.baselineAlfa, alloc.wantsTarget, wantsOver, sinceLabel),
+    ozon: smartNoteFor("Сбережения", "ozon", balances.ozon, alloc.saveTarget, saveOver, null),
   };
 }
 
@@ -596,6 +621,7 @@ function migrateSettings(raw) {
     openingBalance: { ...DEFAULT_SETTINGS.openingBalance, ...(raw.openingBalance || {}) },
     includeInTotal: { ...DEFAULT_SETTINGS.includeInTotal, ...(raw.includeInTotal || {}) },
     closedMonths: Array.isArray(raw.closedMonths) ? raw.closedMonths : [],
+    needsWantsResetDate: raw.needsWantsResetDate || null,
   };
 }
 
@@ -3333,7 +3359,7 @@ function CategoryRow({ cat, onChange, onDelete }) {
   );
 }
 
-function SettingsView({ settings, onSave, onWipeAll }) {
+function SettingsView({ settings, onSave, onWipeAll, onResetTracking }) {
   const [draft, setDraft] = useState(settings);
   const [daysText, setDaysText] = useState((settings.reminderDays || []).join(", "));
   const [saved, setSaved] = useState(false);
@@ -3429,6 +3455,30 @@ function SettingsView({ settings, onSave, onWipeAll }) {
             onChange={(e) => setDraft({ ...draft, goal: e.target.value })}
           />
         </div>
+      </div>
+
+      <div className="panel">
+        <SectionTitle>Сверка Нужд и Желаний</SectionTitle>
+        <div className="small-note" style={{ marginBottom: 10 }}>
+          Подсказки по Сбер/Альфа считают излишки и недокиды с {settings.needsWantsResetDate
+            ? `${formatDateRu(settings.needsWantsResetDate)}`
+            : "самого начала"}. Каждое «Закрыть месяц» в Анализе сдвигает эту точку вперёд
+          автоматически. Если цифры накопились и выглядят непропорционально — сбросьте отсчёт
+          на сегодня (баланс на сейчас будет принят за новую точку отсчёта, старые остатки
+          никуда не денутся физически, просто перестанут считаться «излишком»/«недокидом»).
+        </div>
+        <button
+          className="btn"
+          type="button"
+          style={{ width: "100%" }}
+          onClick={() => {
+            if (window.confirm("Сбросить точку отсчёта Нужд/Желаний на сегодня?")) {
+              onResetTracking();
+            }
+          }}
+        >
+          Сбросить отсчёт на сегодня
+        </button>
       </div>
 
       <div className="panel">
@@ -3663,7 +3713,17 @@ export default function App() {
       if (extra.length) persistTransactions([...transactions, ...extra]);
     }
 
-    persistSettings({ ...settings, closedMonths: [...(settings.closedMonths || []), mk] });
+    const newResetDate = endOfMonthStr(mk);
+    const advancedReset =
+      !settings.needsWantsResetDate || newResetDate > settings.needsWantsResetDate
+        ? newResetDate
+        : settings.needsWantsResetDate;
+
+    persistSettings({
+      ...settings,
+      closedMonths: [...(settings.closedMonths || []), mk],
+      needsWantsResetDate: advancedReset,
+    });
     setToast("Месяц закрыт");
     setTimeout(() => setToast(null), 1200);
   }
@@ -3677,6 +3737,12 @@ export default function App() {
       },
     };
     persistSettings(next);
+  }
+
+  function resetNeedsWantsTracking() {
+    persistSettings({ ...settings, needsWantsResetDate: todayStr() });
+    setToast("Отсчёт сброшен");
+    setTimeout(() => setToast(null), 1200);
   }
 
   if (!loaded) {
@@ -3748,6 +3814,7 @@ export default function App() {
                 settings={settings}
                 onSave={persistSettings}
                 onWipeAll={() => persistTransactions([])}
+                onResetTracking={resetNeedsWantsTracking}
               />
             )}
           </main>
