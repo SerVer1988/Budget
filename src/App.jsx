@@ -468,6 +468,51 @@ function estimateMonthlyRate(transactions, settings, fromMonthKey) {
   return count > 0 ? sum / count : 0;
 }
 
+function estimateAvgMonthlyNeeds(transactions, settings, fromMonthKey) {
+  let mk = fromMonthKey;
+  let sum = 0;
+  let count = 0;
+
+  for (let i = 0; i < 3; i++) {
+    const agg = aggregateMonth(mk, transactions, settings);
+    if (agg.needsSpent > 0) {
+      sum += agg.needsSpent;
+      count += 1;
+    }
+    mk = shiftMonth(mk, -1);
+  }
+
+  return count > 0 ? sum / count : 0;
+}
+
+function ruPlural(n, one, few, many) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}
+
+function runwayText(balance, avgMonthlyNeeds) {
+  if (avgMonthlyNeeds <= 0) {
+    return "Добавьте несколько трат по «Нуждам» — тогда посчитаем, на сколько хватит подушки.";
+  }
+
+  const totalMonths = Math.max(0, balance) / avgMonthlyNeeds;
+  const months = Math.floor(totalMonths);
+  const days = Math.round((totalMonths - months) * 30);
+
+  if (months === 0 && days === 0) {
+    return "Подушка пока не покрывает даже дня обязательных расходов.";
+  }
+
+  const parts = [];
+  if (months > 0) parts.push(`${months} ${ruPlural(months, "месяц", "месяца", "месяцев")}`);
+  if (days > 0) parts.push(`${days} ${ruPlural(days, "день", "дня", "дней")}`);
+
+  return `Ваша подушка безопасности позволит вам полностью не работать ${parts.join(" и ")}.`;
+}
+
 function getAllMonthKeys(transactions) {
   const set = new Set(transactions.map((t) => monthKeyOf(t.date)));
   set.add(todayMonthKey());
@@ -2247,6 +2292,8 @@ function OzonPanel({
   const rate = useMemo(() => estimateMonthlyRate(transactions, settings, todayMonthKey()), [transactions, settings]);
   const monthsLeft = left <= 0 ? 0 : (rate > 0 ? Math.ceil(left / rate) : null);
   const thisMonth = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
+  const avgMonthlyNeeds = useMemo(() => estimateAvgMonthlyNeeds(transactions, settings, todayMonthKey()), [transactions, settings]);
+  const runwayMessage = useMemo(() => runwayText(balance, avgMonthlyNeeds), [balance, avgMonthlyNeeds]);
 
   const ozonEntries = useMemo(() => {
     const list = transactions.filter((t) =>
@@ -2326,6 +2373,9 @@ function OzonPanel({
           </div>
           <div className="progress">
             <div style={{ width: `${clampPct(pct) * 100}%` }} />
+          </div>
+          <div className="small-note" style={{ marginTop: 8, lineHeight: 1.4 }}>
+            {runwayMessage}
           </div>
           <div style={{
             display: "flex",
