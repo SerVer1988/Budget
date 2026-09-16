@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Home, Plus, PiggyBank, BarChart3, Settings as SettingsIcon,
-  ChevronLeft, ChevronRight, Trash2, Check, AlertTriangle, Wallet, X, ArrowUp, ArrowDown,
+  ChevronLeft, ChevronRight, Trash2, Check, AlertTriangle, Wallet, X, ArrowUp, ArrowDown, Pencil,
   ShoppingCart, ShoppingBag, UtensilsCrossed, Coffee, Zap, Droplet, Wifi, Phone,
   Car, Bus, Fuel, Plane, Train, HeartPulse, Pill, Stethoscope, Dumbbell, GraduationCap,
   Baby, PawPrint, Gift, Film, Tv, Music, Gamepad2, Book, Shirt, Smartphone, Laptop,
@@ -1685,6 +1685,29 @@ function AppStyles() {
         padding: 4px 12px;
       }
 
+      .type-filter {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 0 0 10px;
+      }
+
+      .type-filter-chip {
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid ${C.border};
+        background: ${C.surface};
+        color: ${C.inkMuted};
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .type-filter-chip.active {
+        background: ${C.ink};
+        color: #fff;
+        border-color: ${C.ink};
+      }
+
       /* Modal */
       .modal-overlay {
         position: fixed;
@@ -1959,7 +1982,7 @@ function BankCard({ stripe, soft, name, role, bigLabel, bigValue, pct, sub, foot
   );
 }
 
-function TxRow({ tx, onDelete }) {
+function TxRow({ tx, onDelete, onEdit }) {
   const color = tx.type === "income" ? C.sber
     : tx.type === "expense" ? (tx.card === "sber" ? C.sber : C.alfa)
     : tx.type === "transfer" ? C.amber
@@ -1977,7 +2000,7 @@ function TxRow({ tx, onDelete }) {
   const day = tx.date.slice(8, 10);
 
   return (
-    <div className="tx-row">
+    <div className="tx-row" style={{ cursor: "pointer" }} onClick={() => onEdit(tx)} role="button" tabIndex={0}>
       <div className="tx-day">{day}</div>
       <div className="tx-dot" style={{ background: color }} />
       <div className="tx-main">
@@ -1987,9 +2010,15 @@ function TxRow({ tx, onDelete }) {
       <div className="tx-amount" style={{ color }}>
         {sign}{formatMoney(Math.abs(tx.amount))}
       </div>
-      <button onClick={() => onDelete(tx.id)} className="delete-btn" type="button" aria-label="Удалить">
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(tx.id); }}
+        className="delete-btn"
+        type="button"
+        aria-label="Удалить"
+      >
         <Trash2 size={14} />
       </button>
+
     </div>
   );
 }
@@ -2705,6 +2734,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
   const otherBucket = bucket === "wants" ? "needs" : "wants";
   const otherCategories = catListOf(settings, otherBucket);
 
+  const isEdit = !!initial?.editId;
   const homeCard = homeCardOf(bucket);
   const isAnomaly = type === "expense" && card !== homeCard;
 
@@ -2714,6 +2744,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
   );
   const hasRealBalanceInput = amount !== "" && Number.isFinite(evalMoneyExpr(amount));
   const balanceDiff = Math.round(amountNum - computedBalance);
+  const hasEditAmountInput = amount !== "" && Number.isFinite(evalMoneyExpr(amount)) && evalMoneyExpr(amount) !== 0;
 
   function submit(e) {
     e.preventDefault();
@@ -2728,7 +2759,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
       return;
     }
 
-    if (type === "expense" && split) {
+    if (type === "expense" && split && !isEdit) {
       if (!splitAmountNum || splitAmountNum <= 0) {
         window.alert("Укажите сумму второй части разбивки");
         return;
@@ -2786,6 +2817,18 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
         toCard,
         note: note.trim(),
       });
+    } else if (type === "adjustment" && isEdit) {
+      if (!hasEditAmountInput) {
+        window.alert("Введите сумму корректировки (не равную 0)");
+        return;
+      }
+      onSubmit({
+        type: "adjustment",
+        date,
+        amount: amountNum,
+        card,
+        note: note.trim() || "Сверка баланса",
+      });
     } else if (type === "adjustment") {
       if (!hasRealBalanceInput) {
         window.alert("Введите реальный баланс карты");
@@ -2808,7 +2851,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
   return (
     <form className="form-card" onSubmit={submit}>
       <div className="form-title-row">
-        <h2>Новая операция</h2>
+        <h2>{isEdit ? "Изменить операцию" : "Новая операция"}</h2>
         <button type="button" onClick={onCancel} className="icon-button" aria-label="Закрыть">
           <X size={18} />
         </button>
@@ -2819,8 +2862,8 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
       <AmountField
         label={
           type === "adjustment"
-            ? "Реальный баланс карты сейчас"
-            : type === "expense" && split
+            ? (isEdit ? "Сумма корректировки" : "Реальный баланс карты сейчас")
+            : type === "expense" && split && !isEdit
             ? "Сумма (часть 1)"
             : "Сумма"
         }
@@ -2865,14 +2908,16 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
             </div>
           )}
 
-          <div className="field" style={{ marginBottom: split ? 11 : 0 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-              <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} style={{ width: "auto" }} />
-              <span style={{ textTransform: "none", letterSpacing: 0 }}>Разбить между Нуждами и Желаниями</span>
-            </label>
-          </div>
+          {!isEdit && (
+            <div className="field" style={{ marginBottom: split ? 11 : 0 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} style={{ width: "auto" }} />
+                <span style={{ textTransform: "none", letterSpacing: 0 }}>Разбить между Нуждами и Желаниями</span>
+              </label>
+            </div>
+          )}
 
-          {split && (
+          {split && !isEdit && (
             <>
               <AmountField
                 label={`Сумма (часть 2, «${otherBucket === "wants" ? "Желания" : "Нужды"}»)`}
@@ -2930,37 +2975,43 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
             <CardPicker options={ALL_CARDS} value={card} onChange={setCard} />
           </div>
 
-          <div
-            className="notice"
-            style={
-              !hasRealBalanceInput
-                ? {}
-                : balanceDiff === 0
-                ? { borderColor: "#2D8C6F", background: "#E4F2EC", color: "#1F5C46" }
-                : balanceDiff > 0
-                ? { borderColor: C.sber, background: C.sberSoft, color: "#1E5C39" }
-                : { borderColor: C.danger, background: C.dangerSoft, color: "#7A241C" }
-            }
-          >
-            <div style={{ marginBottom: 4 }}>
-              В приложении на {date}: <b className="mono">{formatMoney(computedBalance)}</b>
+          {isEdit ? (
+            <div className="notice" style={{ marginBottom: 11 }}>
+              Меняете сумму этой записи напрямую. Положительное число — пополнение, отрицательное — списание.
             </div>
-            {!hasRealBalanceInput ? (
-              <div>Введите баланс, который видите в банке — сравним с расчётом приложения.</div>
-            ) : balanceDiff === 0 ? (
-              <div>Совпадает с приложением. Корректировка не нужна — просто закройте форму.</div>
-            ) : balanceDiff > 0 ? (
-              <div>
-                На карте на {formatMoney(balanceDiff)} больше, чем в приложении. «Сохранить» внесёт пополнение
-                на эту сумму в историю.
+          ) : (
+            <div
+              className="notice"
+              style={
+                !hasRealBalanceInput
+                  ? {}
+                  : balanceDiff === 0
+                  ? { borderColor: "#2D8C6F", background: "#E4F2EC", color: "#1F5C46" }
+                  : balanceDiff > 0
+                  ? { borderColor: C.sber, background: C.sberSoft, color: "#1E5C39" }
+                  : { borderColor: C.danger, background: C.dangerSoft, color: "#7A241C" }
+              }
+            >
+              <div style={{ marginBottom: 4 }}>
+                В приложении на {date}: <b className="mono">{formatMoney(computedBalance)}</b>
               </div>
-            ) : (
-              <div>
-                На карте на {formatMoney(Math.abs(balanceDiff))} меньше, чем в приложении. «Сохранить» внесёт
-                списание на эту сумму в историю.
-              </div>
-            )}
-          </div>
+              {!hasRealBalanceInput ? (
+                <div>Введите баланс, который видите в банке — сравним с расчётом приложения.</div>
+              ) : balanceDiff === 0 ? (
+                <div>Совпадает с приложением. Корректировка не нужна — просто закройте форму.</div>
+              ) : balanceDiff > 0 ? (
+                <div>
+                  На карте на {formatMoney(balanceDiff)} больше, чем в приложении. «Сохранить» внесёт пополнение
+                  на эту сумму в историю.
+                </div>
+              ) : (
+                <div>
+                  На карте на {formatMoney(Math.abs(balanceDiff))} меньше, чем в приложении. «Сохранить» внесёт
+                  списание на эту сумму в историю.
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -2982,69 +3033,15 @@ function AddPageContent({
   pageIndex,
   settings,
   transactions,
-  onAdd,
-  formInitial,
   openForm,
-  closeForm,
   canPrev,
   canNext,
   onPrev,
   onNext,
   onSelectPage,
 }) {
-  const [newIncomeTx, setNewIncomeTx] = useState(null); // Стейт для модалки дохода
-
   const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
   const smartNotes = useMemo(() => computeSmartNotes(transactions, settings), [transactions, settings]);
-
-  function submit(tx) {
-    if (Array.isArray(tx)) {
-      tx.forEach(onAdd);
-      closeForm();
-      return;
-    }
-
-    onAdd(tx);
-    // Если это доход — показываем модалку автоматического распределения
-    if (tx.type === "income") {
-      setNewIncomeTx(tx);
-    }
-    closeForm();
-  }
-
-  function handleAutoDistribute() {
-    if (!newIncomeTx) return;
-    const split = computeIncomeSplit(newIncomeTx.amount, settings);
-    const sourceCard = newIncomeTx.card;
-    const date = newIncomeTx.date;
-
-    // Авто-создание переводов на нужные суммы (из той карты, куда зачислили доход)
-    if (sourceCard !== "sber" && split.toSber > 0) {
-      onAdd({ type: "transfer", date, amount: Math.round(split.toSber), fromCard: sourceCard, toCard: "sber", note: "Авто-распределение" });
-    }
-    if (sourceCard !== "alfa" && split.toAlfa > 0) {
-      onAdd({ type: "transfer", date, amount: Math.round(split.toAlfa), fromCard: sourceCard, toCard: "alfa", note: "Авто-распределение" });
-    }
-    if (sourceCard !== "ozon" && split.toOzon > 0) {
-      onAdd({ type: "transfer", date, amount: Math.round(split.toOzon), fromCard: sourceCard, toCard: "ozon", note: "Авто-распределение" });
-    }
-
-    setNewIncomeTx(null);
-  }
-
-  if (formInitial) {
-    return (
-      <div className="screen-stack">
-        <FullAddForm
-          settings={settings}
-          transactions={transactions}
-          initial={formInitial}
-          onSubmit={submit}
-          onCancel={closeForm}
-        />
-      </div>
-    );
-  }
 
   const pages = [
     {
@@ -3116,16 +3113,6 @@ function AddPageContent({
 
   return (
     <div className="screen-stack">
-      {/* Модальное окно распределения дохода */}
-      {newIncomeTx && (
-        <IncomeDistributionModal 
-          incomeTx={newIncomeTx}
-          settings={settings}
-          onDistribute={handleAutoDistribute}
-          onClose={() => setNewIncomeTx(null)}
-        />
-      )}
-
       {current.render()}
 
       <div className="dots" style={{ "--accent": current.accent }}>
@@ -3143,13 +3130,40 @@ function AddPageContent({
   );
 }
 
+/* Builds a FullAddForm "initial" seed from an existing transaction, for editing. */
+function deriveFormInitialFromTx(tx) {
+  const base = { type: tx.type, date: tx.date, amount: tx.amount, note: tx.note || "", editId: tx.id };
+  if (tx.type === "expense") {
+    return { ...base, card: tx.card, bucket: tx.bucket || bucketOf(tx.card), category: tx.category };
+  }
+  if (tx.type === "income") {
+    return { ...base, card: tx.card };
+  }
+  if (tx.type === "transfer") {
+    return { ...base, fromCard: tx.fromCard, toCard: tx.toCard };
+  }
+  if (tx.type === "adjustment") {
+    return { ...base, card: tx.card };
+  }
+  return base;
+}
+
 /* ============================================================ Analysis */
+const TX_TYPE_FILTERS = [
+  { id: "all", label: "Все" },
+  { id: "expense", label: "Траты" },
+  { id: "income", label: "Доходы" },
+  { id: "transfer", label: "Переводы" },
+  { id: "adjustment", label: "Коррекции" },
+];
+
 function AnalysisView({
   settings,
   transactions,
   selectedMonth,
   setSelectedMonth,
   onDelete,
+  onEditTx,
   onToggleInclude,
   onCloseMonth,
   goToAdd,
@@ -3181,6 +3195,8 @@ function AnalysisView({
   ];
 
   const monthItems = agg.items;
+  const [typeFilter, setTypeFilter] = useState("all");
+  const filteredItems = typeFilter === "all" ? monthItems : monthItems.filter((t) => t.type === typeFilter);
 
   return (
     <div className="screen-stack">
@@ -3279,12 +3295,32 @@ function AnalysisView({
 
       <div>
         <SectionTitle>Операции</SectionTitle>
+
+        {monthItems.length > 0 && (
+          <div className="type-filter">
+            {TX_TYPE_FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                className={`type-filter-chip ${typeFilter === f.id ? "active" : ""}`}
+                onClick={() => setTypeFilter(f.id)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {monthItems.length === 0 ? (
           <EmptyState onAdd={goToAdd} />
+        ) : filteredItems.length === 0 ? (
+          <div className="soft-card" style={{ padding: 20, textAlign: "center" }}>
+            <span className="muted" style={{ fontSize: 13 }}>Нет операций такого типа за этот месяц.</span>
+          </div>
         ) : (
           <div className="history-list">
-            {monthItems.map((tx) => (
-              <TxRow key={tx.id} tx={tx} onDelete={onDelete} />
+            {filteredItems.map((tx) => (
+              <TxRow key={tx.id} tx={tx} onDelete={onDelete} onEdit={onEditTx} />
             ))}
           </div>
         )}
@@ -3604,6 +3640,7 @@ export default function App() {
   const [pageIndex, setPageIndex] = useState(0); // 0 Нужды, 1 Желания, 2 Подушка, 3 Анализ, 4 Настройки
   const [lastAddPage, setLastAddPage] = useState(0);
   const [formInitial, setFormInitial] = useState(null);
+  const [newIncomeTx, setNewIncomeTx] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(todayMonthKey());
   const [toast, setToast] = useState(null);
   const touchRef = useRef(null);
@@ -3674,6 +3711,12 @@ export default function App() {
     setTimeout(() => setToast(null), 1200);
   }
 
+  function updateTransaction(id, updatedTx) {
+    persistTransactions(transactions.map((t) => (t.id === id ? { ...updatedTx, id } : t)));
+    setToast("Изменено");
+    setTimeout(() => setToast(null), 1200);
+  }
+
   function closeMonth(mk, mode, leftoverNeeds, leftoverWants) {
     if (mode === "toSavings") {
       const date = endOfMonthStr(mk);
@@ -3725,6 +3768,46 @@ export default function App() {
 
   function closeForm() {
     setFormInitial(null);
+  }
+
+  function submitForm(tx) {
+    if (Array.isArray(tx)) {
+      tx.forEach(addTransaction);
+      closeForm();
+      return;
+    }
+
+    if (formInitial?.editId) {
+      updateTransaction(formInitial.editId, tx);
+      closeForm();
+      return;
+    }
+
+    addTransaction(tx);
+    // Если это доход — показываем модалку автоматического распределения
+    if (tx.type === "income") {
+      setNewIncomeTx(tx);
+    }
+    closeForm();
+  }
+
+  function handleAutoDistribute() {
+    if (!newIncomeTx) return;
+    const split = computeIncomeSplit(newIncomeTx.amount, settings);
+    const sourceCard = newIncomeTx.card;
+    const date = newIncomeTx.date;
+
+    if (sourceCard !== "sber" && split.toSber > 0) {
+      addTransaction({ type: "transfer", date, amount: Math.round(split.toSber), fromCard: sourceCard, toCard: "sber", note: "Авто-распределение" });
+    }
+    if (sourceCard !== "alfa" && split.toAlfa > 0) {
+      addTransaction({ type: "transfer", date, amount: Math.round(split.toAlfa), fromCard: sourceCard, toCard: "alfa", note: "Авто-распределение" });
+    }
+    if (sourceCard !== "ozon" && split.toOzon > 0) {
+      addTransaction({ type: "transfer", date, amount: Math.round(split.toOzon), fromCard: sourceCard, toCard: "ozon", note: "Авто-распределение" });
+    }
+
+    setNewIncomeTx(null);
   }
 
   function selectPage(i) {
@@ -3820,37 +3903,50 @@ export default function App() {
           </header>
 
           <main className="app-main" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-            {pageIndex <= 2 && (
+            {newIncomeTx && (
+              <IncomeDistributionModal
+                incomeTx={newIncomeTx}
+                settings={settings}
+                onDistribute={handleAutoDistribute}
+                onClose={() => setNewIncomeTx(null)}
+              />
+            )}
+
+            {formInitial ? (
+              <div className="screen-stack">
+                <FullAddForm
+                  settings={settings}
+                  transactions={transactions}
+                  initial={formInitial}
+                  onSubmit={submitForm}
+                  onCancel={closeForm}
+                />
+              </div>
+            ) : pageIndex <= 2 ? (
               <AddPageContent
                 pageIndex={pageIndex}
                 settings={settings}
                 transactions={transactions}
-                onAdd={addTransaction}
-                formInitial={formInitial}
                 openForm={openForm}
-                closeForm={closeForm}
                 canPrev={pageIndex > 0}
                 canNext={pageIndex < 4}
                 onPrev={() => goPage(-1)}
                 onNext={() => goPage(1)}
                 onSelectPage={selectPage}
               />
-            )}
-
-            {pageIndex === 3 && (
+            ) : pageIndex === 3 ? (
               <AnalysisView
                 settings={settings}
                 transactions={transactions}
                 selectedMonth={selectedMonth}
                 setSelectedMonth={setSelectedMonth}
                 onDelete={deleteTransaction}
+                onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx))}
                 onToggleInclude={toggleIncludeInTotal}
                 onCloseMonth={closeMonth}
                 goToAdd={() => selectPage(0)}
               />
-            )}
-
-            {pageIndex === 4 && (
+            ) : (
               <SettingsView
                 settings={settings}
                 onSave={persistSettings}
