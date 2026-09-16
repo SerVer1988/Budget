@@ -844,7 +844,7 @@ function AppStyles() {
         min-width: 0;
         border: 1px solid ${C.border};
         border-radius: 24px;
-        padding: 14px 12px 14px;
+        padding: 14px 7px 14px;
         overflow: hidden;
         background:
           radial-gradient(circle at 0% 18%, color-mix(in srgb, var(--soft) 65%, transparent) 0, transparent 34%),
@@ -961,22 +961,22 @@ function AppStyles() {
       .big-add {
         width: 100%;
         min-width: 0;
-        height: 104px;
-        border-radius: 18px;
+        height: 58px;
+        border-radius: 16px;
         border: 1px solid color-mix(in srgb, var(--accent) 35%, ${C.border});
         background: rgba(255,255,255,0.88);
         color: var(--accent);
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
         align-items: center;
         justify-content: center;
-        gap: 7px;
-        box-shadow: 0 8px 18px rgba(22, 32, 27, 0.08);
+        gap: 8px;
+        box-shadow: 0 6px 14px rgba(22, 32, 27, 0.06);
       }
 
       .big-add .plus-circle {
-        width: 46px;
-        height: 46px;
+        width: 34px;
+        height: 34px;
         border-radius: 50%;
         background: color-mix(in srgb, var(--soft) 78%, #fff);
         border: 1px dashed color-mix(in srgb, var(--accent) 40%, ${C.border});
@@ -1003,7 +1003,7 @@ function AppStyles() {
         min-width: 0;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 7px;
+        gap: 6px;
       }
 
       .cat-row {
@@ -1011,11 +1011,11 @@ function AppStyles() {
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 7px;
+        gap: 6px;
         border: 1px solid color-mix(in srgb, var(--accent) 16%, ${C.border});
         background: rgba(255,255,255,0.92);
         border-radius: 14px;
-        padding: 8px 10px;
+        padding: 8px 8px;
         color: ${C.ink};
         box-shadow: 0 3px 8px rgba(22, 32, 27, 0.03);
       }
@@ -1721,7 +1721,7 @@ function AppStyles() {
 
         .add-panel {
           border-radius: 20px;
-          padding: 12px 9px;
+          padding: 12px 6px;
         }
 
         .carousel-heading h2 {
@@ -1742,7 +1742,7 @@ function AppStyles() {
         }
 
         .big-add {
-          height: 96px;
+          height: 52px;
         }
 
         .quick-grid {
@@ -1834,7 +1834,7 @@ function AppStyles() {
         }
 
         .big-add {
-          height: 92px;
+          height: 50px;
         }
 
         .quick-tile {
@@ -2136,9 +2136,9 @@ function AddBigButton({ label, onClick }) {
   return (
     <button onClick={onClick} className="big-add" type="button">
       <div className="plus-circle">
-        <Plus size={25} />
+        <Plus size={20} />
       </div>
-      <span>{label}</span>
+      {label && <span>{label}</span>}
     </button>
   );
 }
@@ -2201,7 +2201,6 @@ function CategoryQuickRow({ icon: Icon, color, name, spent, limit, fallbackAmoun
             )}
           </div>
         </div>
-        <ChevronRight size={16} className="cat-row-chevron" />
       </div>
       {hasLimit && (
         <div className="cat-row-bar">
@@ -2322,12 +2321,6 @@ function CategoryPanel({
   const outflow = card === "sber" ? agg.sberOutflow : agg.alfaOutflow;
   const monthlyTotals = card === "sber" ? agg.needCatTotals : agg.wantCatTotals;
 
-  const prevMonthEnd = useMemo(() => endOfMonthStr(shiftMonth(todayMonthKey(), -1)), []);
-  const opening = useMemo(
-    () => computeBalances(transactions, settings, prevMonthEnd)[card],
-    [transactions, settings, prevMonthEnd, card]
-  );
-
   const bucketLimitThisMonth = card === "sber" ? agg.needsLimit : agg.wantsLimit;
   const categoryLimits = useMemo(
     () => computeCategoryLimits(transactions, settings, categories, bucketOf(card), todayMonthKey(), bucketLimitThisMonth),
@@ -2337,10 +2330,6 @@ function CategoryPanel({
   return (
     <div className="add-panel" style={{ "--accent": accentColor, "--soft": softColor }}>
       <TopAmounts inflow={inflow} outflow={outflow} logo={logo} accentColor={accentColor} />
-
-      <div className="small-note" style={{ textAlign: "center", marginTop: -4, marginBottom: 6 }}>
-        Было на начало месяца: {formatMoney(opening)} → сейчас:
-      </div>
 
       <div className="carousel-heading">
         <h2>{title}</h2>
@@ -2355,7 +2344,7 @@ function CategoryPanel({
           <ChevronLeft size={30} />
         </button>
 
-        <AddBigButton label="Новое" onClick={() => onOpenFull({ type: "expense", card, bucket: bucketOf(card) })} />
+        <AddBigButton onClick={() => onOpenFull({ type: "expense", card, bucket: bucketOf(card) })} />
 
         <button className="side-arrow" disabled={!canNext} onClick={onNext} type="button">
           <ChevronRight size={30} />
@@ -2414,12 +2403,6 @@ function OzonPanel({
 
   const balance = balances.ozon || 0;
 
-  const prevMonthEnd = useMemo(() => endOfMonthStr(shiftMonth(todayMonthKey(), -1)), []);
-  const opening = useMemo(
-    () => computeBalances(transactions, settings, prevMonthEnd).ozon,
-    [transactions, settings, prevMonthEnd]
-  );
-
   const pct = settings.goal > 0 ? balance / settings.goal : 0;
   const left = settings.goal - balance;
   const rate = useMemo(() => estimateMonthlyRate(transactions, settings, todayMonthKey()), [transactions, settings]);
@@ -2442,10 +2425,6 @@ function OzonPanel({
   return (
     <div className="add-panel" style={{ "--accent": C.ozon, "--soft": C.ozonSoft }}>
       <TopAmounts inflow={agg.ozonInflow} outflow={agg.ozonOutflow} logo="ozon" accentColor={C.ozon} />
-
-      <div className="small-note" style={{ textAlign: "center", marginTop: -4, marginBottom: 6 }}>
-        Было на начало месяца: {formatMoney(opening)} → сейчас:
-      </div>
 
       <div className="carousel-heading">
         <h2>Подушка</h2>
@@ -2999,92 +2978,29 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
 }
 
 /* ============================================================ Add view */
-function AddView({ settings, transactions, onAdd }) {
-  const [slide, setSlide] = useState(0);
-  const [formInitial, setFormInitial] = useState(null);
+function AddPageContent({
+  pageIndex,
+  settings,
+  transactions,
+  onAdd,
+  formInitial,
+  openForm,
+  closeForm,
+  canPrev,
+  canNext,
+  onPrev,
+  onNext,
+  onSelectPage,
+}) {
   const [newIncomeTx, setNewIncomeTx] = useState(null); // Стейт для модалки дохода
 
   const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
   const smartNotes = useMemo(() => computeSmartNotes(transactions, settings), [transactions, settings]);
 
-  const slides = [
-    {
-      id: "needs",
-      title: "Нужды",
-      accent: C.sber,
-      soft: C.sberSoft,
-      logo: "check",
-      render: (navProps) => (
-        <CategoryPanel
-          title="Нужды"
-          accentColor={C.sber}
-          softColor={C.sberSoft}
-          logo="check"
-          card="sber"
-          categories={settings.needCats}
-          transactions={transactions}
-          settings={settings}
-          balances={balances}
-          note={smartNotes.sber}
-          onOpenFull={openForm}
-          {...navProps}
-        />
-      ),
-    },
-    {
-      id: "wants",
-      title: "Желания",
-      accent: C.alfa,
-      soft: C.alfaSoft,
-      logo: "A",
-      render: (navProps) => (
-        <CategoryPanel
-          title="Желания"
-          accentColor={C.alfa}
-          softColor={C.alfaSoft}
-          logo="A"
-          card="alfa"
-          categories={settings.wantCats}
-          transactions={transactions}
-          settings={settings}
-          balances={balances}
-          note={smartNotes.alfa}
-          onOpenFull={openForm}
-          {...navProps}
-        />
-      ),
-    },
-    {
-      id: "cushion",
-      title: "Подушка",
-      accent: C.ozon,
-      soft: C.ozonSoft,
-      logo: "ozon",
-      render: (navProps) => (
-        <OzonPanel
-          settings={settings}
-          transactions={transactions}
-          balances={balances}
-          note={smartNotes.ozon}
-          onOpenFull={openForm}
-          {...navProps}
-        />
-      ),
-    },
-  ];
-
-  function openForm(initial) {
-    setFormInitial(initial || { type: "expense", card: "sber", bucket: "needs" });
-  }
-
-  function closeForm() {
-    setFormInitial(null);
-  }
-
   function submit(tx) {
     if (Array.isArray(tx)) {
       tx.forEach(onAdd);
-      setFormInitial(null);
+      closeForm();
       return;
     }
 
@@ -3093,7 +3009,7 @@ function AddView({ settings, transactions, onAdd }) {
     if (tx.type === "income") {
       setNewIncomeTx(tx);
     }
-    setFormInitial(null);
+    closeForm();
   }
 
   function handleAutoDistribute() {
@@ -3116,15 +3032,6 @@ function AddView({ settings, transactions, onAdd }) {
     setNewIncomeTx(null);
   }
 
-  const current = slides[slide];
-  const canPrev = slide > 0;
-  const canNext = slide < slides.length - 1;
-
-  function go(delta) {
-    setSlide((v) => Math.max(0, Math.min(slides.length - 1, v + delta)));
-    setFormInitial(null);
-  }
-
   if (formInitial) {
     return (
       <div className="screen-stack">
@@ -3139,6 +3046,74 @@ function AddView({ settings, transactions, onAdd }) {
     );
   }
 
+  const pages = [
+    {
+      accent: C.sber,
+      label: "Нужды",
+      render: () => (
+        <CategoryPanel
+          title="Нужды"
+          accentColor={C.sber}
+          softColor={C.sberSoft}
+          logo="check"
+          card="sber"
+          categories={settings.needCats}
+          transactions={transactions}
+          settings={settings}
+          balances={balances}
+          note={smartNotes.sber}
+          onOpenFull={openForm}
+          canPrev={canPrev}
+          canNext={canNext}
+          onPrev={onPrev}
+          onNext={onNext}
+        />
+      ),
+    },
+    {
+      accent: C.alfa,
+      label: "Желания",
+      render: () => (
+        <CategoryPanel
+          title="Желания"
+          accentColor={C.alfa}
+          softColor={C.alfaSoft}
+          logo="A"
+          card="alfa"
+          categories={settings.wantCats}
+          transactions={transactions}
+          settings={settings}
+          balances={balances}
+          note={smartNotes.alfa}
+          onOpenFull={openForm}
+          canPrev={canPrev}
+          canNext={canNext}
+          onPrev={onPrev}
+          onNext={onNext}
+        />
+      ),
+    },
+    {
+      accent: C.ozon,
+      label: "Подушка",
+      render: () => (
+        <OzonPanel
+          settings={settings}
+          transactions={transactions}
+          balances={balances}
+          note={smartNotes.ozon}
+          onOpenFull={openForm}
+          canPrev={canPrev}
+          canNext={canNext}
+          onPrev={onPrev}
+          onNext={onNext}
+        />
+      ),
+    },
+  ];
+
+  const current = pages[pageIndex];
+
   return (
     <div className="screen-stack">
       {/* Модальное окно распределения дохода */}
@@ -3151,24 +3126,16 @@ function AddView({ settings, transactions, onAdd }) {
         />
       )}
 
-      {current.render({
-        canPrev,
-        canNext,
-        onPrev: () => go(-1),
-        onNext: () => go(1),
-      })}
+      {current.render()}
 
       <div className="dots" style={{ "--accent": current.accent }}>
-        {slides.map((s, i) => (
+        {pages.map((p, i) => (
           <button
-            key={s.id}
-            className={`dot ${i === slide ? "active" : ""}`}
+            key={p.label}
+            className={`dot ${i === pageIndex ? "active" : ""}`}
             type="button"
-            onClick={() => {
-              setSlide(i);
-              setFormInitial(null);
-            }}
-            aria-label={s.title}
+            onClick={() => onSelectPage(i)}
+            aria-label={p.label}
           />
         ))}
       </div>
@@ -3602,11 +3569,11 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking }) {
 }
 
 /* ============================================================ Bottom nav */
-function TabBar({ tab, setTab }) {
+function TabBar({ pageIndex, onSelectAdd, onSelectAnalysis, onSelectSettings }) {
   const items = [
-    { id: "add", label: "Добавить", icon: Plus, cls: "add" },
-    { id: "analysis", label: "Анализ", icon: BarChart3, cls: "" },
-    { id: "settings", label: "Настройки", icon: SettingsIcon, cls: "" },
+    { id: "add", label: "Добавить", icon: Plus, cls: "add", onClick: onSelectAdd, active: pageIndex <= 2 },
+    { id: "analysis", label: "Анализ", icon: BarChart3, cls: "", onClick: onSelectAnalysis, active: pageIndex === 3 },
+    { id: "settings", label: "Настройки", icon: SettingsIcon, cls: "", onClick: onSelectSettings, active: pageIndex === 4 },
   ];
 
   return (
@@ -3617,8 +3584,8 @@ function TabBar({ tab, setTab }) {
           <button
             key={it.id}
             type="button"
-            className={`nav-btn ${it.cls} ${tab === it.id ? "active" : ""}`}
-            onClick={() => setTab(it.id)}
+            className={`nav-btn ${it.cls} ${it.active ? "active" : ""}`}
+            onClick={it.onClick}
           >
             <Icon />
             <span>{it.label}</span>
@@ -3634,9 +3601,16 @@ export default function App() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [transactions, setTransactions] = useState([]);
   const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState("add");
+  const [pageIndex, setPageIndex] = useState(0); // 0 Нужды, 1 Желания, 2 Подушка, 3 Анализ, 4 Настройки
+  const [lastAddPage, setLastAddPage] = useState(0);
+  const [formInitial, setFormInitial] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(todayMonthKey());
   const [toast, setToast] = useState(null);
+  const touchRef = useRef(null);
+
+  useEffect(() => {
+    if (pageIndex <= 2) setLastAddPage(pageIndex);
+  }, [pageIndex]);
 
   useEffect(() => {
     let alive = true;
@@ -3745,6 +3719,45 @@ export default function App() {
     setTimeout(() => setToast(null), 1200);
   }
 
+  function openForm(initial) {
+    setFormInitial(initial || { type: "expense", card: "sber", bucket: "needs" });
+  }
+
+  function closeForm() {
+    setFormInitial(null);
+  }
+
+  function selectPage(i) {
+    setFormInitial(null);
+    setPageIndex(Math.max(0, Math.min(4, i)));
+  }
+
+  function goPage(delta) {
+    if (formInitial) return;
+    setPageIndex((i) => Math.max(0, Math.min(4, i + delta)));
+  }
+
+  function handleTouchStart(e) {
+    if (formInitial) return;
+    const t = e.touches[0];
+    touchRef.current = { x: t.clientX, y: t.clientY };
+  }
+
+  function handleTouchEnd(e) {
+    const start = touchRef.current;
+    touchRef.current = null;
+    if (!start || formInitial) return;
+
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+
+    if (Math.abs(dx) < 50) return; // слишком короткий свайп
+    if (Math.abs(dx) < Math.abs(dy) * 1.3) return; // скорее вертикальный скролл
+
+    goPage(dx < 0 ? 1 : -1);
+  }
+
   if (!loaded) {
     return (
       <>
@@ -3757,6 +3770,8 @@ export default function App() {
       </>
     );
   }
+
+  const showOpTabs = pageIndex <= 2 && !formInitial;
 
   return (
     <>
@@ -3785,18 +3800,44 @@ export default function App() {
                 <Wallet size={18} />
               </div>
             </div>
+
+            {showOpTabs && (
+              <div style={{ marginTop: 8 }}>
+                <OperationTabs
+                  value="expense"
+                  onChange={(type) => {
+                    if (type === "expense") return;
+                    if (type === "income") openForm({ type: "income", card: "sber" });
+                    else if (type === "transfer") openForm({ type: "transfer", fromCard: "sber", toCard: "alfa" });
+                    else if (type === "adjustment") {
+                      const card = pageIndex === 1 ? "alfa" : pageIndex === 2 ? "ozon" : "sber";
+                      openForm({ type: "adjustment", card });
+                    }
+                  }}
+                />
+              </div>
+            )}
           </header>
 
-          <main className="app-main">
-            {tab === "add" && (
-              <AddView
+          <main className="app-main" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+            {pageIndex <= 2 && (
+              <AddPageContent
+                pageIndex={pageIndex}
                 settings={settings}
                 transactions={transactions}
                 onAdd={addTransaction}
+                formInitial={formInitial}
+                openForm={openForm}
+                closeForm={closeForm}
+                canPrev={pageIndex > 0}
+                canNext={pageIndex < 4}
+                onPrev={() => goPage(-1)}
+                onNext={() => goPage(1)}
+                onSelectPage={selectPage}
               />
             )}
 
-            {tab === "analysis" && (
+            {pageIndex === 3 && (
               <AnalysisView
                 settings={settings}
                 transactions={transactions}
@@ -3805,11 +3846,11 @@ export default function App() {
                 onDelete={deleteTransaction}
                 onToggleInclude={toggleIncludeInTotal}
                 onCloseMonth={closeMonth}
-                goToAdd={() => setTab("add")}
+                goToAdd={() => selectPage(0)}
               />
             )}
 
-            {tab === "settings" && (
+            {pageIndex === 4 && (
               <SettingsView
                 settings={settings}
                 onSave={persistSettings}
@@ -3819,7 +3860,12 @@ export default function App() {
             )}
           </main>
 
-          <TabBar tab={tab} setTab={setTab} />
+          <TabBar
+            pageIndex={pageIndex}
+            onSelectAdd={() => selectPage(lastAddPage)}
+            onSelectAnalysis={() => selectPage(3)}
+            onSelectSettings={() => selectPage(4)}
+          />
           <Toast text={toast} />
         </div>
       </div>
