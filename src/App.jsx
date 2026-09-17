@@ -86,6 +86,11 @@ function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+function yesterdayStr() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function dayOfMonth(dateStr) { return parseInt(dateStr.slice(8, 10), 10); }
 function monthKeyOf(dateStr) { return dateStr.slice(0, 7); }
 function todayMonthKey() { return todayStr().slice(0, 7); }
@@ -3150,12 +3155,23 @@ function deriveFormInitialFromTx(tx) {
 
 /* ============================================================ Analysis */
 const TX_TYPE_FILTERS = [
-  { id: "all", label: "Все" },
   { id: "expense", label: "Траты" },
   { id: "income", label: "Доходы" },
   { id: "transfer", label: "Переводы" },
   { id: "adjustment", label: "Коррекции" },
 ];
+
+const TX_DATE_FILTERS = [
+  { id: "today", label: "Сегодня" },
+  { id: "yesterday", label: "Вчера" },
+];
+
+function txNetImpact(t) {
+  if (t.type === "expense") return -t.amount;
+  if (t.type === "income") return t.amount;
+  if (t.type === "adjustment") return t.amount;
+  return 0; // перевод между своими картами не меняет общую сумму
+}
 
 function AnalysisView({
   settings,
@@ -3195,8 +3211,23 @@ function AnalysisView({
   ];
 
   const monthItems = agg.items;
-  const [typeFilter, setTypeFilter] = useState("all");
-  const filteredItems = typeFilter === "all" ? monthItems : monthItems.filter((t) => t.type === typeFilter);
+  const [typeFilters, setTypeFilters] = useState([]);
+  const [dateFilters, setDateFilters] = useState([]);
+
+  function toggleFilter(list, setList, id) {
+    setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  }
+
+  const filteredItems = monthItems.filter((t) => {
+    const typeOk = typeFilters.length === 0 || typeFilters.includes(t.type);
+    const dateOk =
+      dateFilters.length === 0 ||
+      (dateFilters.includes("today") && t.date === todayStr()) ||
+      (dateFilters.includes("yesterday") && t.date === yesterdayStr());
+    return typeOk && dateOk;
+  });
+
+  const filteredTotal = filteredItems.reduce((sum, t) => sum + txNetImpact(t), 0);
 
   return (
     <div className="screen-stack">
@@ -3297,25 +3328,46 @@ function AnalysisView({
         <SectionTitle>Операции</SectionTitle>
 
         {monthItems.length > 0 && (
-          <div className="type-filter">
-            {TX_TYPE_FILTERS.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                className={`type-filter-chip ${typeFilter === f.id ? "active" : ""}`}
-                onClick={() => setTypeFilter(f.id)}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
+          <>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "0 2px 10px" }}>
+              <span className="muted" style={{ fontSize: 12 }}>Итого по показанным</span>
+              <span className="mono" style={{ fontSize: 16, fontWeight: 900, color: filteredTotal >= 0 ? C.sber : C.danger }}>
+                {filteredTotal >= 0 ? "+" : "−"}{formatMoney(Math.abs(filteredTotal))}
+              </span>
+            </div>
+
+            <div className="type-filter">
+              {TX_TYPE_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  className={`type-filter-chip ${typeFilters.includes(f.id) ? "active" : ""}`}
+                  onClick={() => toggleFilter(typeFilters, setTypeFilters, f.id)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div className="type-filter">
+              {TX_DATE_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  className={`type-filter-chip ${dateFilters.includes(f.id) ? "active" : ""}`}
+                  onClick={() => toggleFilter(dateFilters, setDateFilters, f.id)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </>
         )}
 
         {monthItems.length === 0 ? (
           <EmptyState onAdd={goToAdd} />
         ) : filteredItems.length === 0 ? (
           <div className="soft-card" style={{ padding: 20, textAlign: "center" }}>
-            <span className="muted" style={{ fontSize: 13 }}>Нет операций такого типа за этот месяц.</span>
+            <span className="muted" style={{ fontSize: 13 }}>Ничего не подходит под выбранные фильтры.</span>
           </div>
         ) : (
           <div className="history-list">
