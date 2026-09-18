@@ -461,13 +461,6 @@ function computeCategoryLimits(transactions, settings, categories, bucket, curre
     categories.forEach((c) => { limits[c.name] = evenShare; });
   }
 
-  // Займы между категориями (в этом же месяце) двигают лимит, а не сами деньги на карте
-  transactions.forEach((t) => {
-    if (t.type !== "loan" || monthKeyOf(t.date) !== currentMonthKey) return;
-    if (t.toCategory in limits) limits[t.toCategory] += t.amount;
-    if (t.fromCategory in limits) limits[t.fromCategory] -= t.amount;
-  });
-
   return limits;
 }
 
@@ -1038,27 +1031,6 @@ function AppStyles() {
         display: flex;
         align-items: center;
         gap: 10px;
-        background: none;
-        border: none;
-        padding: 0;
-        margin: 0;
-        color: inherit;
-        font: inherit;
-        text-align: left;
-        cursor: pointer;
-      }
-
-      .cat-row-borrow {
-        align-self: flex-start;
-        background: none;
-        border: none;
-        padding: 0;
-        margin: 0;
-        font-size: 11px;
-        font-weight: 700;
-        color: ${C.danger};
-        text-decoration: underline;
-        cursor: pointer;
       }
 
       .cat-row-bar {
@@ -2019,31 +1991,21 @@ function TxRow({ tx, onDelete, onEdit }) {
   const color = tx.type === "income" ? C.sber
     : tx.type === "expense" ? (tx.card === "sber" ? C.sber : C.alfa)
     : tx.type === "transfer" ? C.amber
-    : tx.type === "loan" ? C.amber
     : (tx.card === "sber" ? C.sber : tx.card === "alfa" ? C.alfa : (tx.amount < 0 ? C.danger : C.ozon));
 
   const sign = tx.type === "expense" ? "−"
     : tx.type === "transfer" ? ""
-    : tx.type === "loan" ? ""
     : (tx.type === "adjustment" && tx.amount < 0) ? "−" : "+";
 
   const label = tx.type === "income" ? (tx.note || `Доход (${cardLabel(tx.card)})`)
     : tx.type === "expense" ? (tx.note || tx.category)
     : tx.type === "transfer" ? (tx.note || `${cardLabel(tx.fromCard)} → ${cardLabel(tx.toCard)}`)
-    : tx.type === "loan" ? (tx.note || `«${tx.toCategory}» одолжили у «${tx.fromCategory}»${tx.repaid ? " · возвращено" : ""}`)
     : (tx.note || `Корректировка (${cardLabel(tx.card)})`);
 
   const day = tx.date.slice(8, 10);
-  const editable = tx.type !== "loan";
 
   return (
-    <div
-      className="tx-row"
-      style={{ cursor: editable ? "pointer" : "default" }}
-      onClick={() => editable && onEdit(tx)}
-      role={editable ? "button" : undefined}
-      tabIndex={editable ? 0 : undefined}
-    >
+    <div className="tx-row" style={{ cursor: "pointer" }} onClick={() => onEdit(tx)} role="button" tabIndex={0}>
       <div className="tx-day">{day}</div>
       <div className="tx-dot" style={{ background: color }} />
       <div className="tx-main">
@@ -2136,88 +2098,6 @@ function IncomeDistributionModal({ incomeTx, settings, onDistribute, onClose }) 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button className="btn primary" onClick={onDistribute}>Распределить автоматически</button>
           <button className="btn" style={{ background: "transparent", border: "none" }} onClick={onClose}>Сделаю сам</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function BorrowModal({ settings, transactions, request, onSubmit, onClose }) {
-  const { bucket, toCategory, suggestedAmount } = request;
-
-  const lenderOptions = catListOf(settings, bucket).filter((c) => c.name !== toCategory);
-  const [fromCategory, setFromCategory] = useState(lenderOptions[0]?.name || "");
-  const [amount, setAmount] = useState(suggestedAmount > 0 ? String(suggestedAmount) : "");
-  const [date, setDate] = useState(todayStr());
-
-  const agg = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
-  const bucketLimitThisMonth = bucket === "wants" ? agg.wantsLimit : agg.needsLimit;
-  const limits = useMemo(
-    () => computeCategoryLimits(transactions, settings, catListOf(settings, bucket), bucket, todayMonthKey(), bucketLimitThisMonth),
-    [transactions, settings, bucket, bucketLimitThisMonth]
-  );
-  const spentTotals = bucket === "wants" ? agg.wantCatTotals : agg.needCatTotals;
-  const amountNum = moneyNum(amount);
-
-  function submit() {
-    if (!fromCategory) {
-      window.alert("Выберите, у кого одолжить");
-      return;
-    }
-    if (!amountNum || amountNum <= 0) {
-      window.alert("Введите сумму больше 0");
-      return;
-    }
-    onSubmit({
-      type: "loan",
-      date,
-      amount: amountNum,
-      fromCategory,
-      toCategory,
-      repaid: false,
-      note: "",
-    });
-  }
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal-card">
-        <div style={{ textAlign: "center", marginBottom: 16 }}>
-          <div style={{ width: 48, height: 48, background: C.amberSoft, color: C.amber, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-            <Coins size={22} />
-          </div>
-          <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 4px", color: C.ink }}>
-            Одолжить для «{toCategory}»
-          </h3>
-          <p style={{ fontSize: 12, color: C.inkMuted, margin: 0 }}>
-            Лимит просто переедет от одной категории к другой — карту менять не нужно.
-          </p>
-        </div>
-
-        <div className="field">
-          <label>У какой категории занять</label>
-          <select value={fromCategory} onChange={(e) => setFromCategory(e.target.value)}>
-            {lenderOptions.map((c) => {
-              const remaining = Math.round((limits[c.name] || 0) - (spentTotals[c.name] || 0));
-              return (
-                <option key={c.name} value={c.name}>
-                  {c.name} (остаток {formatMoney(remaining)})
-                </option>
-              );
-            })}
-          </select>
-        </div>
-
-        <AmountField label="Сумма займа" value={amount} onChange={setAmount} big />
-
-        <div className="field">
-          <label>Дата</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </div>
-
-        <div className="button-row">
-          <button type="button" className="btn" onClick={onClose}>Отмена</button>
-          <button type="button" className="btn primary" onClick={submit}>Одолжить</button>
         </div>
       </div>
     </div>
@@ -2319,7 +2199,7 @@ function ListTile({ icon: Icon, color, name, amount, onClick, empty }) {
   );
 }
 
-function CategoryQuickRow({ icon: Icon, color, name, spent, limit, fallbackAmount, onClick, onBorrow }) {
+function CategoryQuickRow({ icon: Icon, color, name, spent, limit, fallbackAmount, onClick }) {
   const hasLimit = limit > 0;
   const over = hasLimit && spent > limit;
 
@@ -2332,8 +2212,8 @@ function CategoryQuickRow({ icon: Icon, color, name, spent, limit, fallbackAmoun
   }
 
   return (
-    <div className="cat-row">
-      <button onClick={onClick} className="cat-row-top" type="button">
+    <button onClick={onClick} className="cat-row" type="button">
+      <div className="cat-row-top">
         <div className="cat-row-icon" style={{ background: color + "22" }}>
           <Icon size={18} style={{ color }} />
         </div>
@@ -2355,19 +2235,14 @@ function CategoryQuickRow({ icon: Icon, color, name, spent, limit, fallbackAmoun
             )}
           </div>
         </div>
-      </button>
+      </div>
       {hasLimit && (
         <div className="cat-row-bar">
           <div className="cat-row-bar-green" style={{ width: `${greenPct}%` }} />
           {redPct > 0 && <div className="cat-row-bar-red" style={{ width: `${redPct}%` }} />}
         </div>
       )}
-      {over && onBorrow && (
-        <button type="button" className="cat-row-borrow" onClick={onBorrow}>
-          Одолжить у другой категории →
-        </button>
-      )}
-    </div>
+    </button>
   );
 }
 
@@ -2467,7 +2342,6 @@ function CategoryPanel({
   onPrev,
   onNext,
   onOpenFull,
-  onRequestBorrow,
 }) {
   const stats = useMemo(() => categoryStats(transactions, bucketOf(card)), [transactions, card]);
   const ordered = useMemo(
@@ -2536,11 +2410,6 @@ function CategoryPanel({
                   amount: s?.modalAmount ?? "",
                 });
               }}
-              onBorrow={() => onRequestBorrow({
-                bucket: bucketOf(card),
-                toCategory: cat.name,
-                suggestedAmount: Math.max(0, Math.round(monthAmount - limit)),
-              })}
             />
           );
         })}
@@ -3170,7 +3039,6 @@ function AddPageContent({
   settings,
   transactions,
   openForm,
-  onRequestBorrow,
   canPrev,
   canNext,
   onPrev,
@@ -3197,7 +3065,6 @@ function AddPageContent({
           balances={balances}
           note={smartNotes.sber}
           onOpenFull={openForm}
-          onRequestBorrow={onRequestBorrow}
           canPrev={canPrev}
           canNext={canNext}
           onPrev={onPrev}
@@ -3221,7 +3088,6 @@ function AddPageContent({
           balances={balances}
           note={smartNotes.alfa}
           onOpenFull={openForm}
-          onRequestBorrow={onRequestBorrow}
           canPrev={canPrev}
           canNext={canNext}
           onPrev={onPrev}
@@ -3293,7 +3159,6 @@ const TX_TYPE_FILTERS = [
   { id: "income", label: "Доходы" },
   { id: "transfer", label: "Переводы" },
   { id: "adjustment", label: "Коррекции" },
-  { id: "loan", label: "Займы" },
 ];
 
 const TX_DATE_FILTERS = [
@@ -3317,7 +3182,6 @@ function AnalysisView({
   onEditTx,
   onToggleInclude,
   onCloseMonth,
-  onToggleLoanRepaid,
   goToAdd,
 }) {
   const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
@@ -3327,10 +3191,6 @@ function AnalysisView({
   );
   const smartNotes = useMemo(() => computeSmartNotes(transactions, settings), [transactions, settings]);
   const hasSmartNotes = [smartNotes.sber, smartNotes.alfa, smartNotes.ozon].some((n) => n.type !== "ok");
-  const openLoans = useMemo(
-    () => transactions.filter((t) => t.type === "loan" && !t.repaid).sort((a, b) => (a.date < b.date ? 1 : -1)),
-    [transactions]
-  );
   const isPastMonth = selectedMonth < todayMonthKey();
   const monthNeedsLeftover = agg.needsLimit - agg.needsSpent;
   const monthWantsLeftover = agg.wantsLimit - agg.wantsSpent;
@@ -3374,39 +3234,11 @@ function AnalysisView({
       <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
       <PaydayReminder settings={settings} transactions={transactions} />
 
-      {(hasSmartNotes || openLoans.length > 0) && (
-        <div className="panel">
-          <SectionTitle>Фонд</SectionTitle>
-
-          {hasSmartNotes && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: openLoans.length > 0 ? 10 : 0 }}>
-              <SmartNoteBanner note={smartNotes.sber} />
-              <SmartNoteBanner note={smartNotes.alfa} />
-              <SmartNoteBanner note={smartNotes.ozon} />
-            </div>
-          )}
-
-          {openLoans.length > 0 && (
-            <div className="history-list">
-              {openLoans.map((loan) => (
-                <div key={loan.id} className="tx-row">
-                  <div className="tx-main">
-                    <div className="tx-label">«{loan.toCategory}» одолжили у «{loan.fromCategory}»</div>
-                    <div className="tx-sub">{loan.date}</div>
-                  </div>
-                  <div className="tx-amount" style={{ color: C.amber }}>{formatMoney(loan.amount)}</div>
-                  <button
-                    type="button"
-                    className="btn"
-                    style={{ height: 30, padding: "0 10px", fontSize: 11, flex: "0 0 auto" }}
-                    onClick={() => onToggleLoanRepaid(loan.id)}
-                  >
-                    Вернул
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+      {hasSmartNotes && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <SmartNoteBanner note={smartNotes.sber} />
+          <SmartNoteBanner note={smartNotes.alfa} />
+          <SmartNoteBanner note={smartNotes.ozon} />
         </div>
       )}
 
@@ -3861,7 +3693,6 @@ export default function App() {
   const [lastAddPage, setLastAddPage] = useState(0);
   const [formInitial, setFormInitial] = useState(null);
   const [newIncomeTx, setNewIncomeTx] = useState(null);
-  const [borrowRequest, setBorrowRequest] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(todayMonthKey());
   const [toast, setToast] = useState(null);
   const touchRef = useRef(null);
@@ -3936,17 +3767,6 @@ export default function App() {
     persistTransactions(transactions.map((t) => (t.id === id ? { ...updatedTx, id } : t)));
     setToast("Изменено");
     setTimeout(() => setToast(null), 1200);
-  }
-
-  function submitBorrow(loanTx) {
-    addTransaction(loanTx);
-    setBorrowRequest(null);
-  }
-
-  function toggleLoanRepaid(id) {
-    const tx = transactions.find((t) => t.id === id);
-    if (!tx) return;
-    updateTransaction(id, { ...tx, repaid: !tx.repaid, repaidDate: !tx.repaid ? todayStr() : null });
   }
 
   function closeMonth(mk, mode, leftoverNeeds, leftoverWants) {
@@ -4144,16 +3964,6 @@ export default function App() {
               />
             )}
 
-            {borrowRequest && (
-              <BorrowModal
-                settings={settings}
-                transactions={transactions}
-                request={borrowRequest}
-                onSubmit={submitBorrow}
-                onClose={() => setBorrowRequest(null)}
-              />
-            )}
-
             {formInitial ? (
               <div className="screen-stack">
                 <FullAddForm
@@ -4170,7 +3980,6 @@ export default function App() {
                 settings={settings}
                 transactions={transactions}
                 openForm={openForm}
-                onRequestBorrow={setBorrowRequest}
                 canPrev={pageIndex > 0}
                 canNext={pageIndex < 4}
                 onPrev={() => goPage(-1)}
@@ -4187,7 +3996,6 @@ export default function App() {
                 onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx))}
                 onToggleInclude={toggleIncludeInTotal}
                 onCloseMonth={closeMonth}
-                onToggleLoanRepaid={toggleLoanRepaid}
                 goToAdd={() => selectPage(0)}
               />
             ) : (
