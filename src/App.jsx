@@ -2764,7 +2764,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
       return;
     }
 
-    if (type === "expense" && split && !isEdit) {
+    if (type === "expense" && split) {
       if (!splitAmountNum || splitAmountNum <= 0) {
         window.alert("Укажите сумму второй части разбивки");
         return;
@@ -2868,7 +2868,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
         label={
           type === "adjustment"
             ? (isEdit ? "Сумма корректировки" : "Реальный баланс карты сейчас")
-            : type === "expense" && split && !isEdit
+            : type === "expense" && split
             ? "Сумма (часть 1)"
             : "Сумма"
         }
@@ -2885,12 +2885,12 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
       {type === "expense" && (
         <>
           <div className="field">
-            <label>{split && !isEdit ? "Категория бюджета (часть 1)" : "Категория бюджета"}</label>
+            <label>{split ? "Категория бюджета (часть 1)" : "Категория бюджета"}</label>
             <CardPicker options={BUCKET_OPTIONS} value={bucket} onChange={setBucket} />
           </div>
 
           <div className="field">
-            <label>{split && !isEdit ? "Категория (часть 1)" : "Категория"}</label>
+            <label>{split ? "Категория (часть 1)" : "Категория"}</label>
             <select value={category} onChange={(e) => setCategory(e.target.value)}>
               {categories.map((c) => (
                 <option key={c.name} value={c.name}>{c.name}</option>
@@ -2913,25 +2913,23 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
             </div>
           )}
 
-          {!isEdit && (
-            <div className="field" style={{ marginBottom: split ? 11 : 0 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={split}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setSplit(checked);
-                    if (checked) setBucket2(bucket);
-                  }}
-                  style={{ width: "auto" }}
-                />
-                <span style={{ textTransform: "none", letterSpacing: 0 }}>Разделить</span>
-              </label>
-            </div>
-          )}
+          <div className="field" style={{ marginBottom: split ? 11 : 0 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={split}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setSplit(checked);
+                  if (checked) setBucket2(bucket);
+                }}
+                style={{ width: "auto" }}
+              />
+              <span style={{ textTransform: "none", letterSpacing: 0 }}>Разделить</span>
+            </label>
+          </div>
 
-          {split && !isEdit && (
+          {split && (
             <>
               <AmountField
                 label="Сумма (часть 2)"
@@ -2950,6 +2948,11 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
                   ))}
                 </select>
               </div>
+              {isEdit && (
+                <div className="small-note" style={{ marginBottom: 7 }}>
+                  Часть 1 заменит эту операцию, часть 2 добавится отдельной новой записью.
+                </div>
+              )}
               <div className="small-note" style={{ marginBottom: 11 }}>
                 Итого спишется с {cardLabel(card)}: {formatMoney(amountNum + splitAmountNum)}
               </div>
@@ -3763,11 +3766,20 @@ export default function App() {
     }
   }
 
-  function addTransaction(tx) {
-    const next = [...transactions, { ...tx, id: uid() }];
-    persistTransactions(next);
+  // Добавляет сразу несколько операций одним обновлением состояния. Важно делать это
+  // атомарно: если вызвать addTransaction() несколько раз подряд в одном обработчике,
+  // каждый вызов берёт `transactions` из одного и того же устаревшего замыкания, и
+  // последующие вызовы перезатирают предыдущие — часть операций (например, вторая
+  // половина разбивки) молча пропадает.
+  function addTransactions(newTxs) {
+    const withIds = newTxs.map((tx) => ({ ...tx, id: uid() }));
+    persistTransactions([...transactions, ...withIds]);
     setToast("Добавлено");
     setTimeout(() => setToast(null), 1400);
+  }
+
+  function addTransaction(tx) {
+    addTransactions([tx]);
   }
 
   function deleteTransaction(id) {
@@ -3778,6 +3790,20 @@ export default function App() {
 
   function updateTransaction(id, updatedTx) {
     persistTransactions(transactions.map((t) => (t.id === id ? { ...updatedTx, id } : t)));
+    setToast("Изменено");
+    setTimeout(() => setToast(null), 1200);
+  }
+
+  // Разбивка существующей операции при редактировании: первая часть занимает место
+  // старой записи (тот же id), вторая (и далее) добавляется как новая — одним
+  // атомарным обновлением состояния.
+  function updateTransactionAsSplit(id, parts) {
+    const [first, ...rest] = parts;
+    const groupId = first.splitGroup || uid();
+    const updatedFirst = { ...first, id, splitGroup: groupId };
+    const newOnes = rest.map((tx) => ({ ...tx, splitGroup: groupId, id: uid() }));
+    const next = transactions.map((t) => (t.id === id ? updatedFirst : t)).concat(newOnes);
+    persistTransactions(next);
     setToast("Изменено");
     setTimeout(() => setToast(null), 1200);
   }
@@ -3837,7 +3863,11 @@ export default function App() {
 
   function submitForm(tx) {
     if (Array.isArray(tx)) {
-      tx.forEach(addTransaction);
+      if (formInitial?.editId) {
+        updateTransactionAsSplit(formInitial.editId, tx);
+      } else {
+        addTransactions(tx);
+      }
       closeForm();
       return;
     }
@@ -3862,15 +3892,17 @@ export default function App() {
     const sourceCard = newIncomeTx.card;
     const date = newIncomeTx.date;
 
+    const transfers = [];
     if (sourceCard !== "sber" && split.toSber > 0) {
-      addTransaction({ type: "transfer", date, amount: Math.round(split.toSber), fromCard: sourceCard, toCard: "sber", note: "Авто-распределение" });
+      transfers.push({ type: "transfer", date, amount: Math.round(split.toSber), fromCard: sourceCard, toCard: "sber", note: "Авто-распределение" });
     }
     if (sourceCard !== "alfa" && split.toAlfa > 0) {
-      addTransaction({ type: "transfer", date, amount: Math.round(split.toAlfa), fromCard: sourceCard, toCard: "alfa", note: "Авто-распределение" });
+      transfers.push({ type: "transfer", date, amount: Math.round(split.toAlfa), fromCard: sourceCard, toCard: "alfa", note: "Авто-распределение" });
     }
     if (sourceCard !== "ozon" && split.toOzon > 0) {
-      addTransaction({ type: "transfer", date, amount: Math.round(split.toOzon), fromCard: sourceCard, toCard: "ozon", note: "Авто-распределение" });
+      transfers.push({ type: "transfer", date, amount: Math.round(split.toOzon), fromCard: sourceCard, toCard: "ozon", note: "Авто-распределение" });
     }
+    if (transfers.length) addTransactions(transfers);
 
     setNewIncomeTx(null);
   }
