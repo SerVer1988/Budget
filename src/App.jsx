@@ -2697,6 +2697,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
 
   const [split, setSplit] = useState(false);
   const [splitAmount2, setSplitAmount2] = useState("");
+  const [bucket2, setBucket2] = useState(initialBucket);
   const [splitCategory2, setSplitCategory2] = useState("");
 
   useEffect(() => {
@@ -2706,6 +2707,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
     setAmount(initial?.amount ?? "");
     setCard(initial?.card || homeCardOf(b));
     setBucket(b);
+    setBucket2(b);
     setFromCard(initial?.fromCard || "sber");
     setToCard(initial?.toCard || "alfa");
     setCategory(initial?.category || defaultCategoryFor(b));
@@ -2725,19 +2727,17 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
   }, [type, bucket, category, settings.needCats, settings.wantCats]);
 
   useEffect(() => {
-    const otherBucket = bucket === "wants" ? "needs" : "wants";
-    const list = catListOf(settings, otherBucket);
+    const list = catListOf(settings, bucket2);
     if (!list.some((c) => c.name === splitCategory2)) {
       setSplitCategory2(list[0]?.name || "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bucket, split, settings.needCats, settings.wantCats]);
+  }, [bucket2, split, settings.needCats, settings.wantCats]);
 
   const amountNum = moneyNum(amount);
   const splitAmountNum = moneyNum(splitAmount2);
   const categories = catListOf(settings, bucket);
-  const otherBucket = bucket === "wants" ? "needs" : "wants";
-  const otherCategories = catListOf(settings, otherBucket);
+  const categories2 = catListOf(settings, bucket2);
 
   const isEdit = !!initial?.editId;
   const homeCard = homeCardOf(bucket);
@@ -2786,7 +2786,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
           date,
           amount: splitAmountNum,
           card,
-          bucket: otherBucket,
+          bucket: bucket2,
           category: splitCategory2,
           note: note.trim(),
           splitGroup: groupId,
@@ -2885,12 +2885,12 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
       {type === "expense" && (
         <>
           <div className="field">
-            <label>Категория бюджета</label>
+            <label>{split && !isEdit ? "Категория бюджета (часть 1)" : "Категория бюджета"}</label>
             <CardPicker options={BUCKET_OPTIONS} value={bucket} onChange={setBucket} />
           </div>
 
           <div className="field">
-            <label>{split ? "Категория (часть 1)" : "Категория"}</label>
+            <label>{split && !isEdit ? "Категория (часть 1)" : "Категория"}</label>
             <select value={category} onChange={(e) => setCategory(e.target.value)}>
               {categories.map((c) => (
                 <option key={c.name} value={c.name}>{c.name}</option>
@@ -2916,8 +2916,17 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
           {!isEdit && (
             <div className="field" style={{ marginBottom: split ? 11 : 0 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-                <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} style={{ width: "auto" }} />
-                <span style={{ textTransform: "none", letterSpacing: 0 }}>Разбить между Нуждами и Желаниями</span>
+                <input
+                  type="checkbox"
+                  checked={split}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setSplit(checked);
+                    if (checked) setBucket2(bucket);
+                  }}
+                  style={{ width: "auto" }}
+                />
+                <span style={{ textTransform: "none", letterSpacing: 0 }}>Разделить</span>
               </label>
             </div>
           )}
@@ -2925,14 +2934,18 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
           {split && !isEdit && (
             <>
               <AmountField
-                label={`Сумма (часть 2, «${otherBucket === "wants" ? "Желания" : "Нужды"}»)`}
+                label="Сумма (часть 2)"
                 value={splitAmount2}
                 onChange={setSplitAmount2}
               />
               <div className="field">
+                <label>Категория бюджета (часть 2)</label>
+                <CardPicker options={BUCKET_OPTIONS} value={bucket2} onChange={setBucket2} />
+              </div>
+              <div className="field">
                 <label>Категория (часть 2)</label>
                 <select value={splitCategory2} onChange={(e) => setSplitCategory2(e.target.value)}>
-                  {otherCategories.map((c) => (
+                  {categories2.map((c) => (
                     <option key={c.name} value={c.name}>{c.name}</option>
                   ))}
                 </select>
