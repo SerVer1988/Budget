@@ -2210,40 +2210,14 @@ function IncomeDistributionModal({ incomeTx, settings, onDistribute, onClose }) 
 }
 
 function LimitStatus({ target, avail }) {
-  // Больше не используется в интерфейсе: заменён единым индикатором SmartNoteBanner
-  // (LimitStatus считал по притоку текущего месяца, SmartNoteBanner — по факту на карте
-  // с учётом всей истории, и одновременный показ обоих вводил в заблуждение).
+  // Больше не используется в интерфейсе: заменён индикатором из карусели подсказок
+  // на вкладке «Анализ» (LimitStatus считал по притоку текущего месяца, новый расчёт —
+  // по факту на карте с учётом всей истории, и одновременный показ обоих вводил в заблуждение).
   const diff = Math.round(target - avail);
   if (diff === 0) return null;
   return diff > 0
     ? <div className="limit-status" style={{ color: C.inkMuted }}>Можно доложить: {formatMoney(diff)}</div>
     : <div className="limit-status" style={{ color: C.danger }}>Перебор: {formatMoney(Math.abs(diff))}</div>;
-}
-
-function SmartNoteBanner({ note, compact }) {
-  if (!note || note.type === "ok") return null;
-
-  const icon = note.type === "over" ? "🔴" : note.type === "under" ? "🟡" : "🟢";
-
-  return (
-    <div
-      style={{
-        borderRadius: compact ? 14 : 16,
-        padding: compact ? "9px 11px" : 12,
-        fontSize: compact ? 11 : 12,
-        lineHeight: 1.4,
-        border: `1px solid ${note.color}`,
-        background: note.soft,
-        color: note.type === "over" ? "#7A241C" : note.type === "under" ? "#8A5A15" : "#1F5C46",
-        display: "flex",
-        gap: 7,
-        alignItems: "flex-start",
-      }}
-    >
-      <span>{icon}</span>
-      <span>{note.text}</span>
-    </div>
-  );
 }
 
 /* Единая карусель подсказок: аванс, аналитика по категориям, баланс карт
@@ -2590,7 +2564,6 @@ function CategoryPanel({
   transactions,
   settings,
   balances,
-  note,
   canPrev,
   canNext,
   onPrev,
@@ -2626,8 +2599,6 @@ function CategoryPanel({
         {/* Баланс вместо потраченного */}
         <div className="sum">{formatMoney(balance)}</div>
       </div>
-
-      <SmartNoteBanner note={note} compact />
 
       <div className="hero-row">
         <button className="side-arrow" disabled={!canPrev} onClick={onPrev} type="button">
@@ -2688,7 +2659,6 @@ function OzonPanel({
   settings,
   transactions,
   balances,
-  note,
   canPrev,
   canNext,
   onPrev,
@@ -2728,8 +2698,6 @@ function OzonPanel({
         <h2>Подушка</h2>
         <div className="sum">{formatMoney(balance)}</div>
       </div>
-
-      <SmartNoteBanner note={note} compact />
 
       <div className="hero-row">
         <button className="side-arrow" disabled={!canPrev} onClick={onPrev} type="button">
@@ -3328,7 +3296,6 @@ function AddPageContent({
   onEditTx,
 }) {
   const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
-  const smartNotes = useMemo(() => computeSmartNotes(transactions, settings), [transactions, settings]);
 
   const pages = [
     {
@@ -3345,7 +3312,6 @@ function AddPageContent({
           transactions={transactions}
           settings={settings}
           balances={balances}
-          note={smartNotes.sber}
           onOpenFull={openForm}
           canPrev={canPrev}
           canNext={canNext}
@@ -3370,7 +3336,6 @@ function AddPageContent({
           transactions={transactions}
           settings={settings}
           balances={balances}
-          note={smartNotes.alfa}
           onOpenFull={openForm}
           canPrev={canPrev}
           canNext={canNext}
@@ -3389,7 +3354,6 @@ function AddPageContent({
           settings={settings}
           transactions={transactions}
           balances={balances}
-          note={smartNotes.ozon}
           onOpenFull={openForm}
           canPrev={canPrev}
           canNext={canNext}
