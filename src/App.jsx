@@ -464,6 +464,147 @@ function computeCategoryLimits(transactions, settings, categories, bucket, curre
   return limits;
 }
 
+/* ============================================================ Insights engine (rotating tips) */
+
+/* Ближайший день выплаты из settings.reminderDays, начиная строго после сегодня,
+   и сколько до него календарных дней (с учётом смены месяца и его длины). */
+function nextPaydayInfo(settings) {
+  const days = (settings.reminderDays && settings.reminderDays.length ? settings.reminderDays : [5, 15, 30])
+    .slice()
+    .sort((a, b) => a - b);
+  if (!days.length) return null;
+
+  const now = new Date();
+  const todayDay = now.getDate();
+
+  let nextDay = days.find((d) => d > todayDay);
+  let year = now.getFullYear();
+  let month = now.getMonth();
+
+  if (nextDay == null) {
+    nextDay = days[0];
+    month += 1;
+    if (month > 11) { month = 0; year += 1; }
+  }
+
+  const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+  const clampedDay = Math.min(nextDay, lastDayOfMonth);
+
+  const payDate = new Date(year, month, clampedDay);
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysLeft = Math.round((payDate - todayMidnight) / 86400000);
+
+  return { day: clampedDay, daysLeft };
+}
+
+/* «До аванса N-го осталось K дней. Безопасный лимит на день по карте Нужд — X ₽.» */
+function computePaydayCountdownInsight(settings, balances) {
+  const info = nextPaydayInfo(settings);
+  if (!info || info.daysLeft < 1) return null;
+
+  const dailyLimit = Math.floor(Math.max(0, balances.sber) / info.daysLeft);
+
+  return {
+    id: "payday-countdown",
+    color: C.amber,
+    soft: C.amberSoft,
+    text: `До аванса ${info.day}-го числа осталось ${info.daysLeft} ${ruPlural(info.daysLeft, "день", "дня", "дней")}. Ваш безопасный лимит на день по карте Нужд — ${formatMoney(dailyLimit)}.`,
+  };
+}
+
+/* Разбор трат месяца по категориям: где явно вышли за обычную долю, и куда ушло
+   больше всего денег в каждом бюджете. */
+function computeCategoryInsights(transactions, settings) {
+  const mk = todayMonthKey();
+  const agg = aggregateMonth(mk, transactions, settings);
+  const insights = [];
+
+  function buildFor(bucketKey, bucketLabel, categories, totals, limitTotal) {
+    const limits = computeCategoryLimits(transactions, settings, categories, bucketKey, mk, limitTotal);
+    const spentList = categories
+      .map((cat) => ({ name: cat.name, spent: totals[cat.name] || 0, limit: limits[cat.name] || 0 }))
+      .filter((c) => c.spent > 0);
+
+    spentList.forEach((c) => {
+      if (c.limit > 0 && c.spent > c.limit * 1.15 && c.spent - c.limit >= 300) {
+        insights.push({
+          id: `cat-over-${bucketKey}-${c.name}`,
+          color: C.danger,
+          soft: C.dangerSoft,
+          text: `В этом месяце на «${c.name}» ушло ${formatMoney(c.spent)} — заметно больше обычного (около ${formatMoney(c.limit)}). Возможно, стоит сократить траты в этой категории.`,
+        });
+      }
+    });
+
+    if (spentList.length) {
+      const top = spentList.reduce((a, b) => (b.spent > a.spent ? b : a));
+      const alreadyFlagged = insights.some((i) => i.id === `cat-over-${bucketKey}-${top.name}`);
+      if (!alreadyFlagged) {
+        const pct = limitTotal > 0 ? Math.round((top.spent / limitTotal) * 100) : null;
+        insights.push({
+          id: `cat-top-${bucketKey}`,
+          color: C.ozon,
+          soft: C.ozonSoft,
+          text: `Больше всего среди «${bucketLabel}» в этом месяце ушло на «${top.name}»: ${formatMoney(top.spent)}${pct != null ? ` (${pct}% от плана «${bucketLabel}»)` : ""}.`,
+        });
+      }
+    }
+  }
+
+  buildFor("needs", "Нужды", settings.needCats, agg.needCatTotals, agg.needsLimit);
+  buildFor("wants", "Желания", settings.wantCats, agg.wantCatTotals, agg.wantsLimit);
+
+  return insights;
+}
+
+/* Собирает все подсказки в один список для карусели: аванс, баланс карт
+   относительно плана, разбор категорий. */
+function computeAllInsights(transactions, settings) {
+  const balances = computeBalances(transactions, settings, null);
+  const smartNotes = computeSmartNotes(transactions, settings);
+  const today = todayStr();
+  const day = dayOfMonth(today);
+  const insights = [];
+
+  if (settings.reminderDays.includes(day)) {
+    const todayIncome = transactions
+      .filter((t) => t.type === "income" && t.date === today)
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    if (todayIncome <= 0) {
+      insights.push({
+        id: "payday-today",
+        color: C.amber,
+        soft: C.amberSoft,
+        text: "Сегодня день выплаты — не забудьте занести доход на вкладке «Добавить», приложение подскажет, сколько перевести в Альфа и Озон.",
+      });
+    } else {
+      const split = computeIncomeSplit(todayIncome, settings);
+      const needPct = needPctOf(settings);
+      insights.push({
+        id: "payday-distribute",
+        color: C.amber,
+        soft: C.amberSoft,
+        text: `Из сегодняшнего дохода (${formatMoney(todayIncome)}): ${formatMoney(split.toAlfa)} в Альфа, ${formatMoney(split.toOzon)} в Озон. Остальное (${needPct}%) остаётся на карте зачисления.`,
+      });
+    }
+  } else {
+    const countdown = computePaydayCountdownInsight(settings, balances);
+    if (countdown) insights.push(countdown);
+  }
+
+  ["sber", "alfa", "ozon"].forEach((card) => {
+    const note = smartNotes[card];
+    if (note && note.type !== "ok") {
+      insights.push({ id: `smart-${card}`, color: note.color, soft: note.soft, text: note.text });
+    }
+  });
+
+  insights.push(...computeCategoryInsights(transactions, settings));
+
+  return insights;
+}
+
 function categoryStats(transactions, bucket) {
   const byName = {};
   transactions.filter((t) => t.type === "expense" && (t.bucket || bucketOf(t.card)) === bucket).forEach((t) => {
@@ -2141,6 +2282,61 @@ function SmartNoteBanner({ note, compact }) {
   );
 }
 
+/* Единая карусель подсказок: аванс, аналитика по категориям, баланс карт
+   относительно плана. Автоматически листается, можно тапнуть по карточке
+   или по точке, чтобы переключить вручную. */
+function InsightsCarousel({ insights }) {
+  const [index, setIndex] = useState(0);
+  const idsKey = insights.map((i) => i.id).join("|");
+
+  useEffect(() => {
+    setIndex(0);
+  }, [idsKey]);
+
+  useEffect(() => {
+    if (insights.length <= 1) return undefined;
+    const timer = setInterval(() => {
+      setIndex((i) => (i + 1) % insights.length);
+    }, 6000);
+    return () => clearInterval(timer);
+  }, [insights.length]);
+
+  if (!insights.length) return null;
+
+  const safeIndex = index % insights.length;
+  const current = insights[safeIndex];
+
+  return (
+    <div
+      className="soft-card"
+      style={{
+        padding: 12,
+        borderLeft: `3px solid ${current.color}`,
+        background: current.soft,
+        cursor: insights.length > 1 ? "pointer" : "default",
+      }}
+      onClick={() => insights.length > 1 && setIndex((i) => (i + 1) % insights.length)}
+      role={insights.length > 1 ? "button" : undefined}
+      tabIndex={insights.length > 1 ? 0 : undefined}
+    >
+      <div style={{ fontSize: 12, lineHeight: 1.45, color: C.ink }}>{current.text}</div>
+      {insights.length > 1 && (
+        <div className="dots" style={{ "--accent": current.color }}>
+          {insights.map((ins, i) => (
+            <button
+              key={ins.id}
+              type="button"
+              className={`dot ${i === safeIndex ? "active" : ""}`}
+              onClick={(e) => { e.stopPropagation(); setIndex(i); }}
+              aria-label={`Подсказка ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ============================================================ Add carousel parts */
 function BankBadge({ label, accentColor }) {
   return (
@@ -3216,10 +3412,13 @@ function AddPageContent({
     },
   ];
 
+  const insights = useMemo(() => computeAllInsights(transactions, settings), [transactions, settings]);
   const current = pages[pageIndex];
 
   return (
     <div className="screen-stack">
+      <InsightsCarousel insights={insights} />
+
       {current.render()}
 
       <div className="dots" style={{ "--accent": current.accent }}>
