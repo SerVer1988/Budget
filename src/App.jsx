@@ -216,6 +216,51 @@ function computeIncomeSplit(amount, settings) {
   return { toSber, toAlfa, toOzon };
 }
 
+const BUCKET_CARD = { needs: "sber", wants: "alfa", savings: "ozon" };
+const BUCKET_LABEL = { needs: "Нужды", wants: "Желания", savings: "Подушка" };
+const BUCKET_LABEL_GEN = { needs: "Нужд", wants: "Желаний", savings: "Подушки" };
+const DEBT_REPAY_CAP = 0.5; // максимум половины обычной доли бакета-должника уходит на погашение за раз
+
+/* Как обычный computeIncomeSplit, но если есть непогашенные "внутренние займы" между
+   бюджетами — часть доли бакета-должника перенаправляется бакету-кредитору, пока долг
+   не погасится. Возвращает ещё и repayments: сколько и по какому долгу ушло на погашение. */
+function computeIncomeSplitWithDebts(amount, settings, transactions) {
+  const base = computeIncomeSplit(amount, settings);
+  const shareOf = { needs: base.toSber, wants: base.toAlfa, savings: base.toOzon };
+
+  const activeDebts = (transactions || []).filter(
+    (t) => t.type === "debt" && !t.repaid && t.remainingAmount > 0
+  );
+
+  if (activeDebts.length === 0) {
+    return { toSber: shareOf.needs, toAlfa: shareOf.wants, toOzon: shareOf.savings, repayments: [] };
+  }
+
+  const redirectedFrom = { needs: 0, wants: 0, savings: 0 };
+  const repayments = [];
+  const shareKey = { needs: "toSber", wants: "toAlfa", savings: "toOzon" };
+
+  activeDebts.forEach((debt) => {
+    const debtor = debt.toBucket;
+    const lender = debt.fromBucket;
+    if (!(debtor in shareOf) || !(lender in shareOf)) return;
+
+    const debtorShare = base[shareKey[debtor]];
+    const maxRedirect = debtorShare * DEBT_REPAY_CAP - redirectedFrom[debtor];
+    if (maxRedirect <= 0) return;
+
+    const repay = Math.min(debt.remainingAmount, maxRedirect);
+    if (repay < 1) return;
+
+    shareOf[debtor] -= repay;
+    shareOf[lender] += repay;
+    redirectedFrom[debtor] += repay;
+    repayments.push({ debtId: debt.id, amount: repay });
+  });
+
+  return { toSber: shareOf.needs, toAlfa: shareOf.wants, toOzon: shareOf.savings, repayments };
+}
+
 function computeBalances(transactions, settings, uptoDateInclusive) {
   let sber = settings.openingBalance?.sber || 0;
   let alfa = settings.openingBalance?.alfa || 0;
@@ -558,7 +603,7 @@ function computeCategoryInsights(transactions, settings) {
 }
 
 /* Собирает все подсказки в один список для карусели: аванс, баланс карт
-   относительно плана, разбор категорий. */
+   относительно плана, разбор категорий, непогашенные внутренние долги. */
 function computeAllInsights(transactions, settings) {
   const balances = computeBalances(transactions, settings, null);
   const smartNotes = computeSmartNotes(transactions, settings);
@@ -598,6 +643,16 @@ function computeAllInsights(transactions, settings) {
     if (note && note.type !== "ok") {
       insights.push({ id: `smart-${card}`, color: note.color, soft: note.soft, text: note.text });
     }
+  });
+
+  const openDebts = transactions.filter((t) => t.type === "debt" && !t.repaid && t.remainingAmount > 0);
+  openDebts.forEach((debt) => {
+    insights.push({
+      id: `debt-${debt.id}`,
+      color: C.amber,
+      soft: C.amberSoft,
+      text: `«${BUCKET_LABEL[debt.toBucket]}» должны «${BUCKET_LABEL_GEN[debt.fromBucket]}» ${formatMoney(debt.remainingAmount)}. Гасится автоматически при следующем доходе.`,
+    });
   });
 
   insights.push(...computeCategoryInsights(transactions, settings));
@@ -1231,6 +1286,24 @@ function AppStyles() {
       .cat-row-chevron {
         flex: 0 0 auto;
         color: ${C.inkMuted};
+      }
+
+      .debt-links {
+        display: flex;
+        gap: 14px;
+        justify-content: center;
+        margin: 2px 0 10px;
+      }
+
+      .debt-link-btn {
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: 11px;
+        font-weight: 700;
+        color: ${C.inkMuted};
+        text-decoration: underline;
+        cursor: pointer;
       }
 
       .quick-tile {
@@ -2096,21 +2169,31 @@ function TxRow({ tx, onDelete, onEdit }) {
   const color = tx.type === "income" ? C.sber
     : tx.type === "expense" ? (tx.card === "sber" ? C.sber : C.alfa)
     : tx.type === "transfer" ? C.amber
+    : tx.type === "debt" ? C.amber
     : (tx.card === "sber" ? C.sber : tx.card === "alfa" ? C.alfa : (tx.amount < 0 ? C.danger : C.ozon));
 
   const sign = tx.type === "expense" ? "−"
     : tx.type === "transfer" ? ""
+    : tx.type === "debt" ? ""
     : (tx.type === "adjustment" && tx.amount < 0) ? "−" : "+";
 
   const label = tx.type === "income" ? (tx.note || `Доход (${cardLabel(tx.card)})`)
     : tx.type === "expense" ? (tx.note || tx.category)
     : tx.type === "transfer" ? (tx.note || `${cardLabel(tx.fromCard)} → ${cardLabel(tx.toCard)}`)
+    : tx.type === "debt" ? (tx.note || `Долг: «${BUCKET_LABEL[tx.toBucket]}» у «${BUCKET_LABEL_GEN[tx.fromBucket]}»${tx.repaid ? " · погашено" : ` · осталось ${formatMoney(tx.remainingAmount)}`}`)
     : (tx.note || `Корректировка (${cardLabel(tx.card)})`);
 
   const day = tx.date.slice(8, 10);
+  const editable = tx.type !== "debt";
 
   return (
-    <div className="tx-row" style={{ cursor: "pointer" }} onClick={() => onEdit(tx)} role="button" tabIndex={0}>
+    <div
+      className="tx-row"
+      style={{ cursor: editable ? "pointer" : "default" }}
+      onClick={() => editable && onEdit(tx)}
+      role={editable ? "button" : undefined}
+      tabIndex={editable ? 0 : undefined}
+    >
       <div className="tx-day">{day}</div>
       <div className="tx-dot" style={{ background: color }} />
       <div className="tx-main">
@@ -2166,11 +2249,12 @@ function Toast({ text }) {
 }
 
 /* ============================================================ NEW: Income Modal & Limit Status */
-function IncomeDistributionModal({ incomeTx, settings, onDistribute, onClose }) {
+function IncomeDistributionModal({ incomeTx, settings, transactions, onDistribute, onClose }) {
   if (!incomeTx) return null;
-  
-  const split = computeIncomeSplit(incomeTx.amount, settings);
-  const needPct = needPctOf(settings);
+
+  const split = computeIncomeSplitWithDebts(incomeTx.amount, settings, transactions);
+  const pctOf = (v) => (incomeTx.amount > 0 ? Math.round((v / incomeTx.amount) * 100) : 0);
+  const hasRepayments = split.repayments.length > 0;
 
   return (
     <div className="modal-overlay">
@@ -2182,29 +2266,117 @@ function IncomeDistributionModal({ incomeTx, settings, onDistribute, onClose }) 
           <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 8px", color: C.ink }}>
             Поступило {formatMoney(incomeTx.amount)}
           </h3>
-          <p style={{ fontSize: 13, color: C.inkMuted, margin: 0 }}>Рекомендуем распределить:</p>
+          <p style={{ fontSize: 13, color: C.inkMuted, margin: 0 }}>
+            {hasRepayments ? "Часть пойдёт на погашение долга:" : "Рекомендуем распределить:"}
+          </p>
         </div>
 
-        <div style={{ background: C.bg, borderRadius: 16, padding: 16, marginBottom: 20 }}>
+        <div style={{ background: C.bg, borderRadius: 16, padding: 16, marginBottom: hasRepayments ? 10 : 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В Нужды ({needPct}%)</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В Нужды ({pctOf(split.toSber)}%)</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: C.sber }}>{formatMoney(split.toSber)}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В Желания ({settings.wantPct}%)</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В Желания ({pctOf(split.toAlfa)}%)</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: C.alfa }}>{formatMoney(split.toAlfa)}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В Сбережения ({settings.savePct}%)</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В Сбережения ({pctOf(split.toOzon)}%)</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: C.ozon }}>{formatMoney(split.toOzon)}</span>
           </div>
         </div>
+
+        {hasRepayments && (
+          <div className="notice" style={{ marginBottom: 20, borderColor: C.amber, background: C.amberSoft }}>
+            Пропорция временно изменена (вместо обычной): {split.repayments.map((r, i) => (
+              <span key={r.debtId}>{i > 0 ? ", " : ""}{formatMoney(r.amount)} на погашение долга</span>
+            ))}.
+          </div>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button className="btn primary" onClick={onDistribute}>Распределить автоматически</button>
           <button className="btn" style={{ background: "transparent", border: "none" }} onClick={onClose}>Сделаю сам</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DebtModal({ balances, request, onSubmit, onClose }) {
+  if (!request) return null;
+  const { fromBucket, toBucket } = request;
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(todayStr());
+  const amountNum = moneyNum(amount);
+
+  function submit() {
+    if (!amountNum || amountNum <= 0) {
+      window.alert("Введите сумму больше 0");
+      return;
+    }
+    onSubmit({
+      fromBucket,
+      toBucket,
+      fromCard: BUCKET_CARD[fromBucket],
+      toCard: BUCKET_CARD[toBucket],
+      amount: amountNum,
+      date,
+    });
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-card">
+        <div style={{ textAlign: "center", marginBottom: 16 }}>
+          <div style={{ width: 48, height: 48, background: C.amberSoft, color: C.amber, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+            <Coins size={22} />
+          </div>
+          <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 4px", color: C.ink }}>
+            Занять у «{BUCKET_LABEL[fromBucket]}» для «{BUCKET_LABEL[toBucket]}»
+          </h3>
+          <p style={{ fontSize: 12, color: C.inkMuted, margin: 0 }}>
+            Деньги реально переедут с карты {cardLabel(BUCKET_CARD[fromBucket])} на {cardLabel(BUCKET_CARD[toBucket])}.
+            Баланс {cardLabel(BUCKET_CARD[fromBucket])} сейчас: {formatMoney(balances[BUCKET_CARD[fromBucket]])}.
+          </p>
+        </div>
+
+        <AmountField label="Сумма займа" value={amount} onChange={setAmount} big />
+
+        <div className="field">
+          <label>Дата</label>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+
+        <div className="small-note" style={{ marginBottom: 16 }}>
+          При следующем поступлении дохода часть обычной доли «{BUCKET_LABEL[toBucket]}» автоматически уйдёт на
+          возврат долга «{BUCKET_LABEL_GEN[fromBucket]}», пока долг не погасится — сама пропорция 50/30/20 на
+          время изменится.
+        </div>
+
+        <div className="button-row">
+          <button type="button" className="btn" onClick={onClose}>Отмена</button>
+          <button type="button" className="btn primary" onClick={submit}>Занять</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DebtBorrowLinks({ myBucket, onRequestDebt }) {
+  const lenders = Object.keys(BUCKET_LABEL).filter((b) => b !== myBucket);
+  return (
+    <div className="debt-links">
+      {lenders.map((b) => (
+        <button
+          key={b}
+          type="button"
+          className="debt-link-btn"
+          onClick={() => onRequestDebt({ fromBucket: b, toBucket: myBucket })}
+        >
+          Занять у {BUCKET_LABEL_GEN[b]}
+        </button>
+      ))}
     </div>
   );
 }
@@ -2560,6 +2732,7 @@ function CategoryPanel({
   softColor,
   logo,
   card,
+  myBucket,
   categories,
   transactions,
   settings,
@@ -2571,6 +2744,7 @@ function CategoryPanel({
   onOpenFull,
   onDeleteTx,
   onEditTx,
+  onRequestDebt,
 }) {
   const stats = useMemo(() => categoryStats(transactions, bucketOf(card)), [transactions, card]);
   const ordered = useMemo(
@@ -2599,6 +2773,8 @@ function CategoryPanel({
         {/* Баланс вместо потраченного */}
         <div className="sum">{formatMoney(balance)}</div>
       </div>
+
+      {onRequestDebt && <DebtBorrowLinks myBucket={myBucket} onRequestDebt={onRequestDebt} />}
 
       <div className="hero-row">
         <button className="side-arrow" disabled={!canPrev} onClick={onPrev} type="button">
@@ -2664,6 +2840,7 @@ function OzonPanel({
   onPrev,
   onNext,
   onOpenFull,
+  onRequestDebt,
 }) {
   const dayStats = useMemo(() => ozonDayStats(transactions), [transactions]);
   const days = settings.reminderDays.length ? settings.reminderDays : [5, 15, 30];
@@ -2698,6 +2875,8 @@ function OzonPanel({
         <h2>Подушка</h2>
         <div className="sum">{formatMoney(balance)}</div>
       </div>
+
+      {onRequestDebt && <DebtBorrowLinks myBucket="savings" onRequestDebt={onRequestDebt} />}
 
       <div className="hero-row">
         <button className="side-arrow" disabled={!canPrev} onClick={onPrev} type="button">
@@ -3294,6 +3473,7 @@ function AddPageContent({
   onSelectPage,
   onDeleteTx,
   onEditTx,
+  onRequestDebt,
 }) {
   const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
 
@@ -3308,6 +3488,7 @@ function AddPageContent({
           softColor={C.sberSoft}
           logo="check"
           card="sber"
+          myBucket="needs"
           categories={settings.needCats}
           transactions={transactions}
           settings={settings}
@@ -3319,6 +3500,7 @@ function AddPageContent({
           onNext={onNext}
           onDeleteTx={onDeleteTx}
           onEditTx={onEditTx}
+          onRequestDebt={onRequestDebt}
         />
       ),
     },
@@ -3332,6 +3514,7 @@ function AddPageContent({
           softColor={C.alfaSoft}
           logo="A"
           card="alfa"
+          myBucket="wants"
           categories={settings.wantCats}
           transactions={transactions}
           settings={settings}
@@ -3343,6 +3526,7 @@ function AddPageContent({
           onNext={onNext}
           onDeleteTx={onDeleteTx}
           onEditTx={onEditTx}
+          onRequestDebt={onRequestDebt}
         />
       ),
     },
@@ -3359,6 +3543,7 @@ function AddPageContent({
           canNext={canNext}
           onPrev={onPrev}
           onNext={onNext}
+          onRequestDebt={onRequestDebt}
         />
       ),
     },
@@ -3409,6 +3594,7 @@ const TX_TYPE_FILTERS = [
   { id: "income", label: "Доходы" },
   { id: "transfer", label: "Переводы" },
   { id: "adjustment", label: "Коррекции" },
+  { id: "debt", label: "Долги" },
 ];
 
 const TX_DATE_FILTERS = [
@@ -3432,6 +3618,7 @@ function AnalysisView({
   onEditTx,
   onToggleInclude,
   onCloseMonth,
+  onToggleDebtRepaid,
   goToAdd,
 }) {
   const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
@@ -3440,6 +3627,10 @@ function AnalysisView({
     [transactions, settings, selectedMonth]
   );
   const insights = useMemo(() => computeAllInsights(transactions, settings), [transactions, settings]);
+  const openDebts = useMemo(
+    () => transactions.filter((t) => t.type === "debt" && !t.repaid).sort((a, b) => (a.date < b.date ? 1 : -1)),
+    [transactions]
+  );
   const isPastMonth = selectedMonth < todayMonthKey();
   const monthNeedsLeftover = agg.needsLimit - agg.needsSpent;
   const monthWantsLeftover = agg.wantsLimit - agg.wantsSpent;
@@ -3505,6 +3696,33 @@ function AnalysisView({
             >
               В сбережения
             </button>
+          </div>
+        </div>
+      )}
+
+      {openDebts.length > 0 && (
+        <div className="panel">
+          <SectionTitle>Фонд</SectionTitle>
+          <div className="history-list">
+            {openDebts.map((debt) => (
+              <div key={debt.id} className="tx-row">
+                <div className="tx-main">
+                  <div className="tx-label">«{BUCKET_LABEL[debt.toBucket]}» должны «{BUCKET_LABEL_GEN[debt.fromBucket]}»</div>
+                  <div className="tx-sub">
+                    {debt.date} · осталось {formatMoney(debt.remainingAmount)} из {formatMoney(debt.amount)} · гасится автоматически при доходе
+                  </div>
+                </div>
+                <div className="tx-amount" style={{ color: C.amber }}>{formatMoney(debt.remainingAmount)}</div>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ height: 30, padding: "0 10px", fontSize: 11, flex: "0 0 auto" }}
+                  onClick={() => onToggleDebtRepaid(debt.id)}
+                >
+                  Списать
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -3934,6 +4152,7 @@ export default function App() {
   const [lastAddPage, setLastAddPage] = useState(0);
   const [formInitial, setFormInitial] = useState(null);
   const [newIncomeTx, setNewIncomeTx] = useState(null);
+  const [debtRequest, setDebtRequest] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(todayMonthKey());
   const [toast, setToast] = useState(null);
   const touchRef = useRef(null);
@@ -4033,6 +4252,45 @@ export default function App() {
     setTimeout(() => setToast(null), 1200);
   }
 
+  // Одалживание между бюджетами: реальный перевод денег плюс запись долга — одним
+  // атомарным обновлением, чтобы обе записи гарантированно попали в историю.
+  function submitDebt({ fromBucket, toBucket, fromCard, toCard, amount, date }) {
+    const transferTx = {
+      type: "transfer",
+      date,
+      amount,
+      fromCard,
+      toCard,
+      note: `Заём: ${BUCKET_LABEL[toBucket]} у ${BUCKET_LABEL_GEN[fromBucket]}`,
+      id: uid(),
+    };
+    const debtTx = {
+      type: "debt",
+      date,
+      amount,
+      remainingAmount: amount,
+      fromBucket,
+      toBucket,
+      repaid: false,
+      note: "",
+      id: uid(),
+    };
+    persistTransactions([...transactions, transferTx, debtTx]);
+    setDebtRequest(null);
+    setToast("Занято");
+    setTimeout(() => setToast(null), 1400);
+  }
+
+  function toggleDebtRepaid(id) {
+    const tx = transactions.find((t) => t.id === id);
+    if (!tx) return;
+    updateTransaction(id, {
+      ...tx,
+      repaid: !tx.repaid,
+      remainingAmount: !tx.repaid ? 0 : tx.amount,
+    });
+  }
+
   function closeMonth(mk, mode, leftoverNeeds, leftoverWants) {
     if (mode === "toSavings") {
       const date = endOfMonthStr(mk);
@@ -4113,22 +4371,35 @@ export default function App() {
 
   function handleAutoDistribute() {
     if (!newIncomeTx) return;
-    const split = computeIncomeSplit(newIncomeTx.amount, settings);
+    const split = computeIncomeSplitWithDebts(newIncomeTx.amount, settings, transactions);
     const sourceCard = newIncomeTx.card;
     const date = newIncomeTx.date;
 
     const transfers = [];
     if (sourceCard !== "sber" && split.toSber > 0) {
-      transfers.push({ type: "transfer", date, amount: Math.round(split.toSber), fromCard: sourceCard, toCard: "sber", note: "Авто-распределение" });
+      transfers.push({ type: "transfer", date, amount: Math.round(split.toSber), fromCard: sourceCard, toCard: "sber", note: "Авто-распределение", id: uid() });
     }
     if (sourceCard !== "alfa" && split.toAlfa > 0) {
-      transfers.push({ type: "transfer", date, amount: Math.round(split.toAlfa), fromCard: sourceCard, toCard: "alfa", note: "Авто-распределение" });
+      transfers.push({ type: "transfer", date, amount: Math.round(split.toAlfa), fromCard: sourceCard, toCard: "alfa", note: "Авто-распределение", id: uid() });
     }
     if (sourceCard !== "ozon" && split.toOzon > 0) {
-      transfers.push({ type: "transfer", date, amount: Math.round(split.toOzon), fromCard: sourceCard, toCard: "ozon", note: "Авто-распределение" });
+      transfers.push({ type: "transfer", date, amount: Math.round(split.toOzon), fromCard: sourceCard, toCard: "ozon", note: "Авто-распределение", id: uid() });
     }
-    if (transfers.length) addTransactions(transfers);
 
+    const debtUpdates = split.repayments.map(({ debtId, amount: repay }) => {
+      const debt = transactions.find((t) => t.id === debtId);
+      const nextRemaining = Math.max(0, Math.round(debt.remainingAmount - repay));
+      return { id: debtId, updatedTx: { ...debt, remainingAmount: nextRemaining, repaid: nextRemaining <= 0 } };
+    });
+
+    const next = transactions
+      .map((t) => {
+        const upd = debtUpdates.find((u) => u.id === t.id);
+        return upd ? { ...upd.updatedTx, id: t.id } : t;
+      })
+      .concat(transfers);
+
+    persistTransactions(next);
     setNewIncomeTx(null);
   }
 
@@ -4229,8 +4500,18 @@ export default function App() {
               <IncomeDistributionModal
                 incomeTx={newIncomeTx}
                 settings={settings}
+                transactions={transactions}
                 onDistribute={handleAutoDistribute}
                 onClose={() => setNewIncomeTx(null)}
+              />
+            )}
+
+            {debtRequest && (
+              <DebtModal
+                balances={computeBalances(transactions, settings, null)}
+                request={debtRequest}
+                onSubmit={submitDebt}
+                onClose={() => setDebtRequest(null)}
               />
             )}
 
@@ -4257,6 +4538,7 @@ export default function App() {
                 onSelectPage={selectPage}
                 onDeleteTx={deleteTransaction}
                 onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx))}
+                onRequestDebt={setDebtRequest}
               />
             ) : pageIndex === 3 ? (
               <AnalysisView
@@ -4268,6 +4550,7 @@ export default function App() {
                 onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx))}
                 onToggleInclude={toggleIncludeInTotal}
                 onCloseMonth={closeMonth}
+                onToggleDebtRepaid={toggleDebtRepaid}
                 goToAdd={() => selectPage(0)}
               />
             ) : (
