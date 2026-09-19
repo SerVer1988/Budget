@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Home, Plus, PiggyBank, BarChart3, Settings as SettingsIcon,
-  ChevronLeft, ChevronRight, Trash2, Check, AlertTriangle, Wallet, X, ArrowUp, ArrowDown, Pencil,
+  ChevronLeft, ChevronRight, ChevronDown, Trash2, Check, AlertTriangle, Wallet, X, ArrowUp, ArrowDown, Pencil,
   ShoppingCart, ShoppingBag, UtensilsCrossed, Coffee, Zap, Droplet, Wifi, Phone,
   Car, Bus, Fuel, Plane, Train, HeartPulse, Pill, Stethoscope, Dumbbell, GraduationCap,
   Baby, PawPrint, Gift, Film, Tv, Music, Gamepad2, Book, Shirt, Smartphone, Laptop,
@@ -2246,7 +2246,9 @@ function CategoryQuickRow({ icon: Icon, color, name, spent, limit, fallbackAmoun
   );
 }
 
-function CategoryDonut({ categories, totals, bucketLabel }) {
+function CategoryDonut({ categories, totals, bucketLabel, transactions, bucket, onDeleteTx, onEditTx }) {
+  const [expandedCat, setExpandedCat] = useState(null);
+
   const data = useMemo(
     () =>
       categories
@@ -2255,6 +2257,24 @@ function CategoryDonut({ categories, totals, bucketLabel }) {
         .sort((a, b) => b.value - a.value),
     [categories, totals]
   );
+
+  // Реальные операции месяца по каждой категории — раскрываются по тапу на строку легенды.
+  const itemsByCat = useMemo(() => {
+    const map = {};
+    const mk = todayMonthKey();
+    (transactions || []).forEach((t) => {
+      if (t.type !== "expense") return;
+      if (monthKeyOf(t.date) !== mk) return;
+      const tBucket = t.bucket || bucketOf(t.card);
+      if (tBucket !== bucket) return;
+      if (!map[t.category]) map[t.category] = [];
+      map[t.category].push(t);
+    });
+    Object.values(map).forEach((arr) =>
+      arr.sort((a, b) => (a.date !== b.date ? (a.date < b.date ? 1 : -1) : (a.id < b.id ? 1 : -1)))
+    );
+    return map;
+  }, [transactions, bucket]);
 
   const total = data.reduce((sum, d) => sum + d.value, 0);
 
@@ -2309,18 +2329,68 @@ function CategoryDonut({ categories, totals, bucketLabel }) {
           </div>
         </div>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 4 }}>
-        {data.map((d) => (
-          <div key={d.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}>
-              <span style={{ width: 8, height: 8, borderRadius: 999, background: d.color, flex: "0 0 auto" }} />
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
-            </span>
-            <span className="mono" style={{ fontWeight: 700, flex: "0 0 auto" }}>
-              {formatMoney(d.value)} · {Math.round((d.value / total) * 100)}%
-            </span>
-          </div>
-        ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 4 }}>
+        {data.map((d) => {
+          const items = itemsByCat[d.name] || [];
+          const isOpen = expandedCat === d.name;
+
+          return (
+            <div key={d.name}>
+              <button
+                type="button"
+                onClick={() => items.length && setExpandedCat(isOpen ? null : d.name)}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  fontSize: 12,
+                  padding: "5px 0",
+                  border: "none",
+                  background: "transparent",
+                  color: C.ink,
+                  textAlign: "left",
+                  cursor: items.length ? "pointer" : "default",
+                }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 999, background: d.color, flex: "0 0 auto" }} />
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
+                </span>
+                <span style={{ display: "flex", alignItems: "center", gap: 3, flex: "0 0 auto" }}>
+                  <span className="mono" style={{ fontWeight: 700 }}>
+                    {formatMoney(d.value)} · {Math.round((d.value / total) * 100)}%
+                  </span>
+                  {items.length > 0 && (
+                    <ChevronDown
+                      size={14}
+                      style={{
+                        color: C.inkMuted,
+                        transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+                        transition: "transform 0.15s ease",
+                        flex: "0 0 auto",
+                      }}
+                    />
+                  )}
+                </span>
+              </button>
+
+              {isOpen && items.length > 0 && (
+                <div className="history-list" style={{ marginBottom: 6 }}>
+                  {items.map((t) => (
+                    <TxRow
+                      key={t.id}
+                      tx={t}
+                      onDelete={onDeleteTx || (() => {})}
+                      onEdit={onEditTx || (() => {})}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -2342,6 +2412,8 @@ function CategoryPanel({
   onPrev,
   onNext,
   onOpenFull,
+  onDeleteTx,
+  onEditTx,
 }) {
   const stats = useMemo(() => categoryStats(transactions, bucketOf(card)), [transactions, card]);
   const ordered = useMemo(
@@ -2415,7 +2487,15 @@ function CategoryPanel({
         })}
       </div>
 
-      <CategoryDonut categories={categories} totals={monthlyTotals} bucketLabel={title} />
+      <CategoryDonut
+        categories={categories}
+        totals={monthlyTotals}
+        bucketLabel={title}
+        transactions={transactions}
+        bucket={bucketOf(card)}
+        onDeleteTx={onDeleteTx}
+        onEditTx={onEditTx}
+      />
     </div>
   );
 }
@@ -3060,6 +3140,8 @@ function AddPageContent({
   onPrev,
   onNext,
   onSelectPage,
+  onDeleteTx,
+  onEditTx,
 }) {
   const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
   const smartNotes = useMemo(() => computeSmartNotes(transactions, settings), [transactions, settings]);
@@ -3085,6 +3167,8 @@ function AddPageContent({
           canNext={canNext}
           onPrev={onPrev}
           onNext={onNext}
+          onDeleteTx={onDeleteTx}
+          onEditTx={onEditTx}
         />
       ),
     },
@@ -3108,6 +3192,8 @@ function AddPageContent({
           canNext={canNext}
           onPrev={onPrev}
           onNext={onNext}
+          onDeleteTx={onDeleteTx}
+          onEditTx={onEditTx}
         />
       ),
     },
@@ -4030,6 +4116,8 @@ export default function App() {
                 onPrev={() => goPage(-1)}
                 onNext={() => goPage(1)}
                 onSelectPage={selectPage}
+                onDeleteTx={deleteTransaction}
+                onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx))}
               />
             ) : pageIndex === 3 ? (
               <AnalysisView
