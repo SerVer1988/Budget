@@ -2037,42 +2037,6 @@ function MonthNav({ value, onChange }) {
   );
 }
 
-function PaydayReminder({ settings, transactions }) {
-  const today = todayStr();
-  const day = dayOfMonth(today);
-
-  if (!settings.reminderDays.includes(day)) return null;
-
-  const todayIncome = transactions
-    .filter((t) => t.type === "income" && t.date === today)
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  if (todayIncome <= 0) {
-    return (
-      <div className="notice">
-        <div style={{ fontWeight: 800, marginBottom: 4 }}>Сегодня день выплаты</div>
-        <div>
-          Не забудьте занести доход на вкладке «Добавить» — после этого приложение подскажет, сколько перевести в Альфа и Озон.
-        </div>
-      </div>
-    );
-  }
-
-  // При наличии авто-распределения это напоминание можно оставить для информативности
-  const split = computeIncomeSplit(todayIncome, settings);
-  const needPct = needPctOf(settings);
-  
-  return (
-    <div className="notice">
-      <div style={{ fontWeight: 800, marginBottom: 4 }}>Не забудьте сделать переводы</div>
-      <div>
-        Из сегодняшнего дохода ({formatMoney(todayIncome)}): {formatMoney(split.toAlfa)} в Альфа,
-        {" "}{formatMoney(split.toOzon)} в Озон. Остальное ({needPct}%) остаётся на карте зачисления.
-      </div>
-    </div>
-  );
-}
-
 function TotalBalanceCard({ total, settings, onToggle }) {
   const items = [
     { key: "sber", label: "Сбер", color: C.sber },
@@ -2283,8 +2247,9 @@ function SmartNoteBanner({ note, compact }) {
 }
 
 /* Единая карусель подсказок: аванс, аналитика по категориям, баланс карт
-   относительно плана. Автоматически листается, можно тапнуть по карточке
-   или по точке, чтобы переключить вручную. */
+   относительно плана. Листается только тапом: левая половина карточки —
+   на одну подсказку назад, правая — вперёд. Точки внизу позволяют
+   перейти к конкретной подсказке напрямую. */
 function InsightsCarousel({ insights }) {
   const [index, setIndex] = useState(0);
   const idsKey = insights.map((i) => i.id).join("|");
@@ -2293,18 +2258,19 @@ function InsightsCarousel({ insights }) {
     setIndex(0);
   }, [idsKey]);
 
-  useEffect(() => {
-    if (insights.length <= 1) return undefined;
-    const timer = setInterval(() => {
-      setIndex((i) => (i + 1) % insights.length);
-    }, 6000);
-    return () => clearInterval(timer);
-  }, [insights.length]);
-
   if (!insights.length) return null;
 
   const safeIndex = index % insights.length;
   const current = insights[safeIndex];
+
+  function handleTap(e) {
+    if (insights.length <= 1) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const isLeftHalf = e.clientX - rect.left < rect.width / 2;
+    setIndex((i) =>
+      isLeftHalf ? (i - 1 + insights.length) % insights.length : (i + 1) % insights.length
+    );
+  }
 
   return (
     <div
@@ -2314,12 +2280,34 @@ function InsightsCarousel({ insights }) {
         borderLeft: `3px solid ${current.color}`,
         background: current.soft,
         cursor: insights.length > 1 ? "pointer" : "default",
+        position: "relative",
       }}
-      onClick={() => insights.length > 1 && setIndex((i) => (i + 1) % insights.length)}
+      onClick={handleTap}
       role={insights.length > 1 ? "button" : undefined}
       tabIndex={insights.length > 1 ? 0 : undefined}
     >
-      <div style={{ fontSize: 12, lineHeight: 1.45, color: C.ink }}>{current.text}</div>
+      {insights.length > 1 && (
+        <ChevronLeft
+          size={14}
+          style={{ position: "absolute", left: 4, top: 12, color: C.inkMuted, opacity: 0.45 }}
+        />
+      )}
+      <div
+        style={{
+          fontSize: 12,
+          lineHeight: 1.45,
+          color: C.ink,
+          padding: insights.length > 1 ? "0 15px" : 0,
+        }}
+      >
+        {current.text}
+      </div>
+      {insights.length > 1 && (
+        <ChevronRight
+          size={14}
+          style={{ position: "absolute", right: 4, top: 12, color: C.inkMuted, opacity: 0.45 }}
+        />
+      )}
       {insights.length > 1 && (
         <div className="dots" style={{ "--accent": current.color }}>
           {insights.map((ins, i) => (
@@ -3412,13 +3400,10 @@ function AddPageContent({
     },
   ];
 
-  const insights = useMemo(() => computeAllInsights(transactions, settings), [transactions, settings]);
   const current = pages[pageIndex];
 
   return (
     <div className="screen-stack">
-      <InsightsCarousel insights={insights} />
-
       {current.render()}
 
       <div className="dots" style={{ "--accent": current.accent }}>
@@ -3490,8 +3475,7 @@ function AnalysisView({
     () => computeBalances(transactions, settings, endOfMonthStr(selectedMonth)),
     [transactions, settings, selectedMonth]
   );
-  const smartNotes = useMemo(() => computeSmartNotes(transactions, settings), [transactions, settings]);
-  const hasSmartNotes = [smartNotes.sber, smartNotes.alfa, smartNotes.ozon].some((n) => n.type !== "ok");
+  const insights = useMemo(() => computeAllInsights(transactions, settings), [transactions, settings]);
   const isPastMonth = selectedMonth < todayMonthKey();
   const monthNeedsLeftover = agg.needsLimit - agg.needsSpent;
   const monthWantsLeftover = agg.wantsLimit - agg.wantsSpent;
@@ -3533,15 +3517,7 @@ function AnalysisView({
   return (
     <div className="screen-stack">
       <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
-      <PaydayReminder settings={settings} transactions={transactions} />
-
-      {hasSmartNotes && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <SmartNoteBanner note={smartNotes.sber} />
-          <SmartNoteBanner note={smartNotes.alfa} />
-          <SmartNoteBanner note={smartNotes.ozon} />
-        </div>
-      )}
+      <InsightsCarousel insights={insights} />
 
       {showCloseBanner && (
         <div className="notice" style={{ borderColor: C.ozon, background: C.ozonSoft, color: "#0F3E70" }}>
