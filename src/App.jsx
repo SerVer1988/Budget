@@ -217,6 +217,7 @@ function computeIncomeSplit(amount, settings) {
 }
 
 const BUCKET_CARD = { needs: "sber", wants: "alfa", savings: "ozon" };
+const CARD_BUCKET = { sber: "needs", alfa: "wants", ozon: "savings" };
 const BUCKET_LABEL = { needs: "Нужды", wants: "Желания", savings: "Подушка" };
 const BUCKET_LABEL_GEN = { needs: "Нужд", wants: "Желаний", savings: "Подушки" };
 const DEBT_REPAY_CAP = 0.5; // максимум половины обычной доли бакета-должника уходит на погашение за раз
@@ -259,6 +260,88 @@ function computeIncomeSplitWithDebts(amount, settings, transactions) {
   });
 
   return { toSber: shareOf.needs, toAlfa: shareOf.wants, toOzon: shareOf.savings, repayments };
+}
+
+/* ------------------------------------------------------------ внутренние долги, связанные с операциями
+   Какой долг между бюджетами должна породить операция (или null, если никакой):
+   • Трата, оплаченная картой «чужого» бюджета (например, «Нужды» с карты Альфа):
+     кредитор — бюджет, которому принадлежит карта, должник — бюджет самой траты.
+   • Перевод с включённой галочкой «Считать долгом»: кредитор — бюджет карты-источника,
+     должник — бюджет карты-получателя. */
+function debtSpecFor(tx, asDebt) {
+  if (tx.type === "expense") {
+    const bucket = tx.bucket || bucketOf(tx.card);
+    const lender = CARD_BUCKET[tx.card];
+    if (!lender || lender === bucket) return null;
+    return { fromBucket: lender, toBucket: bucket };
+  }
+
+  if (tx.type === "transfer" && asDebt) {
+    const lender = CARD_BUCKET[tx.fromCard];
+    const debtor = CARD_BUCKET[tx.toCard];
+    if (!lender || !debtor || lender === debtor) return null;
+    return { fromBucket: lender, toBucket: debtor };
+  }
+
+  return null;
+}
+
+/* Приводит долг, привязанный к операции (поле sourceTxId), в соответствие с самой операцией:
+   создаёт его, обновляет сумму/направление или убирает, если долг больше не нужен.
+   Возвращает новый список операций. Работает и при добавлении, и при правке, и при разбивке. */
+function syncLinkedDebt(list, tx, asDebt) {
+  const spec = debtSpecFor(tx, asDebt);
+  const existing = list.find((t) => t.type === "debt" && t.sourceTxId === tx.id);
+
+  if (!spec) {
+    return existing ? list.filter((t) => t.id !== existing.id) : list;
+  }
+
+  if (!existing) {
+    return [
+      ...list,
+      {
+        id: uid(),
+        type: "debt",
+        date: tx.date,
+        amount: tx.amount,
+        remainingAmount: tx.amount,
+        fromBucket: spec.fromBucket,
+        toBucket: spec.toBucket,
+        repaid: false,
+        note: "",
+        sourceTxId: tx.id,
+      },
+    ];
+  }
+
+  const sameDirection = existing.fromBucket === spec.fromBucket && existing.toBucket === spec.toBucket;
+  let updated;
+
+  if (!sameDirection) {
+    updated = {
+      ...existing,
+      date: tx.date,
+      amount: tx.amount,
+      remainingAmount: tx.amount,
+      fromBucket: spec.fromBucket,
+      toBucket: spec.toBucket,
+      repaid: false,
+    };
+  } else {
+    // Уже погашенная часть сохраняется, меняется только «хвост».
+    const alreadyRepaid = Math.max(0, existing.amount - existing.remainingAmount);
+    const remaining = existing.repaid ? 0 : Math.max(0, tx.amount - alreadyRepaid);
+    updated = {
+      ...existing,
+      date: tx.date,
+      amount: tx.amount,
+      remainingAmount: remaining,
+      repaid: existing.repaid || remaining <= 0,
+    };
+  }
+
+  return list.map((t) => (t.id === existing.id ? updated : t));
 }
 
 function computeBalances(transactions, settings, uptoDateInclusive) {
@@ -1288,24 +1371,6 @@ function AppStyles() {
         color: ${C.inkMuted};
       }
 
-      .debt-links {
-        display: flex;
-        gap: 14px;
-        justify-content: center;
-        margin: 2px 0 10px;
-      }
-
-      .debt-link-btn {
-        background: none;
-        border: none;
-        padding: 0;
-        font-size: 11px;
-        font-weight: 700;
-        color: ${C.inkMuted};
-        text-decoration: underline;
-        cursor: pointer;
-      }
-
       .quick-tile {
         min-width: 0;
         min-height: 104px;
@@ -2303,84 +2368,6 @@ function IncomeDistributionModal({ incomeTx, settings, transactions, onDistribut
   );
 }
 
-function DebtModal({ balances, request, onSubmit, onClose }) {
-  if (!request) return null;
-  const { fromBucket, toBucket } = request;
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(todayStr());
-  const amountNum = moneyNum(amount);
-
-  function submit() {
-    if (!amountNum || amountNum <= 0) {
-      window.alert("Введите сумму больше 0");
-      return;
-    }
-    onSubmit({
-      fromBucket,
-      toBucket,
-      fromCard: BUCKET_CARD[fromBucket],
-      toCard: BUCKET_CARD[toBucket],
-      amount: amountNum,
-      date,
-    });
-  }
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal-card">
-        <div style={{ textAlign: "center", marginBottom: 16 }}>
-          <div style={{ width: 48, height: 48, background: C.amberSoft, color: C.amber, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-            <Coins size={22} />
-          </div>
-          <h3 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 4px", color: C.ink }}>
-            Занять у «{BUCKET_LABEL[fromBucket]}» для «{BUCKET_LABEL[toBucket]}»
-          </h3>
-          <p style={{ fontSize: 12, color: C.inkMuted, margin: 0 }}>
-            Деньги реально переедут с карты {cardLabel(BUCKET_CARD[fromBucket])} на {cardLabel(BUCKET_CARD[toBucket])}.
-            Баланс {cardLabel(BUCKET_CARD[fromBucket])} сейчас: {formatMoney(balances[BUCKET_CARD[fromBucket]])}.
-          </p>
-        </div>
-
-        <AmountField label="Сумма займа" value={amount} onChange={setAmount} big />
-
-        <div className="field">
-          <label>Дата</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </div>
-
-        <div className="small-note" style={{ marginBottom: 16 }}>
-          При следующем поступлении дохода часть обычной доли «{BUCKET_LABEL[toBucket]}» автоматически уйдёт на
-          возврат долга «{BUCKET_LABEL_GEN[fromBucket]}», пока долг не погасится — сама пропорция 50/30/20 на
-          время изменится.
-        </div>
-
-        <div className="button-row">
-          <button type="button" className="btn" onClick={onClose}>Отмена</button>
-          <button type="button" className="btn primary" onClick={submit}>Занять</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DebtBorrowLinks({ myBucket, onRequestDebt }) {
-  const lenders = Object.keys(BUCKET_LABEL).filter((b) => b !== myBucket);
-  return (
-    <div className="debt-links">
-      {lenders.map((b) => (
-        <button
-          key={b}
-          type="button"
-          className="debt-link-btn"
-          onClick={() => onRequestDebt({ fromBucket: b, toBucket: myBucket })}
-        >
-          Занять у {BUCKET_LABEL_GEN[b]}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function LimitStatus({ target, avail }) {
   // Больше не используется в интерфейсе: заменён индикатором из карусели подсказок
   // на вкладке «Анализ» (LimitStatus считал по притоку текущего месяца, новый расчёт —
@@ -2732,7 +2719,6 @@ function CategoryPanel({
   softColor,
   logo,
   card,
-  myBucket,
   categories,
   transactions,
   settings,
@@ -2744,7 +2730,6 @@ function CategoryPanel({
   onOpenFull,
   onDeleteTx,
   onEditTx,
-  onRequestDebt,
 }) {
   const stats = useMemo(() => categoryStats(transactions, bucketOf(card)), [transactions, card]);
   const ordered = useMemo(
@@ -2773,8 +2758,6 @@ function CategoryPanel({
         {/* Баланс вместо потраченного */}
         <div className="sum">{formatMoney(balance)}</div>
       </div>
-
-      {onRequestDebt && <DebtBorrowLinks myBucket={myBucket} onRequestDebt={onRequestDebt} />}
 
       <div className="hero-row">
         <button className="side-arrow" disabled={!canPrev} onClick={onPrev} type="button">
@@ -2840,7 +2823,6 @@ function OzonPanel({
   onPrev,
   onNext,
   onOpenFull,
-  onRequestDebt,
 }) {
   const dayStats = useMemo(() => ozonDayStats(transactions), [transactions]);
   const days = settings.reminderDays.length ? settings.reminderDays : [5, 15, 30];
@@ -2876,16 +2858,15 @@ function OzonPanel({
         <div className="sum">{formatMoney(balance)}</div>
       </div>
 
-      {onRequestDebt && <DebtBorrowLinks myBucket="savings" onRequestDebt={onRequestDebt} />}
-
       <div className="hero-row">
         <button className="side-arrow" disabled={!canPrev} onClick={onPrev} type="button">
           <ChevronLeft size={30} />
         </button>
 
+        {/* Пополнение подушки — обычный перевод, а не заём, поэтому галочка «Считать долгом» здесь выключена */}
         <AddBigButton
           label="Добавить перевод"
-          onClick={() => onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon" })}
+          onClick={() => onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon", debt: false })}
         />
 
         <button className="side-arrow" disabled={!canNext} onClick={onNext} type="button">
@@ -2911,6 +2892,7 @@ function OzonPanel({
                   type: "transfer",
                   fromCard: "sber",
                   toCard: "ozon",
+                  debt: false,
                   amount: s?.modalAmount ?? "",
                 });
               }}
@@ -3105,6 +3087,8 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
   const [toCard, setToCard] = useState(initial?.toCard || "alfa");
   const [category, setCategory] = useState(initial?.category || defaultCategoryFor(initialBucket));
   const [note, setNote] = useState(initial?.note || "");
+  // Галочка «Считать долгом» у перевода: по умолчанию включена (initial.debt === false её выключает).
+  const [asDebt, setAsDebt] = useState(initial?.debt ?? true);
 
   const [split, setSplit] = useState(false);
   const [splitAmount2, setSplitAmount2] = useState("");
@@ -3123,6 +3107,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
     setToCard(initial?.toCard || "alfa");
     setCategory(initial?.category || defaultCategoryFor(b));
     setNote(initial?.note || "");
+    setAsDebt(initial?.debt ?? true);
     setSplit(false);
     setSplitAmount2("");
     setSplitCategory2("");
@@ -3151,8 +3136,14 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
   const categories2 = catListOf(settings, bucket2);
 
   const isEdit = !!initial?.editId;
-  const homeCard = homeCardOf(bucket);
-  const isAnomaly = type === "expense" && card !== homeCard;
+
+  // Части траты, оплаченные картой «чужого» бюджета, — каждая такая часть станет внутренним долгом.
+  const expenseParts = type === "expense"
+    ? [{ bucket, amount: amountNum }, ...(split ? [{ bucket: bucket2, amount: splitAmountNum }] : [])]
+    : [];
+  const anomalyParts = expenseParts.filter((p) => CARD_BUCKET[card] !== p.bucket);
+
+  const transferDebtActive = type === "transfer" && asDebt && fromCard !== toCard;
 
   const computedBalance = useMemo(
     () => computeBalances(transactions || [], settings, date)[card],
@@ -3225,14 +3216,17 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
         note: note.trim(),
       });
     } else if (type === "transfer") {
-      onSubmit({
-        type: "transfer",
-        date,
-        amount: amountNum,
-        fromCard,
-        toCard,
-        note: note.trim(),
-      });
+      onSubmit(
+        {
+          type: "transfer",
+          date,
+          amount: amountNum,
+          fromCard,
+          toCard,
+          note: note.trim(),
+        },
+        { asDebt }
+      );
     } else if (type === "adjustment" && isEdit) {
       if (!hasEditAmountInput) {
         window.alert("Введите сумму корректировки (не равную 0)");
@@ -3314,13 +3308,18 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
             <CardPicker options={ALL_CARDS} value={card} onChange={setCard} />
           </div>
 
-          {isAnomaly && (
+          {anomalyParts.length > 0 && (
             <div
               className="notice"
               style={{ borderColor: C.amber, background: C.amberSoft, marginBottom: 11 }}
             >
-              ⚠️ Вы платите за «{bucket === "wants" ? "Желания" : "Нужды"}» картой {cardLabel(card)}, а не {cardLabel(homeCard)}.
-              После сохранения баланс карт разойдётся с планом — приложение подскажет, сколько перевести для выравнивания.
+              ⚠️ Вы платите картой {cardLabel(card)} («{BUCKET_LABEL[CARD_BUCKET[card]]}») за другой бюджет — это запишется как долг:
+              {anomalyParts.map((p, i) => (
+                <div key={i} style={{ fontWeight: 700, marginTop: 3 }}>
+                  «{BUCKET_LABEL[p.bucket]}» должны «{BUCKET_LABEL_GEN[CARD_BUCKET[card]]}»{p.amount > 0 ? ` ${formatMoney(p.amount)}` : ""}
+                </div>
+              ))}
+              <div style={{ marginTop: 3 }}>Долг погасится автоматически из следующего дохода.</div>
             </div>
           )}
 
@@ -3400,6 +3399,29 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
         </div>
       )}
 
+      {type === "transfer" && (
+        <>
+          <div className="field" style={{ marginBottom: transferDebtActive ? 6 : 11 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={asDebt}
+                onChange={(e) => setAsDebt(e.target.checked)}
+                style={{ width: "auto", height: "auto" }}
+              />
+              <span style={{ textTransform: "none", letterSpacing: 0 }}>Считать долгом</span>
+            </label>
+          </div>
+
+          {transferDebtActive && (
+            <div className="small-note" style={{ marginBottom: 11 }}>
+              «{BUCKET_LABEL[CARD_BUCKET[toCard]]}» должны «{BUCKET_LABEL_GEN[CARD_BUCKET[fromCard]]}»
+              {amountNum > 0 ? ` ${formatMoney(amountNum)}` : ""}. Долг погасится автоматически из следующего дохода.
+            </div>
+          )}
+        </>
+      )}
+
       {type === "adjustment" && (
         <>
           <div className="field">
@@ -3473,7 +3495,6 @@ function AddPageContent({
   onSelectPage,
   onDeleteTx,
   onEditTx,
-  onRequestDebt,
 }) {
   const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
 
@@ -3488,7 +3509,6 @@ function AddPageContent({
           softColor={C.sberSoft}
           logo="check"
           card="sber"
-          myBucket="needs"
           categories={settings.needCats}
           transactions={transactions}
           settings={settings}
@@ -3500,7 +3520,6 @@ function AddPageContent({
           onNext={onNext}
           onDeleteTx={onDeleteTx}
           onEditTx={onEditTx}
-          onRequestDebt={onRequestDebt}
         />
       ),
     },
@@ -3514,7 +3533,6 @@ function AddPageContent({
           softColor={C.alfaSoft}
           logo="A"
           card="alfa"
-          myBucket="wants"
           categories={settings.wantCats}
           transactions={transactions}
           settings={settings}
@@ -3526,7 +3544,6 @@ function AddPageContent({
           onNext={onNext}
           onDeleteTx={onDeleteTx}
           onEditTx={onEditTx}
-          onRequestDebt={onRequestDebt}
         />
       ),
     },
@@ -3543,7 +3560,6 @@ function AddPageContent({
           canNext={canNext}
           onPrev={onPrev}
           onNext={onNext}
-          onRequestDebt={onRequestDebt}
         />
       ),
     },
@@ -3570,8 +3586,9 @@ function AddPageContent({
   );
 }
 
-/* Builds a FullAddForm "initial" seed from an existing transaction, for editing. */
-function deriveFormInitialFromTx(tx) {
+/* Builds a FullAddForm "initial" seed from an existing transaction, for editing.
+   Для перевода галочка «Считать долгом» включена, только если к нему уже привязан долг. */
+function deriveFormInitialFromTx(tx, transactions) {
   const base = { type: tx.type, date: tx.date, amount: tx.amount, note: tx.note || "", editId: tx.id };
   if (tx.type === "expense") {
     return { ...base, card: tx.card, bucket: tx.bucket || bucketOf(tx.card), category: tx.category };
@@ -3580,7 +3597,8 @@ function deriveFormInitialFromTx(tx) {
     return { ...base, card: tx.card };
   }
   if (tx.type === "transfer") {
-    return { ...base, fromCard: tx.fromCard, toCard: tx.toCard };
+    const linked = (transactions || []).some((t) => t.type === "debt" && t.sourceTxId === tx.id);
+    return { ...base, fromCard: tx.fromCard, toCard: tx.toCard, debt: linked };
   }
   if (tx.type === "adjustment") {
     return { ...base, card: tx.card };
@@ -4152,7 +4170,6 @@ export default function App() {
   const [lastAddPage, setLastAddPage] = useState(0);
   const [formInitial, setFormInitial] = useState(null);
   const [newIncomeTx, setNewIncomeTx] = useState(null);
-  const [debtRequest, setDebtRequest] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(todayMonthKey());
   const [toast, setToast] = useState(null);
   const touchRef = useRef(null);
@@ -4215,25 +4232,34 @@ export default function App() {
   // каждый вызов берёт `transactions` из одного и того же устаревшего замыкания, и
   // последующие вызовы перезатирают предыдущие — часть операций (например, вторая
   // половина разбивки) молча пропадает.
-  function addTransactions(newTxs) {
+  //
+  // meta.asDebt — галочка «Считать долгом» у перевода. Долг за трату «чужой» картой
+  // создаётся автоматически (см. debtSpecFor), для остальных типов операций долг не нужен.
+  function addTransactions(newTxs, meta) {
     const withIds = newTxs.map((tx) => ({ ...tx, id: uid() }));
-    persistTransactions([...transactions, ...withIds]);
+    let next = [...transactions, ...withIds];
+    withIds.forEach((tx) => { next = syncLinkedDebt(next, tx, meta?.asDebt); });
+    persistTransactions(next);
     setToast("Добавлено");
     setTimeout(() => setToast(null), 1400);
   }
 
-  function addTransaction(tx) {
-    addTransactions([tx]);
+  function addTransaction(tx, meta) {
+    addTransactions([tx], meta);
   }
 
+  // Вместе с операцией удаляется и привязанный к ней долг (трата чужой картой / перевод-заём).
   function deleteTransaction(id) {
-    persistTransactions(transactions.filter((t) => t.id !== id));
+    persistTransactions(
+      transactions.filter((t) => t.id !== id && !(t.type === "debt" && t.sourceTxId === id))
+    );
     setToast("Удалено");
     setTimeout(() => setToast(null), 1200);
   }
 
-  function updateTransaction(id, updatedTx) {
-    persistTransactions(transactions.map((t) => (t.id === id ? { ...updatedTx, id } : t)));
+  function updateTransaction(id, updatedTx, meta) {
+    const replaced = transactions.map((t) => (t.id === id ? { ...updatedTx, id } : t));
+    persistTransactions(syncLinkedDebt(replaced, { ...updatedTx, id }, meta?.asDebt));
     setToast("Изменено");
     setTimeout(() => setToast(null), 1200);
   }
@@ -4246,39 +4272,11 @@ export default function App() {
     const groupId = first.splitGroup || uid();
     const updatedFirst = { ...first, id, splitGroup: groupId };
     const newOnes = rest.map((tx) => ({ ...tx, splitGroup: groupId, id: uid() }));
-    const next = transactions.map((t) => (t.id === id ? updatedFirst : t)).concat(newOnes);
+    let next = transactions.map((t) => (t.id === id ? updatedFirst : t)).concat(newOnes);
+    [updatedFirst, ...newOnes].forEach((tx) => { next = syncLinkedDebt(next, tx, false); });
     persistTransactions(next);
     setToast("Изменено");
     setTimeout(() => setToast(null), 1200);
-  }
-
-  // Одалживание между бюджетами: реальный перевод денег плюс запись долга — одним
-  // атомарным обновлением, чтобы обе записи гарантированно попали в историю.
-  function submitDebt({ fromBucket, toBucket, fromCard, toCard, amount, date }) {
-    const transferTx = {
-      type: "transfer",
-      date,
-      amount,
-      fromCard,
-      toCard,
-      note: `Заём: ${BUCKET_LABEL[toBucket]} у ${BUCKET_LABEL_GEN[fromBucket]}`,
-      id: uid(),
-    };
-    const debtTx = {
-      type: "debt",
-      date,
-      amount,
-      remainingAmount: amount,
-      fromBucket,
-      toBucket,
-      repaid: false,
-      note: "",
-      id: uid(),
-    };
-    persistTransactions([...transactions, transferTx, debtTx]);
-    setDebtRequest(null);
-    setToast("Занято");
-    setTimeout(() => setToast(null), 1400);
   }
 
   function toggleDebtRepaid(id) {
@@ -4344,7 +4342,7 @@ export default function App() {
     setFormInitial(null);
   }
 
-  function submitForm(tx) {
+  function submitForm(tx, meta) {
     if (Array.isArray(tx)) {
       if (formInitial?.editId) {
         updateTransactionAsSplit(formInitial.editId, tx);
@@ -4356,12 +4354,12 @@ export default function App() {
     }
 
     if (formInitial?.editId) {
-      updateTransaction(formInitial.editId, tx);
+      updateTransaction(formInitial.editId, tx, meta);
       closeForm();
       return;
     }
 
-    addTransaction(tx);
+    addTransaction(tx, meta);
     // Если это доход — показываем модалку автоматического распределения
     if (tx.type === "income") {
       setNewIncomeTx(tx);
@@ -4506,15 +4504,6 @@ export default function App() {
               />
             )}
 
-            {debtRequest && (
-              <DebtModal
-                balances={computeBalances(transactions, settings, null)}
-                request={debtRequest}
-                onSubmit={submitDebt}
-                onClose={() => setDebtRequest(null)}
-              />
-            )}
-
             {formInitial ? (
               <div className="screen-stack">
                 <FullAddForm
@@ -4537,8 +4526,7 @@ export default function App() {
                 onNext={() => goPage(1)}
                 onSelectPage={selectPage}
                 onDeleteTx={deleteTransaction}
-                onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx))}
-                onRequestDebt={setDebtRequest}
+                onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx, transactions))}
               />
             ) : pageIndex === 3 ? (
               <AnalysisView
@@ -4547,7 +4535,7 @@ export default function App() {
                 selectedMonth={selectedMonth}
                 setSelectedMonth={setSelectedMonth}
                 onDelete={deleteTransaction}
-                onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx))}
+                onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx, transactions))}
                 onToggleInclude={toggleIncludeInTotal}
                 onCloseMonth={closeMonth}
                 onToggleDebtRepaid={toggleDebtRepaid}
