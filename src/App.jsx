@@ -247,9 +247,9 @@ const BUCKET_LABEL_GEN = { needs: "Нужд", wants: "Желаний", savings: 
 // Оформление экранов «Добавить» под каждый бакет: картинка-иллюстрация, фон
 // «папки» и цвет заголовка — все три взяты из присланных макетов/картинок.
 const BUCKET_STYLE = {
-  needs: { card: "sber", art: cardNeedsImg, folderBg: "#E7F1DC", titleColor: "#1F5C34" },
-  wants: { card: "alfa", art: cardWantsImg, folderBg: "#FEE8CD", titleColor: "#AE3523" },
-  savings: { card: "ozon", art: cardSavingsImg, folderBg: "#D5E7F0", titleColor: "#1E5478" },
+  needs: { card: "sber", art: cardNeedsImg, folderBg: "#E9F2E0", titleColor: "#1F5C34" },
+  wants: { card: "alfa", art: cardWantsImg, folderBg: "#FEEAD2", titleColor: "#AE3523" },
+  savings: { card: "ozon", art: cardSavingsImg, folderBg: "#D9E9F2", titleColor: "#1E5478" },
 };
 const DEBT_REPAY_CAP = 0.5; // максимум половины обычной доли бакета-должника уходит на погашение за раз
 
@@ -1143,6 +1143,7 @@ function AppStyles() {
         display: flex;
         flex-direction: column;
         gap: 14px;
+        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
       }
 
       .bucket-tabs {
@@ -1150,6 +1151,7 @@ function AppStyles() {
         grid-template-columns: repeat(3, minmax(0, 1fr));
         width: calc(100% + 24px);
         margin: 0 -12px 2px;
+        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
       }
 
       .bucket-tab {
@@ -1332,42 +1334,16 @@ function AppStyles() {
       .cat-row {
         width: 100%;
         min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        border: 1px solid ${C.gardenCardBorder};
-        background: ${C.gardenCard};
-        border-radius: 16px;
-        padding: 8px 8px;
-        color: ${C.ink};
-        box-shadow: 0 3px 8px rgba(22, 32, 27, 0.03);
-      }
-
-      .cat-row-top {
-        width: 100%;
-        min-width: 0;
+        height: 52px;
         display: flex;
         align-items: center;
         gap: 10px;
-      }
-
-      .cat-row-bar {
-        width: 100%;
-        height: 5px;
+        border: 1px solid ${C.gardenCardBorder};
+        background: ${C.gardenCard};
         border-radius: 999px;
-        overflow: hidden;
-        background: ${C.border};
-        display: flex;
-      }
-
-      .cat-row-bar-green {
-        height: 100%;
-        background: ${C.sber};
-      }
-
-      .cat-row-bar-red {
-        height: 100%;
-        background: ${C.danger};
+        padding: 6px 14px 6px 6px;
+        color: ${C.ink};
+        box-shadow: 0 3px 8px rgba(22, 32, 27, 0.03);
       }
 
       .cat-row-icon {
@@ -1380,26 +1356,13 @@ function AppStyles() {
         justify-content: center;
       }
 
-      .cat-row-main {
+      .cat-row-name {
         flex: 1;
         min-width: 0;
         text-align: left;
-      }
-
-      .cat-row-name {
         font-size: 13px;
         font-weight: 700;
         line-height: 1.2;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .cat-row-amount {
-        font-size: 11px;
-        color: ${C.inkMuted};
-        font-variant-numeric: tabular-nums;
-        margin-top: 1px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -1950,7 +1913,7 @@ function AppStyles() {
         position: relative;
         z-index: 1;
         pointer-events: auto;
-        width: min(calc(100vw - 24px), 406px);
+        width: min(calc(100vw - 84px), 320px);
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 8px;
@@ -1959,6 +1922,7 @@ function AppStyles() {
         border-radius: 22px;
         background: ${C.gardenNav};
         box-shadow: 0 12px 28px rgba(22, 32, 27, 0.13);
+        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
       }
 
       .nav-btn {
@@ -2105,7 +2069,8 @@ function AppStyles() {
         }
 
         .cat-row {
-          padding: 7px 8px;
+          height: 48px;
+          padding: 6px 12px 6px 6px;
           gap: 8px;
         }
 
@@ -2118,10 +2083,6 @@ function AppStyles() {
           font-size: 12px;
         }
 
-        .cat-row-amount {
-          font-size: 10px;
-        }
-
         .operation-tabs button {
           font-size: 10px;
         }
@@ -2131,7 +2092,7 @@ function AppStyles() {
         }
 
         .bottom-nav {
-          width: calc(100vw - 16px);
+          width: calc(100vw - 64px);
           gap: 6px;
           padding: 7px;
         }
@@ -2561,49 +2522,14 @@ function ListTile({ icon: Icon, color, name, amount, onClick, empty }) {
   );
 }
 
-function CategoryQuickRow({ icon: Icon, color, name, spent, limit, fallbackAmount, onClick }) {
-  const hasLimit = limit > 0;
-  const over = hasLimit && spent > limit;
-
-  let greenPct = 0;
-  let redPct = 0;
-  if (hasLimit) {
-    const total = Math.max(spent, limit, 1);
-    greenPct = (Math.min(spent, limit) / total) * 100;
-    redPct = over ? ((spent - limit) / total) * 100 : 0;
-  }
-
+function CategoryQuickRow({ icon: Icon, color, name, onClick }) {
   return (
     <button onClick={onClick} className="cat-row" type="button">
-      <div className="cat-row-top">
-        <div className="cat-row-icon" style={{ background: color + "22" }}>
-          <Icon size={18} style={{ color }} />
-        </div>
-        <div className="cat-row-main">
-          <div className="cat-row-name">{name}</div>
-          <div className="cat-row-amount">
-            {hasLimit ? (
-              <>
-                <span style={over ? { color: C.danger, fontWeight: 800 } : undefined}>
-                  {formatMoney(spent)}
-                </span>
-                {" из "}
-                {formatMoney(limit)}
-              </>
-            ) : fallbackAmount != null ? (
-              formatMoney(fallbackAmount)
-            ) : (
-              "Нет трат"
-            )}
-          </div>
-        </div>
+      <div className="cat-row-icon" style={{ background: color + "22" }}>
+        <Icon size={18} style={{ color }} />
       </div>
-      {hasLimit && (
-        <div className="cat-row-bar">
-          <div className="cat-row-bar-green" style={{ width: `${greenPct}%` }} />
-          {redPct > 0 && <div className="cat-row-bar-red" style={{ width: `${redPct}%` }} />}
-        </div>
-      )}
+      <div className="cat-row-name">{name}</div>
+      <ChevronRight size={16} className="cat-row-chevron" />
     </button>
   );
 }
@@ -2786,12 +2712,6 @@ function CategoryPanel({
   const outflow = card === "sber" ? agg.sberOutflow : agg.alfaOutflow;
   const monthlyTotals = card === "sber" ? agg.needCatTotals : agg.wantCatTotals;
 
-  const bucketLimitThisMonth = card === "sber" ? agg.needsLimit : agg.wantsLimit;
-  const categoryLimits = useMemo(
-    () => computeCategoryLimits(transactions, settings, categories, bucket, todayMonthKey(), bucketLimitThisMonth),
-    [transactions, settings, categories, bucket, bucketLimitThisMonth]
-  );
-
   return (
     <div className="add-panel">
       <TopAmounts inflow={inflow} outflow={outflow} card={card} />
@@ -2812,8 +2732,6 @@ function CategoryPanel({
         {ordered.map((cat) => {
           const s = stats[cat.name];
           const Icon = getIcon(cat.icon);
-          const monthAmount = monthlyTotals[cat.name] || 0;
-          const limit = categoryLimits[cat.name] || 0;
 
           return (
             <CategoryQuickRow
@@ -2821,9 +2739,6 @@ function CategoryPanel({
               icon={Icon}
               color={cat.color}
               name={cat.name}
-              spent={monthAmount}
-              limit={limit}
-              fallbackAmount={s?.modalAmount ?? null}
               onClick={() => {
                 onOpenFull({
                   type: "expense",
