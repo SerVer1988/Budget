@@ -1013,36 +1013,11 @@ function AppStyles() {
         overflow-x: hidden;
       }
 
-      .app-header {
-        flex: 0 0 auto;
-        padding: calc(10px + env(safe-area-inset-top)) 14px 6px;
-      }
-
-      .app-title-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-      }
-
-      .app-title {
-        font-size: 18px;
-        line-height: 1.2;
-        font-weight: 700;
-        letter-spacing: -0.02em;
-      }
-
-      .app-date {
-        font-size: 12px;
-        color: ${C.inkMuted};
-        white-space: nowrap;
-      }
-
       .app-main {
         flex: 1 1 auto;
         min-height: 0;
         width: 100%;
-        padding: 8px 12px calc(94px + env(safe-area-inset-bottom));
+        padding: calc(8px + env(safe-area-inset-top)) 12px calc(94px + env(safe-area-inset-bottom));
         overflow-y: auto;
         overflow-x: hidden;
         -webkit-overflow-scrolling: touch;
@@ -1124,11 +1099,13 @@ function AppStyles() {
       }
 
       .add-panel {
-        width: 100%;
+        width: calc(100% + 24px);
+        margin: 0 -12px;
         min-width: 0;
-        border: 1px solid ${C.border};
-        border-radius: 24px;
-        padding: 14px 7px 14px;
+        border-top: 1px solid ${C.border};
+        border-bottom: 1px solid ${C.border};
+        border-radius: 0;
+        padding: 14px 12px 14px;
         overflow: hidden;
         background:
           radial-gradient(circle at 0% 18%, color-mix(in srgb, var(--soft) 65%, transparent) 0, transparent 34%),
@@ -2027,8 +2004,9 @@ function AppStyles() {
         }
 
         .add-panel {
-          border-radius: 20px;
-          padding: 12px 6px;
+          width: calc(100% + 18px);
+          margin: 0 -9px;
+          padding: 12px 9px;
         }
 
         .carousel-heading h2 {
@@ -2109,13 +2087,8 @@ function AppStyles() {
       }
 
       @media (max-height: 720px) {
-        .app-header {
-          padding-top: calc(7px + env(safe-area-inset-top));
-          padding-bottom: 3px;
-        }
-
         .app-main {
-          padding-top: 6px;
+          padding-top: calc(6px + env(safe-area-inset-top));
         }
 
         .add-panel {
@@ -4136,8 +4109,8 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking }) {
 /* ============================================================ Bottom nav */
 function TabBar({ pageIndex, onSelectAdd, onSelectAnalysis, onSelectSettings }) {
   const items = [
-    { id: "add", label: "Добавить", icon: Plus, cls: "add", onClick: onSelectAdd, active: pageIndex <= 2 },
-    { id: "analysis", label: "Анализ", icon: BarChart3, cls: "", onClick: onSelectAnalysis, active: pageIndex === 3 },
+    { id: "analysis", label: "Анализ", icon: BarChart3, cls: "", onClick: onSelectAnalysis, active: pageIndex === 0 },
+    { id: "add", label: "Добавить", icon: Plus, cls: "add", onClick: onSelectAdd, active: pageIndex >= 1 && pageIndex <= 3 },
     { id: "settings", label: "Настройки", icon: SettingsIcon, cls: "", onClick: onSelectSettings, active: pageIndex === 4 },
   ];
 
@@ -4166,8 +4139,8 @@ export default function App() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [transactions, setTransactions] = useState([]);
   const [loaded, setLoaded] = useState(false);
-  const [pageIndex, setPageIndex] = useState(0); // 0 Нужды, 1 Желания, 2 Подушка, 3 Анализ, 4 Настройки
-  const [lastAddPage, setLastAddPage] = useState(0);
+  const [pageIndex, setPageIndex] = useState(1); // 0 Анализ, 1 Нужды, 2 Желания, 3 Подушка, 4 Настройки; по умолчанию — Добавить (Нужды)
+  const [lastAddPage, setLastAddPage] = useState(1);
   const [formInitial, setFormInitial] = useState(null);
   const [newIncomeTx, setNewIncomeTx] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(todayMonthKey());
@@ -4175,7 +4148,7 @@ export default function App() {
   const touchRef = useRef(null);
 
   useEffect(() => {
-    if (pageIndex <= 2) setLastAddPage(pageIndex);
+    if (pageIndex >= 1 && pageIndex <= 3) setLastAddPage(pageIndex);
   }, [pageIndex]);
 
   useEffect(() => {
@@ -4406,6 +4379,25 @@ export default function App() {
     setPageIndex(Math.max(0, Math.min(4, i)));
   }
 
+  // Тот же вариант операции, что открывает большая "+"-кнопка на самой странице
+  // (Нужды/Желания/Подушка), — используется при повторном нажатии на "Добавить".
+  function defaultAddFormFor(pi) {
+    if (pi === 2) return { type: "expense", card: "alfa", bucket: "wants" };
+    if (pi === 3) return { type: "transfer", fromCard: "sber", toCard: "ozon", debt: false };
+    return { type: "expense", card: "sber", bucket: "needs" };
+  }
+
+  // Первое нажатие на "Добавить" (если мы не в разделе Добавить) — переход на последнюю
+  // открытую страницу (Нужды/Желания/Подушка). Повторное нажатие (мы уже там и форма
+  // закрыта) — сразу открывает "Новую операцию".
+  function handleSelectAdd() {
+    if (!formInitial && pageIndex >= 1 && pageIndex <= 3) {
+      openForm(defaultAddFormFor(pageIndex));
+    } else {
+      selectPage(lastAddPage);
+    }
+  }
+
   function goPage(delta) {
     if (formInitial) return;
     setPageIndex((i) => Math.max(0, Math.min(4, i + delta)));
@@ -4445,54 +4437,12 @@ export default function App() {
     );
   }
 
-  const showOpTabs = pageIndex <= 2 && !formInitial;
-
   return (
     <>
       <AppStyles />
 
       <div className="app-viewport">
         <div className="app-shell">
-          <header className="app-header">
-            <div className="app-title-row">
-              <div>
-                <div className="app-title">Бюджет</div>
-                <div className="app-date">{monthLabelShort(todayMonthKey())}</div>
-              </div>
-
-              <div style={{
-                width: 36,
-                height: 36,
-                borderRadius: 14,
-                background: C.surface,
-                border: `1px solid ${C.border}`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: C.inkMuted,
-              }}>
-                <Wallet size={18} />
-              </div>
-            </div>
-
-            {showOpTabs && (
-              <div style={{ marginTop: 8 }}>
-                <OperationTabs
-                  value="expense"
-                  onChange={(type) => {
-                    if (type === "expense") return;
-                    if (type === "income") openForm({ type: "income", card: "sber" });
-                    else if (type === "transfer") openForm({ type: "transfer", fromCard: "sber", toCard: "alfa" });
-                    else if (type === "adjustment") {
-                      const card = pageIndex === 1 ? "alfa" : pageIndex === 2 ? "ozon" : "sber";
-                      openForm({ type: "adjustment", card });
-                    }
-                  }}
-                />
-              </div>
-            )}
-          </header>
-
           <main className="app-main" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
             {newIncomeTx && (
               <IncomeDistributionModal
@@ -4514,21 +4464,7 @@ export default function App() {
                   onCancel={closeForm}
                 />
               </div>
-            ) : pageIndex <= 2 ? (
-              <AddPageContent
-                pageIndex={pageIndex}
-                settings={settings}
-                transactions={transactions}
-                openForm={openForm}
-                canPrev={pageIndex > 0}
-                canNext={pageIndex < 4}
-                onPrev={() => goPage(-1)}
-                onNext={() => goPage(1)}
-                onSelectPage={selectPage}
-                onDeleteTx={deleteTransaction}
-                onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx, transactions))}
-              />
-            ) : pageIndex === 3 ? (
+            ) : pageIndex === 0 ? (
               <AnalysisView
                 settings={settings}
                 transactions={transactions}
@@ -4539,7 +4475,21 @@ export default function App() {
                 onToggleInclude={toggleIncludeInTotal}
                 onCloseMonth={closeMonth}
                 onToggleDebtRepaid={toggleDebtRepaid}
-                goToAdd={() => selectPage(0)}
+                goToAdd={() => selectPage(1)}
+              />
+            ) : pageIndex >= 1 && pageIndex <= 3 ? (
+              <AddPageContent
+                pageIndex={pageIndex - 1}
+                settings={settings}
+                transactions={transactions}
+                openForm={openForm}
+                canPrev={pageIndex > 0}
+                canNext={pageIndex < 4}
+                onPrev={() => goPage(-1)}
+                onNext={() => goPage(1)}
+                onSelectPage={(i) => selectPage(i + 1)}
+                onDeleteTx={deleteTransaction}
+                onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx, transactions))}
               />
             ) : (
               <SettingsView
@@ -4553,8 +4503,8 @@ export default function App() {
 
           <TabBar
             pageIndex={pageIndex}
-            onSelectAdd={() => selectPage(lastAddPage)}
-            onSelectAnalysis={() => selectPage(3)}
+            onSelectAdd={handleSelectAdd}
+            onSelectAnalysis={() => selectPage(0)}
             onSelectSettings={() => selectPage(4)}
           />
           <Toast text={toast} />
