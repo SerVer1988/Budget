@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Home, Plus, PiggyBank, BarChart3, Settings as SettingsIcon,
+  Home, PiggyBank,
   ChevronLeft, ChevronRight, ChevronDown, Trash2, Check, AlertTriangle, Wallet, X, ArrowUp, ArrowDown, Pencil,
   ShoppingCart, ShoppingBag, UtensilsCrossed, Coffee, Zap, Droplet, Wifi, Phone,
   Car, Bus, Fuel, Plane, Train, HeartPulse, Pill, Stethoscope, Dumbbell, GraduationCap,
@@ -11,6 +11,18 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { storage } from "./storage.js";
+
+/* Оформление «дачный уголок»: иллюстрации, значки и шрифт под новый стиль.
+   Файлы лежат в ./assets — если у тебя другая структура проекта, просто
+   поправь пути в этих нескольких import'ах, остальной код трогать не нужно. */
+import cardNeedsImg from "./assets/card-needs.webp";
+import cardWantsImg from "./assets/card-wants.webp";
+import cardSavingsImg from "./assets/card-savings.webp";
+import bottomPlantsImg from "./assets/bottom-plants.webp";
+import badgeSberImg from "./assets/badge-sber.webp";
+import badgeAlfaImg from "./assets/badge-alfa.webp";
+import badgeOzonImg from "./assets/badge-ozon.webp";
+import handwrittenFontUrl from "./assets/font-handwritten.ttf";
 
 /* ============================================================ design tokens */
 const C = {
@@ -30,6 +42,16 @@ const C = {
   amberSoft: "#FBF0DF",
   danger: "#C0392B",
   dangerSoft: "#FBEAE8",
+
+  // «Дачный уголок» — палитра раздела «Добавить» + нижняя панель (из присланных макетов)
+  gardenInk: "#00733B",
+  gardenInkDeep: "#08352C",
+  gardenCard: "#FCFDF6",
+  gardenCardBorder: "#D0D6C1",
+  gardenNav: "#FDFDF6",
+  gardenNavBorder: "#A6BC98",
+  gardenNavActive: "#E3EFD1",
+  gardenNavActiveBorder: "#CEDFBF",
 };
 
 const MONTHS_RU = ["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
@@ -45,25 +67,26 @@ const ICON_MAP = {
 const ICON_KEYS = Object.keys(ICON_MAP);
 function getIcon(key) { return ICON_MAP[key] || HelpCircle; }
 
-const CATEGORY_COLORS = ["#E8935C", "#2D8C6F", "#D46A93", "#D4A537", "#7C6FC4", "#3B82C4", "#C4573B", "#4F7CAC", "#8A6D4F", "#6B7280"];
+// Приглушённая «садовая» палитра категорий — под новый стиль (вместо ярких цветов)
+const CATEGORY_COLORS = ["#C97A4E", "#7C9473", "#6B93AD", "#C4A54A", "#9B7BA6", "#4F8C82", "#C48A93", "#A67C52", "#5E7C4F", "#8C8577"];
 
 const DEFAULT_NEED_CATS = [
-  { name: "Аренда/ипотека", icon: "Home", color: "#7C6FC4" },
-  { name: "ЖКХ", icon: "Zap", color: "#D4A537" },
-  { name: "Продукты", icon: "ShoppingCart", color: "#E8935C" },
-  { name: "Транспорт", icon: "Bus", color: "#3B82C4" },
-  { name: "Связь", icon: "Wifi", color: "#2D8C6F" },
-  { name: "Лекарства/здоровье", icon: "HeartPulse", color: "#D46A93" },
-  { name: "Прочее", icon: "MoreHorizontal", color: "#6B7280" },
+  { name: "Аренда/ипотека", icon: "Home", color: "#9B7BA6" },
+  { name: "ЖКХ", icon: "Zap", color: "#C4A54A" },
+  { name: "Продукты", icon: "ShoppingCart", color: "#C97A4E" },
+  { name: "Транспорт", icon: "Bus", color: "#6B93AD" },
+  { name: "Связь", icon: "Wifi", color: "#4F8C82" },
+  { name: "Лекарства/здоровье", icon: "HeartPulse", color: "#C48A93" },
+  { name: "Прочее", icon: "MoreHorizontal", color: "#8C8577" },
 ];
 
 const DEFAULT_WANT_CATS = [
-  { name: "Кафе/рестораны", icon: "UtensilsCrossed", color: "#C4573B" },
-  { name: "Кино/развлечения", icon: "Film", color: "#7C6FC4" },
-  { name: "Шоппинг", icon: "ShoppingBag", color: "#D46A93" },
-  { name: "Подписки", icon: "Tv", color: "#3B82C4" },
-  { name: "Подарки", icon: "Gift", color: "#2D8C6F" },
-  { name: "Прочее", icon: "MoreHorizontal", color: "#6B7280" },
+  { name: "Кафе/рестораны", icon: "UtensilsCrossed", color: "#D08B5B" },
+  { name: "Кино/развлечения", icon: "Film", color: "#9B7BA6" },
+  { name: "Шоппинг", icon: "ShoppingBag", color: "#C48A93" },
+  { name: "Подписки", icon: "Tv", color: "#6B93AD" },
+  { name: "Подарки", icon: "Gift", color: "#5E7C4F" },
+  { name: "Прочее", icon: "MoreHorizontal", color: "#8C8577" },
 ];
 
 const DEFAULT_SETTINGS = {
@@ -220,6 +243,14 @@ const BUCKET_CARD = { needs: "sber", wants: "alfa", savings: "ozon" };
 const CARD_BUCKET = { sber: "needs", alfa: "wants", ozon: "savings" };
 const BUCKET_LABEL = { needs: "Нужды", wants: "Желания", savings: "Подушка" };
 const BUCKET_LABEL_GEN = { needs: "Нужд", wants: "Желаний", savings: "Подушки" };
+
+// Оформление экранов «Добавить» под каждый бакет: картинка-иллюстрация, фон
+// «папки» и цвет заголовка — все три взяты из присланных макетов/картинок.
+const BUCKET_STYLE = {
+  needs: { card: "sber", art: cardNeedsImg, folderBg: "#E7F1DC", titleColor: "#1F5C34" },
+  wants: { card: "alfa", art: cardWantsImg, folderBg: "#FEE8CD", titleColor: "#AE3523" },
+  savings: { card: "ozon", art: cardSavingsImg, folderBg: "#D5E7F0", titleColor: "#1E5478" },
+};
 const DEBT_REPAY_CAP = 0.5; // максимум половины обычной доли бакета-должника уходит на погашение за раз
 
 /* Как обычный computeIncomeSplit, но если есть непогашенные "внутренние займы" между
@@ -967,6 +998,12 @@ function migrateTransactions(list, settings) {
 function AppStyles() {
   return (
     <style>{`
+      @font-face {
+        font-family: 'Handgeschrieben';
+        src: url(${handwrittenFontUrl}) format('truetype');
+        font-display: swap;
+      }
+
       * {
         box-sizing: border-box;
       }
@@ -1021,6 +1058,8 @@ function AppStyles() {
         overflow-y: auto;
         overflow-x: hidden;
         -webkit-overflow-scrolling: touch;
+        background: ${C.bg};
+        transition: background-color 0.25s ease;
       }
 
       .app-main::-webkit-scrollbar {
@@ -1099,18 +1138,51 @@ function AppStyles() {
       }
 
       .add-panel {
-        width: calc(100% + 24px);
-        margin: 0 -12px;
+        width: 100%;
         min-width: 0;
-        border-top: 1px solid ${C.border};
-        border-bottom: 1px solid ${C.border};
-        border-radius: 0;
-        padding: 14px 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .bucket-tabs {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        width: calc(100% + 24px);
+        margin: 0 -12px 2px;
+      }
+
+      .bucket-tab {
+        height: 38px;
+        min-width: 0;
+        border: 0;
+        font-weight: 700;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+        color: ${C.ink};
+        opacity: 0.62;
+        cursor: pointer;
         overflow: hidden;
-        background:
-          radial-gradient(circle at 0% 18%, color-mix(in srgb, var(--soft) 65%, transparent) 0, transparent 34%),
-          radial-gradient(circle at 100% 82%, color-mix(in srgb, var(--soft) 65%, transparent) 0, transparent 32%),
-          linear-gradient(180deg, color-mix(in srgb, var(--soft) 74%, #fff) 0%, ${C.bg} 100%);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        transition: opacity 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .bucket-tab:first-child {
+        border-radius: 16px 0 0 16px;
+      }
+
+      .bucket-tab:last-child {
+        border-radius: 0 16px 16px 0;
+      }
+
+      .bucket-tab.active {
+        opacity: 1;
+        font-size: 14px;
+        font-weight: 800;
+        box-shadow: 0 4px 10px rgba(22, 32, 27, 0.1);
+        position: relative;
+        z-index: 1;
       }
 
       .add-top {
@@ -1118,7 +1190,6 @@ function AppStyles() {
         grid-template-columns: minmax(0, 1fr) 50px minmax(0, 1fr);
         align-items: center;
         gap: 8px;
-        margin-bottom: 10px;
       }
 
       .amount-mini {
@@ -1151,42 +1222,28 @@ function AppStyles() {
       }
 
       .bank-badge {
-        width: 46px;
-        height: 46px;
+        width: 44px;
+        height: 44px;
+        flex: 0 0 auto;
         border-radius: 999px;
-        background: var(--accent);
-        color: #fff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        line-height: 1;
-        font-weight: 900;
-        text-align: center;
-        border: 3px solid rgba(255,255,255,0.88);
+        overflow: hidden;
         box-shadow: 0 4px 12px rgba(22, 32, 27, 0.14);
       }
 
-      .carousel-heading {
+      .bank-badge img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .folder-title {
+        margin: 2px 0 0;
         text-align: center;
-        margin: 4px 0 10px;
-      }
-
-      .carousel-heading h2 {
-        margin: 0;
-        font-size: 28px;
-        line-height: 1.02;
-        font-weight: 700;
-        letter-spacing: -0.03em;
-        color: ${C.ink};
-      }
-
-      .carousel-heading .sum {
-        margin-top: 3px;
-        font-size: 20px;
-        font-weight: 800;
-        font-variant-numeric: tabular-nums;
-        color: ${C.ink};
+        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
+        font-size: 34px;
+        line-height: 1.1;
+        font-weight: 400;
       }
 
       .limit-status {
@@ -1195,60 +1252,65 @@ function AppStyles() {
         font-weight: 600;
       }
 
-      .hero-row {
-        display: grid;
-        grid-template-columns: 34px minmax(0, 1fr) 34px;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 12px;
-      }
-
-      .side-arrow {
-        width: 34px;
-        height: 48px;
-        border: 0;
-        background: transparent;
-        color: ${C.inkMuted};
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .side-arrow:disabled {
-        opacity: 0.22;
-      }
-
-      .big-add {
+      .hero-illustration {
+        position: relative;
         width: 100%;
-        min-width: 0;
-        height: 58px;
-        border-radius: 16px;
-        border: 1px solid color-mix(in srgb, var(--accent) 35%, ${C.border});
-        background: rgba(255,255,255,0.88);
-        color: var(--accent);
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        box-shadow: 0 6px 14px rgba(22, 32, 27, 0.06);
+        line-height: 0;
       }
 
-      .big-add .plus-circle {
-        width: 34px;
-        height: 34px;
-        border-radius: 50%;
-        background: color-mix(in srgb, var(--soft) 78%, #fff);
-        border: 1px dashed color-mix(in srgb, var(--accent) 40%, ${C.border});
-        display: flex;
-        align-items: center;
-        justify-content: center;
+      .hero-illustration img {
+        width: 100%;
+        height: auto;
+        display: block;
+        user-select: none;
+        -webkit-user-drag: none;
       }
 
-      .big-add span {
+      .hero-hit {
+        position: absolute;
+        background: transparent;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        border-radius: 999px;
+      }
+
+      .hero-hit:focus-visible {
+        outline: 2px solid ${C.gardenInk};
+        outline-offset: 2px;
+      }
+
+      .hero-hit-prev,
+      .hero-hit-next {
+        top: 80%;
+        width: 17%;
+        height: 22%;
+        transform: translate(-50%, -50%);
+      }
+
+      .hero-hit-prev {
+        left: 24.5%;
+      }
+
+      .hero-hit-next {
+        left: 74.5%;
+      }
+
+      .hero-hit-add {
+        left: 49.5%;
+        top: 76.5%;
+        width: 21%;
+        height: 28%;
+        transform: translate(-50%, -50%);
+      }
+
+      .hero-add-label {
+        margin-top: -4px;
+        text-align: center;
+        font-weight: 800;
         font-size: 13px;
-        font-weight: 700;
+        color: ${C.gardenInk};
       }
 
       .quick-grid {
@@ -1273,9 +1335,9 @@ function AppStyles() {
         display: flex;
         flex-direction: column;
         gap: 6px;
-        border: 1px solid color-mix(in srgb, var(--accent) 16%, ${C.border});
-        background: rgba(255,255,255,0.92);
-        border-radius: 14px;
+        border: 1px solid ${C.gardenCardBorder};
+        background: ${C.gardenCard};
+        border-radius: 16px;
         padding: 8px 8px;
         color: ${C.ink};
         box-shadow: 0 3px 8px rgba(22, 32, 27, 0.03);
@@ -1351,8 +1413,8 @@ function AppStyles() {
       .quick-tile {
         min-width: 0;
         min-height: 104px;
-        border: 1px solid color-mix(in srgb, var(--accent) 20%, ${C.border});
-        background: rgba(255,255,255,0.9);
+        border: 1px solid ${C.gardenCardBorder};
+        background: ${C.gardenCard};
         border-radius: 17px;
         padding: 9px 7px;
         display: flex;
@@ -1388,7 +1450,7 @@ function AppStyles() {
         display: flex;
         align-items: center;
         justify-content: center;
-        background: color-mix(in srgb, var(--soft) 72%, #fff);
+        background: color-mix(in srgb, ${C.gardenInk} 14%, #fff);
       }
 
       .quick-icon svg {
@@ -1860,54 +1922,66 @@ function AppStyles() {
         color: ${C.inkMuted};
       }
 
-      .bottom-nav {
+      .bottom-nav-wrap {
         position: fixed;
         left: 50%;
-        bottom: max(10px, env(safe-area-inset-bottom));
+        bottom: max(6px, env(safe-area-inset-bottom));
         transform: translateX(-50%);
-        width: min(calc(100vw - 24px), 406px);
+        width: min(calc(100vw - 8px), 430px);
         z-index: 30;
+        display: flex;
+        justify-content: center;
+        pointer-events: none;
+      }
+
+      .bottom-nav-plants {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -8px;
+        width: 100%;
+        height: auto;
+        pointer-events: none;
+        user-select: none;
+        z-index: 0;
+      }
+
+      .bottom-nav {
+        position: relative;
+        z-index: 1;
+        pointer-events: auto;
+        width: min(calc(100vw - 24px), 406px);
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 8px;
         padding: 8px;
-        border: 1px solid ${C.border};
+        border: 1px solid ${C.gardenNavBorder};
         border-radius: 22px;
-        background: rgba(255,255,255,0.94);
+        background: ${C.gardenNav};
         box-shadow: 0 12px 28px rgba(22, 32, 27, 0.13);
-        backdrop-filter: blur(10px);
       }
 
       .nav-btn {
         min-width: 0;
         height: 54px;
-        border: 1px solid ${C.border};
+        border: 1px solid transparent;
         border-radius: 16px;
-        background: ${C.surface};
-        color: ${C.inkMuted};
+        background: transparent;
+        color: ${C.gardenInk};
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         gap: 4px;
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 600;
         cursor: pointer;
       }
 
-      .nav-btn svg {
-        width: 20px;
-        height: 20px;
-      }
-
       .nav-btn.active {
-        background: ${C.sberSoft};
-        color: ${C.ink};
-        border-color: ${C.border};
-      }
-
-      .nav-btn.add.active svg {
-        color: ${C.sber};
+        background: ${C.gardenNavActive};
+        border-color: ${C.gardenNavActiveBorder};
+        font-weight: 800;
       }
 
       .toast {
@@ -2003,31 +2077,13 @@ function AppStyles() {
           padding-right: 9px;
         }
 
-        .add-panel {
+        .bucket-tabs {
           width: calc(100% + 18px);
-          margin: 0 -9px;
-          padding: 12px 9px;
+          margin: 0 -9px 2px;
         }
 
-        .carousel-heading h2 {
-          font-size: 25px;
-        }
-
-        .carousel-heading .sum {
-          font-size: 18px;
-        }
-
-        .hero-row {
-          grid-template-columns: 28px minmax(0, 1fr) 28px;
-          gap: 5px;
-        }
-
-        .side-arrow {
-          width: 28px;
-        }
-
-        .big-add {
-          height: 52px;
+        .folder-title {
+          font-size: 28px;
         }
 
         .quick-grid {
@@ -2092,12 +2148,11 @@ function AppStyles() {
         }
 
         .add-panel {
-          padding-top: 11px;
-          padding-bottom: 11px;
+          gap: 10px;
         }
 
         .add-top {
-          margin-bottom: 7px;
+          margin-bottom: 0;
         }
 
         .bank-badge {
@@ -2105,16 +2160,8 @@ function AppStyles() {
           height: 42px;
         }
 
-        .carousel-heading {
-          margin-bottom: 8px;
-        }
-
-        .hero-row {
-          margin-bottom: 9px;
-        }
-
-        .big-add {
-          height: 50px;
+        .folder-title {
+          font-size: 30px;
         }
 
         .quick-tile {
@@ -2432,22 +2479,24 @@ function InsightsCarousel({ insights }) {
 }
 
 /* ============================================================ Add carousel parts */
-function BankBadge({ label, accentColor }) {
+const BADGE_IMG = { sber: badgeSberImg, alfa: badgeAlfaImg, ozon: badgeOzonImg };
+
+function BankBadge({ card }) {
   return (
-    <div className="bank-badge" style={{ background: accentColor }}>
-      {label === "check" ? <Check size={23} /> : <span>{label}</span>}
+    <div className="bank-badge">
+      <img src={BADGE_IMG[card]} alt="" />
     </div>
   );
 }
 
-function TopAmounts({ inflow, outflow, logo, accentColor }) {
+function TopAmounts({ inflow, outflow, card }) {
   return (
     <div className="add-top">
       <div className="amount-mini">
         <span>Пришло:</span>
         <b style={{ color: C.sber }}>+{formatMoney(Math.abs(inflow))}</b>
       </div>
-      <BankBadge label={logo} accentColor={accentColor} />
+      <BankBadge card={card} />
       <div className="amount-mini right">
         <span>Ушло:</span>
         <b style={{ color: C.danger }}>−{formatMoney(Math.abs(outflow))}</b>
@@ -2456,14 +2505,37 @@ function TopAmounts({ inflow, outflow, logo, accentColor }) {
   );
 }
 
-function AddBigButton({ label, onClick }) {
+/* Иллюстрация «Нужды/Желания/Подушка»: картинка уже содержит нарисованную
+   пилюлю с ‹ + ›, поверх неё лежат три прозрачные кнопки-хитзоны (проценты
+   от размера картинки, так что попадание остаётся точным на любой ширине). */
+function IllustratedHero({ art, canPrev, canNext, onPrev, onNext, onAdd, addLabel }) {
   return (
-    <button onClick={onClick} className="big-add" type="button">
-      <div className="plus-circle">
-        <Plus size={20} />
+    <>
+      <div className="hero-illustration">
+        <img src={art} alt="" draggable="false" />
+        <button
+          type="button"
+          className="hero-hit hero-hit-prev"
+          disabled={!canPrev}
+          onClick={onPrev}
+          aria-label="Предыдущая вкладка"
+        />
+        <button
+          type="button"
+          className="hero-hit hero-hit-add"
+          onClick={onAdd}
+          aria-label={addLabel || "Новая операция"}
+        />
+        <button
+          type="button"
+          className="hero-hit hero-hit-next"
+          disabled={!canNext}
+          onClick={onNext}
+          aria-label="Следующая вкладка"
+        />
       </div>
-      {label && <span>{label}</span>}
-    </button>
+      <div className="hero-add-label">{addLabel || "Новое"}</div>
+    </>
   );
 }
 
@@ -2688,14 +2760,10 @@ function CategoryDonut({ categories, totals, bucketLabel, transactions, bucket, 
 
 function CategoryPanel({
   title,
-  accentColor,
-  softColor,
-  logo,
   card,
   categories,
   transactions,
   settings,
-  balances,
   canPrev,
   canNext,
   onPrev,
@@ -2704,13 +2772,15 @@ function CategoryPanel({
   onDeleteTx,
   onEditTx,
 }) {
-  const stats = useMemo(() => categoryStats(transactions, bucketOf(card)), [transactions, card]);
+  const bucket = bucketOf(card);
+  const style = BUCKET_STYLE[bucket];
+
+  const stats = useMemo(() => categoryStats(transactions, bucket), [transactions, bucket]);
   const ordered = useMemo(
     () => [...categories].sort((a, b) => (stats[b.name]?.count || 0) - (stats[a.name]?.count || 0)),
     [categories, stats]
   );
 
-  const balance = balances[card] || 0;
   const agg = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
   const inflow = card === "sber" ? agg.sberInflow : agg.alfaInflow;
   const outflow = card === "sber" ? agg.sberOutflow : agg.alfaOutflow;
@@ -2718,31 +2788,25 @@ function CategoryPanel({
 
   const bucketLimitThisMonth = card === "sber" ? agg.needsLimit : agg.wantsLimit;
   const categoryLimits = useMemo(
-    () => computeCategoryLimits(transactions, settings, categories, bucketOf(card), todayMonthKey(), bucketLimitThisMonth),
-    [transactions, settings, categories, card, bucketLimitThisMonth]
+    () => computeCategoryLimits(transactions, settings, categories, bucket, todayMonthKey(), bucketLimitThisMonth),
+    [transactions, settings, categories, bucket, bucketLimitThisMonth]
   );
 
   return (
-    <div className="add-panel" style={{ "--accent": accentColor, "--soft": softColor }}>
-      <TopAmounts inflow={inflow} outflow={outflow} logo={logo} accentColor={accentColor} />
+    <div className="add-panel">
+      <TopAmounts inflow={inflow} outflow={outflow} card={card} />
 
-      <div className="carousel-heading">
-        <h2>{title}</h2>
-        {/* Баланс вместо потраченного */}
-        <div className="sum">{formatMoney(balance)}</div>
-      </div>
+      <h2 className="folder-title" style={{ color: style.titleColor }}>{title}</h2>
 
-      <div className="hero-row">
-        <button className="side-arrow" disabled={!canPrev} onClick={onPrev} type="button">
-          <ChevronLeft size={30} />
-        </button>
-
-        <AddBigButton onClick={() => onOpenFull({ type: "expense", card, bucket: bucketOf(card) })} />
-
-        <button className="side-arrow" disabled={!canNext} onClick={onNext} type="button">
-          <ChevronRight size={30} />
-        </button>
-      </div>
+      <IllustratedHero
+        art={style.art}
+        canPrev={canPrev}
+        canNext={canNext}
+        onPrev={onPrev}
+        onNext={onNext}
+        onAdd={() => onOpenFull({ type: "expense", card, bucket })}
+        addLabel="Новое"
+      />
 
       <div className="cat-list">
         {ordered.map((cat) => {
@@ -2764,7 +2828,7 @@ function CategoryPanel({
                 onOpenFull({
                   type: "expense",
                   card,
-                  bucket: bucketOf(card),
+                  bucket,
                   category: cat.name,
                   amount: s?.modalAmount ?? "",
                 });
@@ -2779,7 +2843,7 @@ function CategoryPanel({
         totals={monthlyTotals}
         bucketLabel={title}
         transactions={transactions}
-        bucket={bucketOf(card)}
+        bucket={bucket}
         onDeleteTx={onDeleteTx}
         onEditTx={onEditTx}
       />
@@ -2823,29 +2887,21 @@ function OzonPanel({
   while (visibleDays.length < 4) visibleDays.push(null);
 
   return (
-    <div className="add-panel" style={{ "--accent": C.ozon, "--soft": C.ozonSoft }}>
-      <TopAmounts inflow={agg.ozonInflow} outflow={agg.ozonOutflow} logo="ozon" accentColor={C.ozon} />
+    <div className="add-panel">
+      <TopAmounts inflow={agg.ozonInflow} outflow={agg.ozonOutflow} card="ozon" />
 
-      <div className="carousel-heading">
-        <h2>Подушка</h2>
-        <div className="sum">{formatMoney(balance)}</div>
-      </div>
+      <h2 className="folder-title" style={{ color: BUCKET_STYLE.savings.titleColor }}>Подушка</h2>
 
-      <div className="hero-row">
-        <button className="side-arrow" disabled={!canPrev} onClick={onPrev} type="button">
-          <ChevronLeft size={30} />
-        </button>
-
-        {/* Пополнение подушки — обычный перевод, а не заём, поэтому галочка «Считать долгом» здесь выключена */}
-        <AddBigButton
-          label="Добавить перевод"
-          onClick={() => onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon", debt: false })}
-        />
-
-        <button className="side-arrow" disabled={!canNext} onClick={onNext} type="button">
-          <ChevronRight size={30} />
-        </button>
-      </div>
+      {/* Пополнение подушки — обычный перевод, а не заём, поэтому галочка «Считать долгом» здесь выключена */}
+      <IllustratedHero
+        art={BUCKET_STYLE.savings.art}
+        canPrev={canPrev}
+        canNext={canNext}
+        onPrev={onPrev}
+        onNext={onNext}
+        onAdd={() => onOpenFull({ type: "transfer", fromCard: "sber", toCard: "ozon", debt: false })}
+        addLabel="Новый перевод"
+      />
 
       <div className="quick-grid">
         {visibleDays.map((d, i) => {
@@ -3456,6 +3512,32 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
 }
 
 /* ============================================================ Add view */
+/* Три плашки-баланса сверху экрана «Добавить» — переход между Нужды/Желания/
+   Подушка одним тапом (заменяют прежние точки-навигацию снизу). */
+function BucketBalanceTabs({ activeIndex, balances, onSelect }) {
+  const items = [
+    { card: "sber", bg: BUCKET_STYLE.needs.folderBg },
+    { card: "alfa", bg: BUCKET_STYLE.wants.folderBg },
+    { card: "ozon", bg: BUCKET_STYLE.savings.folderBg },
+  ];
+
+  return (
+    <div className="bucket-tabs">
+      {items.map((it, i) => (
+        <button
+          key={it.card}
+          type="button"
+          className={`bucket-tab ${i === activeIndex ? "active" : ""}`}
+          style={{ background: it.bg }}
+          onClick={() => onSelect(i)}
+        >
+          {formatMoney(balances[it.card] || 0)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function AddPageContent({
   pageIndex,
   settings,
@@ -3473,19 +3555,13 @@ function AddPageContent({
 
   const pages = [
     {
-      accent: C.sber,
-      label: "Нужды",
       render: () => (
         <CategoryPanel
           title="Нужды"
-          accentColor={C.sber}
-          softColor={C.sberSoft}
-          logo="check"
           card="sber"
           categories={settings.needCats}
           transactions={transactions}
           settings={settings}
-          balances={balances}
           onOpenFull={openForm}
           canPrev={canPrev}
           canNext={canNext}
@@ -3497,19 +3573,13 @@ function AddPageContent({
       ),
     },
     {
-      accent: C.alfa,
-      label: "Желания",
       render: () => (
         <CategoryPanel
           title="Желания"
-          accentColor={C.alfa}
-          softColor={C.alfaSoft}
-          logo="A"
           card="alfa"
           categories={settings.wantCats}
           transactions={transactions}
           settings={settings}
-          balances={balances}
           onOpenFull={openForm}
           canPrev={canPrev}
           canNext={canNext}
@@ -3521,8 +3591,6 @@ function AddPageContent({
       ),
     },
     {
-      accent: C.ozon,
-      label: "Подушка",
       render: () => (
         <OzonPanel
           settings={settings}
@@ -3542,19 +3610,8 @@ function AddPageContent({
 
   return (
     <div className="screen-stack">
+      <BucketBalanceTabs activeIndex={pageIndex} balances={balances} onSelect={onSelectPage} />
       {current.render()}
-
-      <div className="dots" style={{ "--accent": current.accent }}>
-        {pages.map((p, i) => (
-          <button
-            key={p.label}
-            className={`dot ${i === pageIndex ? "active" : ""}`}
-            type="button"
-            onClick={() => onSelectPage(i)}
-            aria-label={p.label}
-          />
-        ))}
-      </div>
     </div>
   );
 }
@@ -4107,30 +4164,68 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking }) {
 }
 
 /* ============================================================ Bottom nav */
+/* Иконки нижней панели — из присланных SVG, перекрашиваются через currentColor */
+function NavIconAnalysis({ size = 22 }) {
+  return (
+    <svg viewBox="0 0 0.078 0.075" style={{ width: size, height: size }}>
+      <path
+        fill="currentColor"
+        d="M0.057 0l0.017 0c0.001,0 0.002,0 0.003,0.001 0,0.001 0.001,0.001 0.001,0.002l0 0.069c0,0.001 -0.001,0.002 -0.001,0.002 -0.001,0.001 -0.002,0.001 -0.003,0.001l-0.017 0c-0.001,0 -0.002,0 -0.002,-0.001 -0.001,0 -0.001,-0.001 -0.001,-0.002l0 -0.069c0,-0.001 0,-0.001 0.001,-0.002 0,-0.001 0.001,-0.001 0.002,-0.001zm-0.054 0.035l0.018 0c0.001,0 0.001,0.001 0.002,0.001 0.001,0.001 0.001,0.002 0.001,0.003l0 0.033c0,0.001 0,0.002 -0.001,0.002 -0.001,0.001 -0.001,0.001 -0.002,0.001l-0.018 0c-0.001,0 -0.001,0 -0.002,-0.001 -0.001,0 -0.001,-0.001 -0.001,-0.002l0 -0.033c0,-0.001 0,-0.002 0.001,-0.003 0.001,0 0.001,-0.001 0.002,-0.001zm0.015 0.006l-0.012 0 0 0.029 0.012 0 0 -0.029zm0.013 -0.023l0.017 0c0.001,0 0.002,0.001 0.002,0.001 0.001,0.001 0.001,0.002 0.001,0.003l0 0.05c0,0.001 0,0.002 -0.001,0.002 0,0.001 -0.001,0.001 -0.002,0.001l-0.017 0c-0.001,0 -0.002,0 -0.003,-0.001 0,0 -0.001,-0.001 -0.001,-0.002l0 -0.05c0,-0.001 0.001,-0.002 0.001,-0.003 0.001,0 0.002,-0.001 0.003,-0.001zm0.015 0.006l-0.013 0 0 0.046 0.013 0 0 -0.046zm0.026 -0.018l-0.013 0 0 0.064 0.013 0 0 -0.064z"
+      />
+    </svg>
+  );
+}
+
+function NavIconSettings({ size = 22 }) {
+  return (
+    <svg viewBox="0 0 0.075 0.075" style={{ width: size, height: size }}>
+      <path
+        fill="currentColor"
+        d="M0.025 0.036c0,0.003 0,0.005 0,0.006 0.001,0.002 0.002,0.003 0.003,0.005 0.001,0 0.002,0.001 0.002,0.001 0.001,0 0.001,0.001 0.002,0.001 0.002,0.001 0.005,0.002 0.007,0.001 0.003,0 0.005,-0.001 0.006,-0.002l0 0c0.002,-0.002 0.003,-0.002 0.004,-0.004 0,0 0,-0.001 0.001,-0.001l0 -0.001c0.001,-0.002 0.001,-0.004 0,-0.007 0,-0.002 -0.001,-0.005 -0.003,-0.007 -0.001,0 -0.001,-0.001 -0.002,-0.001 -0.002,-0.002 -0.006,-0.003 -0.009,-0.003 -0.003,0.001 -0.005,0.002 -0.008,0.004 0,0.001 0,0.001 -0.001,0.002 0,0 -0.001,0.002 -0.002,0.003 0,0.001 0,0.002 0,0.003zm-0.005 0.008c0,-0.002 -0.001,-0.005 -0.001,-0.008 0,-0.001 0.001,-0.003 0.001,-0.005 0.001,-0.002 0.002,-0.003 0.003,-0.005 0.001,0 0.001,-0.001 0.002,-0.002 0.003,-0.003 0.007,-0.004 0.011,-0.005 0.004,0 0.009,0.001 0.012,0.004 0.001,0 0.002,0.001 0.002,0.002 0.003,0.002 0.005,0.006 0.006,0.009 0,0.004 0,0.008 -0.002,0.011l0 0c0,0.001 0,0.001 -0.001,0.002 -0.001,0.002 -0.002,0.003 -0.004,0.005l0 0c-0.003,0.002 -0.006,0.003 -0.009,0.004 -0.004,0 -0.007,-0.001 -0.01,-0.002 -0.001,-0.001 -0.002,-0.001 -0.003,-0.002 -0.001,0 -0.001,-0.001 -0.002,-0.002 -0.002,-0.002 -0.004,-0.004 -0.005,-0.006zm0.004 -0.031c-0.002,0 -0.003,-0.001 -0.004,-0.001 -0.001,-0.001 -0.002,-0.001 -0.003,0 0,0.001 -0.001,0.002 -0.002,0.002 -0.002,0.002 -0.003,0.004 -0.003,0.005l0 0.001c0.001,0.002 0.002,0.005 -0.001,0.009 0,0.001 -0.001,0.001 -0.002,0.001 0,0.001 -0.001,0.001 -0.001,0.001 -0.003,0.001 -0.003,0.002 -0.003,0.006 0,0.002 0,0.003 0,0.004 0,0.001 0,0.001 0.001,0.001 0,0 0,0.001 0,0.001 0,0 0.001,0 0.001,0l0.001 0c0.007,0.003 0.005,0.009 0.004,0.012 0,0.001 0,0.001 0,0.001 0,0.001 0.001,0.002 0.002,0.003 0,0 0.001,0.001 0.001,0.001l0.001 0.001c0.001,0.001 0.002,0.002 0.003,0.002 0,0 0.001,0 0.001,0 0.003,-0.001 0.005,-0.002 0.009,0.001 0.002,0.001 0.002,0.002 0.003,0.004 0,0.001 0.001,0.002 0.001,0.002l0.008 0c0.001,0 0.001,0 0.001,0 0,-0.001 0.001,-0.001 0.001,-0.001 0,0 0,-0.001 0.001,-0.001 0.001,-0.003 0.002,-0.006 0.007,-0.006 0.002,0 0.003,0.001 0.004,0.001 0,0 0.001,0 0.002,0 0,0 0.002,-0.001 0.002,-0.002l0.001 -0.001c0.001,0 0.001,-0.001 0.002,-0.001 0.001,-0.001 0.002,-0.002 0.002,-0.003 0,-0.001 0,0 -0.001,-0.001 -0.001,-0.003 -0.003,-0.008 0.004,-0.011 0.003,-0.002 0.003,-0.002 0.003,-0.006 0,-0.002 0,-0.003 0,-0.005 0,0 -0.001,-0.001 -0.002,-0.001 -0.001,-0.001 -0.002,-0.001 -0.004,-0.003 -0.003,-0.003 -0.002,-0.006 -0.001,-0.008 0,-0.001 0.001,-0.002 0.001,-0.003 0,0 -0.001,0 -0.001,-0.001 -0.002,-0.001 -0.003,-0.003 -0.005,-0.005 -0.001,-0.001 -0.002,-0.001 -0.003,0 -0.001,0 -0.002,0.001 -0.004,0.001 -0.005,0 -0.006,-0.003 -0.008,-0.006 0,-0.001 0,-0.002 -0.001,-0.002l-0.009 0c0,0 0,0 -0.001,0.001 0,0 0,0.001 0,0.002 -0.001,0.001 -0.002,0.002 -0.003,0.003 -0.002,0.001 -0.003,0.002 -0.005,0.002zm-0.002 -0.006c0.001,0 0.001,0 0.002,0 0.001,0 0.001,0 0.002,0 0,0 0,-0.001 0.001,-0.001 0,-0.001 0.001,-0.003 0.001,-0.004 0.002,-0.001 0.003,-0.002 0.005,-0.002l0.009 0c0.004,0 0.005,0.002 0.006,0.005 0.001,0.001 0.001,0.002 0.003,0.002 0.001,0 0.002,0 0.002,0 0.003,-0.001 0.005,-0.002 0.009,0.002l0.005 0.005c0.001,0.001 0.002,0.002 0.002,0.004 0,0.002 -0.001,0.003 -0.001,0.004 0,0.001 -0.001,0.003 0,0.003 0.001,0.001 0.002,0.002 0.003,0.002 0.002,0.001 0.004,0.002 0.004,0.006 0,0.002 0,0.003 0,0.004 0,0.008 0,0.009 -0.005,0.011 -0.003,0.002 -0.002,0.004 -0.002,0.005 0.001,0.001 0.001,0.002 0.001,0.003 0,0.003 -0.001,0.004 -0.004,0.007 0,0 -0.001,0 -0.001,0.001l-0.001 0.001c-0.001,0.001 -0.004,0.004 -0.006,0.004 -0.002,0 -0.004,-0.001 -0.005,-0.001 0,0 0,-0.001 -0.001,-0.001 -0.002,0 -0.002,0.002 -0.003,0.003 0,0.001 -0.001,0.002 -0.002,0.003 -0.001,0.001 -0.001,0.001 -0.002,0.001 -0.001,0.001 -0.002,0.001 -0.003,0.001l-0.008 0c-0.004,0 -0.005,-0.002 -0.006,-0.005 0,-0.001 -0.001,-0.002 -0.001,-0.002 -0.001,-0.001 -0.003,0 -0.004,0 -0.001,0 -0.002,0.001 -0.003,0.001 -0.003,0 -0.005,-0.003 -0.007,-0.004l-0.001 -0.001c0,0 -0.001,-0.001 -0.001,-0.001 -0.002,-0.002 -0.004,-0.004 -0.004,-0.007 0,-0.001 0,-0.001 0.001,-0.002 0,-0.002 0.001,-0.005 -0.001,-0.006l-0.001 0c-0.001,0 -0.002,-0.001 -0.003,-0.002 -0.001,0 -0.001,-0.001 -0.001,-0.002 -0.001,-0.001 -0.001,-0.002 -0.001,-0.003 0,-0.002 0,-0.003 0,-0.004 0,-0.007 0,-0.008 0.006,-0.01 0,-0.001 0,-0.001 0.001,-0.001 0,0 0,0 0,0 0.001,-0.002 0,-0.003 0,-0.004 0,-0.001 -0.001,-0.002 -0.001,-0.003 0,-0.004 0.003,-0.006 0.006,-0.009 0,0 0.001,-0.001 0.002,-0.001 0.003,-0.004 0.005,-0.003 0.008,-0.002z"
+      />
+    </svg>
+  );
+}
+
+function NavIconAdd({ size = 34 }) {
+  return (
+    <svg viewBox="0 0 0.136 0.136" style={{ width: size, height: size }}>
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        d="M0.068 0.002c0.037,0 0.066,0.029 0.066,0.066 0,0.037 -0.029,0.066 -0.066,0.066 -0.037,0 -0.066,-0.029 -0.066,-0.066 0,-0.037 0.029,-0.066 0.066,-0.066zm0 0.038c0.003,0 0.005,0.002 0.005,0.005l0 0.018 0.018 0c0.003,0 0.005,0.003 0.005,0.005 0,0.003 -0.002,0.006 -0.005,0.006l-0.018 0 0 0.018c0,0.003 -0.002,0.005 -0.005,0.005 -0.003,0 -0.005,-0.002 -0.005,-0.005l0 -0.018 -0.018 0c-0.003,0 -0.005,-0.003 -0.005,-0.006 0,-0.002 0.002,-0.005 0.005,-0.005l0.018 0 0 -0.018c0,-0.003 0.002,-0.005 0.005,-0.005z"
+      />
+    </svg>
+  );
+}
+
 function TabBar({ pageIndex, onSelectAdd, onSelectAnalysis, onSelectSettings }) {
   const items = [
-    { id: "analysis", label: "Анализ", icon: BarChart3, cls: "", onClick: onSelectAnalysis, active: pageIndex === 0 },
-    { id: "add", label: "Добавить", icon: Plus, cls: "add", onClick: onSelectAdd, active: pageIndex >= 1 && pageIndex <= 3 },
-    { id: "settings", label: "Настройки", icon: SettingsIcon, cls: "", onClick: onSelectSettings, active: pageIndex === 4 },
+    { id: "analysis", label: "Анализ", Icon: NavIconAnalysis, iconSize: 22, cls: "", onClick: onSelectAnalysis, active: pageIndex === 0 },
+    { id: "add", label: "Добавить", Icon: NavIconAdd, iconSize: 34, cls: "add", onClick: onSelectAdd, active: pageIndex >= 1 && pageIndex <= 3 },
+    { id: "settings", label: "Настройки", Icon: NavIconSettings, iconSize: 22, cls: "", onClick: onSelectSettings, active: pageIndex === 4 },
   ];
 
   return (
-    <nav className="bottom-nav">
-      {items.map((it) => {
-        const Icon = it.icon;
-        return (
-          <button
-            key={it.id}
-            type="button"
-            className={`nav-btn ${it.cls} ${it.active ? "active" : ""}`}
-            onClick={it.onClick}
-          >
-            <Icon />
-            <span>{it.label}</span>
-          </button>
-        );
-      })}
-    </nav>
+    <div className="bottom-nav-wrap">
+      <img src={bottomPlantsImg} alt="" className="bottom-nav-plants" draggable="false" />
+      <nav className="bottom-nav">
+        {items.map((it) => {
+          const Icon = it.Icon;
+          return (
+            <button
+              key={it.id}
+              type="button"
+              className={`nav-btn ${it.cls} ${it.active ? "active" : ""}`}
+              onClick={it.onClick}
+            >
+              <Icon size={it.iconSize} />
+              <span>{it.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </div>
   );
 }
 
@@ -4437,13 +4532,21 @@ export default function App() {
     );
   }
 
+  const folderBucketKey = pageIndex === 1 ? "needs" : pageIndex === 2 ? "wants" : pageIndex === 3 ? "savings" : null;
+  const heroBg = folderBucketKey ? BUCKET_STYLE[folderBucketKey].folderBg : undefined;
+
   return (
     <>
       <AppStyles />
 
       <div className="app-viewport">
         <div className="app-shell">
-          <main className="app-main" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+          <main
+            className="app-main"
+            style={heroBg ? { background: heroBg } : undefined}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
             {newIncomeTx && (
               <IncomeDistributionModal
                 incomeTx={newIncomeTx}
