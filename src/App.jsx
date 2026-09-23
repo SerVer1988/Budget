@@ -2438,9 +2438,9 @@ function BankBadge({ card }) {
 }
 
 const HERO_TABS = [
-  { card: "sber", left: "25.2%" },
-  { card: "alfa", left: "47.9%" },
-  { card: "ozon", left: "70.9%" },
+  { card: "sber", left: "24%" },
+  { card: "alfa", left: "48%" },
+  { card: "ozon", left: "72%" },
 ];
 
 /* Единый «герой» Нужды/Желания/Подушка: картинка — фон во всю ширину экрана
