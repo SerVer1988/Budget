@@ -4531,7 +4531,7 @@ export default function App() {
                 onSave={persistSettings}
                 onWipeAll={() => persistTransactions([])}
                 onResetTracking={resetNeedsWantsTracking}
-              />
+              /> 
             )}
           </main>
 
