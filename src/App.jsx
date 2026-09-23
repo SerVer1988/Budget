@@ -1191,7 +1191,7 @@ function AppStyles() {
         transform: translate(-50%, -50%);
         background: transparent;
         border: 0;
-        padding: 7px 6px;
+        padding: 7px 8px;
         margin: 0;
         display: flex;
         align-items: center;
