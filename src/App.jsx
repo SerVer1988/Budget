@@ -247,9 +247,9 @@ const BUCKET_LABEL_GEN = { needs: "Нужд", wants: "Желаний", savings: 
 // Оформление экранов «Добавить» под каждый бакет: картинка-иллюстрация, фон
 // «папки» и цвет заголовка — все три взяты из присланных макетов/картинок.
 const BUCKET_STYLE = {
-  needs: { card: "sber", art: cardNeedsImg, folderBg: "#E9F2E0", titleColor: "#1F5C34" },
-  wants: { card: "alfa", art: cardWantsImg, folderBg: "#FEEAD2", titleColor: "#AE3523" },
-  savings: { card: "ozon", art: cardSavingsImg, folderBg: "#D9E9F2", titleColor: "#1E5478" },
+  needs: { card: "sber", art: cardNeedsImg, folderBg: "#F1F6E8", titleColor: "#1F5C34" },
+  wants: { card: "alfa", art: cardWantsImg, folderBg: "#FEF2DF", titleColor: "#AE3523" },
+  savings: { card: "ozon", art: cardSavingsImg, folderBg: "#E3F0F8", titleColor: "#1E5478" },
 };
 const DEBT_REPAY_CAP = 0.5; // максимум половины обычной доли бакета-должника уходит на погашение за раз
 
@@ -1146,90 +1146,13 @@ function AppStyles() {
         font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
       }
 
-      .bucket-tabs {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        width: calc(100% + 24px);
-        margin: 0 -12px 2px;
-        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
-      }
-
-      .bucket-tab {
-        height: 38px;
-        min-width: 0;
-        border: 0;
-        font-weight: 700;
-        font-size: 13px;
-        font-variant-numeric: tabular-nums;
-        color: ${C.ink};
-        opacity: 0.62;
-        cursor: pointer;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        transition: opacity 0.15s ease, box-shadow 0.15s ease;
-      }
-
-      .bucket-tab:first-child {
-        border-radius: 16px 0 0 16px;
-      }
-
-      .bucket-tab:last-child {
-        border-radius: 0 16px 16px 0;
-      }
-
-      .bucket-tab.active {
-        opacity: 1;
-        font-size: 14px;
-        font-weight: 800;
-        box-shadow: 0 4px 10px rgba(22, 32, 27, 0.1);
-        position: relative;
-        z-index: 1;
-      }
-
-      .add-top {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 50px minmax(0, 1fr);
-        align-items: center;
-        gap: 8px;
-      }
-
-      .amount-mini {
-        min-width: 0;
-        text-align: left;
-      }
-
-      .amount-mini.right {
-        text-align: right;
-      }
-
-      .amount-mini span {
-        display: block;
-        font-size: 10px;
-        line-height: 1.1;
-        font-weight: 700;
-        color: ${C.ink};
-        margin-bottom: 2px;
-      }
-
-      .amount-mini b {
-        display: block;
-        font-size: 12px;
-        line-height: 1.15;
-        font-weight: 800;
-        font-variant-numeric: tabular-nums;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
       .bank-badge {
-        width: 44px;
-        height: 44px;
+        width: 35px;
+        height: 35px;
         flex: 0 0 auto;
         border-radius: 999px;
         overflow: hidden;
-        box-shadow: 0 4px 12px rgba(22, 32, 27, 0.14);
+        box-shadow: 0 3px 10px rgba(22, 32, 27, 0.16);
       }
 
       .bank-badge img {
@@ -1239,28 +1162,22 @@ function AppStyles() {
         display: block;
       }
 
-      .folder-title {
-        margin: 2px 0 0;
-        text-align: center;
-        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
-        font-size: 34px;
-        line-height: 1.1;
-        font-weight: 400;
-      }
-
       .limit-status {
         font-size: 12px;
         margin-top: 4px;
         font-weight: 600;
       }
 
-      .hero-illustration {
+      /* Картинка — фон на всю ширину экрана; всё остальное лежит поверх неё
+         абсолютным позиционированием в процентах от самой картинки. */
+      .folder-hero {
         position: relative;
-        width: 100%;
+        width: calc(100% + 24px);
+        margin: 0 -12px;
         line-height: 0;
       }
 
-      .hero-illustration img {
+      .folder-hero-img {
         width: 100%;
         height: auto;
         display: block;
@@ -1268,8 +1185,91 @@ function AppStyles() {
         -webkit-user-drag: none;
       }
 
+      .hero-tab-num {
+        position: absolute;
+        top: 4.5%;
+        transform: translate(-50%, -50%);
+        background: transparent;
+        border: 0;
+        padding: 4px 6px;
+        margin: 0;
+        font-weight: 700;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
+        color: ${C.inkMuted};
+        opacity: 0.7;
+        cursor: pointer;
+        line-height: 1.1;
+        white-space: nowrap;
+      }
+
+      .hero-tab-num.active {
+        opacity: 1;
+        color: ${C.ink};
+        font-weight: 800;
+        font-size: 14px;
+      }
+
+      .hero-flow {
+        position: absolute;
+        top: 13%;
+        line-height: 1.2;
+        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
+      }
+
+      .hero-flow span {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        color: ${C.ink};
+        margin-bottom: 1px;
+      }
+
+      .hero-flow b {
+        display: block;
+        font-size: 13px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+
+      .hero-flow-in {
+        left: 4%;
+        text-align: left;
+      }
+
+      .hero-flow-out {
+        right: 4%;
+        text-align: right;
+      }
+
+      .hero-badge {
+        position: absolute;
+        left: 50%;
+        top: 18%;
+        transform: translate(-50%, -50%);
+      }
+
+      .hero-title {
+        position: absolute;
+        left: 50%;
+        top: 27%;
+        transform: translate(-50%, -50%);
+        margin: 0;
+        width: 100%;
+        text-align: center;
+        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
+        font-size: 28px;
+        line-height: 1;
+        font-weight: 400;
+        white-space: nowrap;
+      }
+
       .hero-hit {
         position: absolute;
+        appearance: none;
+        -webkit-appearance: none;
         background: transparent;
         border: 0;
         padding: 0;
@@ -1312,6 +1312,7 @@ function AppStyles() {
         text-align: center;
         font-weight: 800;
         font-size: 13px;
+        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
         color: ${C.gardenInk};
       }
 
@@ -2041,13 +2042,13 @@ function AppStyles() {
           padding-right: 9px;
         }
 
-        .bucket-tabs {
+        .folder-hero {
           width: calc(100% + 18px);
-          margin: 0 -9px 2px;
+          margin: 0 -9px;
         }
 
-        .folder-title {
-          font-size: 28px;
+        .hero-title {
+          font-size: 24px;
         }
 
         .quick-grid {
@@ -2112,17 +2113,8 @@ function AppStyles() {
           gap: 10px;
         }
 
-        .add-top {
-          margin-bottom: 0;
-        }
-
-        .bank-badge {
-          width: 42px;
-          height: 42px;
-        }
-
-        .folder-title {
-          font-size: 30px;
+        .hero-title {
+          font-size: 26px;
         }
 
         .quick-tile {
@@ -2450,30 +2442,66 @@ function BankBadge({ card }) {
   );
 }
 
-function TopAmounts({ inflow, outflow, card }) {
-  return (
-    <div className="add-top">
-      <div className="amount-mini">
-        <span>Пришло:</span>
-        <b style={{ color: C.sber }}>+{formatMoney(Math.abs(inflow))}</b>
-      </div>
-      <BankBadge card={card} />
-      <div className="amount-mini right">
-        <span>Ушло:</span>
-        <b style={{ color: C.danger }}>−{formatMoney(Math.abs(outflow))}</b>
-      </div>
-    </div>
-  );
-}
+const HERO_TABS = [
+  { card: "sber", left: "25.2%" },
+  { card: "alfa", left: "47.9%" },
+  { card: "ozon", left: "70.9%" },
+];
 
-/* Иллюстрация «Нужды/Желания/Подушка»: картинка уже содержит нарисованную
-   пилюлю с ‹ + ›, поверх неё лежат три прозрачные кнопки-хитзоны (проценты
-   от размера картинки, так что попадание остаётся точным на любой ширине). */
-function IllustratedHero({ art, canPrev, canNext, onPrev, onNext, onAdd, addLabel }) {
+/* Единый «герой» Нужды/Желания/Подушка: картинка — фон во всю ширину экрана
+   (стрелки ‹ › и кружок с плюсом уже нарисованы внутри нее), а три
+   баланса-вкладки, Пришло/Ушло, значок банка и заголовок лежат поверх неё
+   абсолютным позиционированием — в процентах от картинки, чтобы не съезжать
+   на разных экранах. Проценты подобраны под нарисованные в картинке плашки. */
+function FolderHero({
+  art,
+  card,
+  title,
+  titleColor,
+  inflow,
+  outflow,
+  balances,
+  activeIndex,
+  onSelectBucket,
+  canPrev,
+  canNext,
+  onPrev,
+  onNext,
+  onAdd,
+  addLabel,
+}) {
   return (
     <>
-      <div className="hero-illustration">
-        <img src={art} alt="" draggable="false" />
+      <div className="folder-hero">
+        <img src={art} alt="" className="folder-hero-img" draggable="false" />
+
+        {HERO_TABS.map((t, i) => (
+          <button
+            key={t.card}
+            type="button"
+            className={`hero-tab-num ${i === activeIndex ? "active" : ""}`}
+            style={{ left: t.left }}
+            onClick={() => onSelectBucket(i)}
+          >
+            {formatMoney(balances?.[t.card] || 0)}
+          </button>
+        ))}
+
+        <div className="hero-flow hero-flow-in">
+          <span>Пришло:</span>
+          <b style={{ color: C.sber }}>+{formatMoney(Math.abs(inflow))}</b>
+        </div>
+        <div className="hero-flow hero-flow-out">
+          <span>Ушло:</span>
+          <b style={{ color: C.danger }}>−{formatMoney(Math.abs(outflow))}</b>
+        </div>
+
+        <div className="hero-badge">
+          <BankBadge card={card} />
+        </div>
+
+        <h2 className="hero-title" style={{ color: titleColor }}>{title}</h2>
+
         <button
           type="button"
           className="hero-hit hero-hit-prev"
@@ -2690,6 +2718,9 @@ function CategoryPanel({
   categories,
   transactions,
   settings,
+  balances,
+  activeIndex,
+  onSelectBucket,
   canPrev,
   canNext,
   onPrev,
@@ -2714,12 +2745,16 @@ function CategoryPanel({
 
   return (
     <div className="add-panel">
-      <TopAmounts inflow={inflow} outflow={outflow} card={card} />
-
-      <h2 className="folder-title" style={{ color: style.titleColor }}>{title}</h2>
-
-      <IllustratedHero
+      <FolderHero
         art={style.art}
+        card={card}
+        title={title}
+        titleColor={style.titleColor}
+        inflow={inflow}
+        outflow={outflow}
+        balances={balances}
+        activeIndex={activeIndex}
+        onSelectBucket={onSelectBucket}
         canPrev={canPrev}
         canNext={canNext}
         onPrev={onPrev}
@@ -2770,6 +2805,8 @@ function OzonPanel({
   settings,
   transactions,
   balances,
+  activeIndex,
+  onSelectBucket,
   canPrev,
   canNext,
   onPrev,
@@ -2803,13 +2840,17 @@ function OzonPanel({
 
   return (
     <div className="add-panel">
-      <TopAmounts inflow={agg.ozonInflow} outflow={agg.ozonOutflow} card="ozon" />
-
-      <h2 className="folder-title" style={{ color: BUCKET_STYLE.savings.titleColor }}>Подушка</h2>
-
       {/* Пополнение подушки — обычный перевод, а не заём, поэтому галочка «Считать долгом» здесь выключена */}
-      <IllustratedHero
+      <FolderHero
         art={BUCKET_STYLE.savings.art}
+        card="ozon"
+        title="Подушка"
+        titleColor={BUCKET_STYLE.savings.titleColor}
+        inflow={agg.ozonInflow}
+        outflow={agg.ozonOutflow}
+        balances={balances}
+        activeIndex={activeIndex}
+        onSelectBucket={onSelectBucket}
         canPrev={canPrev}
         canNext={canNext}
         onPrev={onPrev}
@@ -3427,32 +3468,6 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
 }
 
 /* ============================================================ Add view */
-/* Три плашки-баланса сверху экрана «Добавить» — переход между Нужды/Желания/
-   Подушка одним тапом (заменяют прежние точки-навигацию снизу). */
-function BucketBalanceTabs({ activeIndex, balances, onSelect }) {
-  const items = [
-    { card: "sber", bg: BUCKET_STYLE.needs.folderBg },
-    { card: "alfa", bg: BUCKET_STYLE.wants.folderBg },
-    { card: "ozon", bg: BUCKET_STYLE.savings.folderBg },
-  ];
-
-  return (
-    <div className="bucket-tabs">
-      {items.map((it, i) => (
-        <button
-          key={it.card}
-          type="button"
-          className={`bucket-tab ${i === activeIndex ? "active" : ""}`}
-          style={{ background: it.bg }}
-          onClick={() => onSelect(i)}
-        >
-          {formatMoney(balances[it.card] || 0)}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function AddPageContent({
   pageIndex,
   settings,
@@ -3477,6 +3492,9 @@ function AddPageContent({
           categories={settings.needCats}
           transactions={transactions}
           settings={settings}
+          balances={balances}
+          activeIndex={pageIndex}
+          onSelectBucket={onSelectPage}
           onOpenFull={openForm}
           canPrev={canPrev}
           canNext={canNext}
@@ -3495,6 +3513,9 @@ function AddPageContent({
           categories={settings.wantCats}
           transactions={transactions}
           settings={settings}
+          balances={balances}
+          activeIndex={pageIndex}
+          onSelectBucket={onSelectPage}
           onOpenFull={openForm}
           canPrev={canPrev}
           canNext={canNext}
@@ -3511,6 +3532,8 @@ function AddPageContent({
           settings={settings}
           transactions={transactions}
           balances={balances}
+          activeIndex={pageIndex}
+          onSelectBucket={onSelectPage}
           onOpenFull={openForm}
           canPrev={canPrev}
           canNext={canNext}
@@ -3525,7 +3548,6 @@ function AddPageContent({
 
   return (
     <div className="screen-stack">
-      <BucketBalanceTabs activeIndex={pageIndex} balances={balances} onSelect={onSelectPage} />
       {current.render()}
     </div>
   );
