@@ -1196,9 +1196,9 @@ function AppStyles() {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 22px;
+        min-height: 23px;
         font-weight: 700;
-        font-size: 14px;
+        font-size: 15px;
         font-variant-numeric: tabular-nums;
         font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
         color: ${C.inkMuted};
@@ -1212,7 +1212,7 @@ function AppStyles() {
         opacity: 1;
         color: ${C.ink};
         font-weight: 800;
-        font-size: 16px;
+        font-size: 17px;
       }
 
       .hero-flow {
