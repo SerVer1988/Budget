@@ -1196,7 +1196,7 @@ function AppStyles() {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 23px;
+        min-height: 25px;
         font-weight: 700;
         font-size: 15px;
         font-variant-numeric: tabular-nums;
@@ -1212,7 +1212,7 @@ function AppStyles() {
         opacity: 1;
         color: ${C.ink};
         font-weight: 800;
-        font-size: 17px;
+        font-size: 18px;
       }
 
       .hero-flow {
