@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Home, PiggyBank,
+  Home, PiggyBank, Plus,
   ChevronLeft, ChevronRight, ChevronDown, Trash2, Check, AlertTriangle, Wallet, X, ArrowUp, ArrowDown, Pencil,
   ShoppingCart, ShoppingBag, UtensilsCrossed, Coffee, Zap, Droplet, Wifi, Phone,
   Car, Bus, Fuel, Plane, Train, HeartPulse, Pill, Stethoscope, Dumbbell, GraduationCap,
@@ -1193,6 +1193,10 @@ function AppStyles() {
         border: 0;
         padding: 4px 6px;
         margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 20px;
         font-weight: 700;
         font-size: 12px;
         font-variant-numeric: tabular-nums;
@@ -1235,26 +1239,19 @@ function AppStyles() {
       }
 
       .hero-flow-in {
-        left: 4%;
+        left: calc(4% + 4px);
         text-align: left;
       }
 
       .hero-flow-out {
-        right: 4%;
+        right: calc(4% + 4px);
         text-align: right;
-      }
-
-      .hero-badge {
-        position: absolute;
-        left: 50%;
-        top: 18%;
-        transform: translate(-50%, -50%);
       }
 
       .hero-title {
         position: absolute;
         left: 50%;
-        top: 27%;
+        top: 24%;
         transform: translate(-50%, -50%);
         margin: 0;
         width: 100%;
@@ -1264,6 +1261,13 @@ function AppStyles() {
         line-height: 1;
         font-weight: 400;
         white-space: nowrap;
+      }
+
+      .hero-badge {
+        position: absolute;
+        left: 50%;
+        top: 39%;
+        transform: translate(-50%, -50%);
       }
 
       .hero-hit {
@@ -1285,35 +1289,57 @@ function AppStyles() {
 
       .hero-hit-prev,
       .hero-hit-next {
-        top: 80%;
+        top: 84%;
         width: 17%;
         height: 22%;
         transform: translate(-50%, -50%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: ${C.gardenInk};
       }
 
       .hero-hit-prev {
-        left: 24.5%;
+        left: 22%;
       }
 
       .hero-hit-next {
-        left: 74.5%;
+        left: 77%;
       }
 
       .hero-hit-add {
         left: 49.5%;
-        top: 76.5%;
-        width: 21%;
-        height: 28%;
+        top: 84%;
+        width: 30%;
+        height: 34%;
         transform: translate(-50%, -50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+      }
+
+      .hero-add-circle {
+        width: 42px;
+        height: 42px;
+        flex: 0 0 auto;
+        border-radius: 999px;
+        border: 2px dashed ${C.gardenInk};
+        background: rgba(255, 255, 255, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: ${C.gardenInk};
       }
 
       .hero-add-label {
-        margin-top: -4px;
         text-align: center;
         font-weight: 800;
         font-size: 13px;
         font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
         color: ${C.gardenInk};
+        white-space: nowrap;
       }
 
       .quick-grid {
@@ -2496,11 +2522,11 @@ function FolderHero({
           <b style={{ color: C.danger }}>−{formatMoney(Math.abs(outflow))}</b>
         </div>
 
+        <h2 className="hero-title" style={{ color: titleColor }}>{title}</h2>
+
         <div className="hero-badge">
           <BankBadge card={card} />
         </div>
-
-        <h2 className="hero-title" style={{ color: titleColor }}>{title}</h2>
 
         <button
           type="button"
@@ -2508,22 +2534,30 @@ function FolderHero({
           disabled={!canPrev}
           onClick={onPrev}
           aria-label="Предыдущая вкладка"
-        />
+        >
+          <ChevronLeft size={22} strokeWidth={2.5} />
+        </button>
         <button
           type="button"
           className="hero-hit hero-hit-add"
           onClick={onAdd}
           aria-label={addLabel || "Новая операция"}
-        />
+        >
+          <span className="hero-add-circle">
+            <Plus size={26} strokeWidth={2.5} />
+          </span>
+          <span className="hero-add-label">{addLabel || "Новое"}</span>
+        </button>
         <button
           type="button"
           className="hero-hit hero-hit-next"
           disabled={!canNext}
           onClick={onNext}
           aria-label="Следующая вкладка"
-        />
+        >
+          <ChevronRight size={22} strokeWidth={2.5} />
+        </button>
       </div>
-      <div className="hero-add-label">{addLabel || "Новое"}</div>
     </>
   );
 }
