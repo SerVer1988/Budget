@@ -1191,12 +1191,12 @@ function AppStyles() {
         transform: translate(-50%, -50%);
         background: transparent;
         border: 0;
-        padding: 6px 6px;
+        padding: 7px 6px;
         margin: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 25px;
+        min-height: 22px;
         font-weight: 700;
         font-size: 15px;
         font-variant-numeric: tabular-nums;
