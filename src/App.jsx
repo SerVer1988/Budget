@@ -1382,7 +1382,6 @@ function AppStyles() {
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 3px 8px rgba(22, 32, 27, 0.16);
       }
 
       .cat-tile-name {
@@ -2689,8 +2688,8 @@ function CategoryTile({ icon: Icon, color, name, spent, limit, onClick }) {
   return (
     <button onClick={onClick} className="cat-tile" type="button">
       <div className="cat-tile-head">
-        <div className="cat-tile-icon" style={{ background: color }}>
-          <Icon size={20} color="#fff" />
+        <div className="cat-tile-icon" style={{ background: color + "22" }}>
+          <Icon size={20} style={{ color }} />
         </div>
         <div className="cat-tile-name">{name}</div>
       </div>
