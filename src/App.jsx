@@ -1190,12 +1190,12 @@ function AppStyles() {
         transform: translate(-50%, -50%);
         background: transparent;
         border: 0;
-        padding: 7px 8px;
+        padding: 8px 8px;
         margin: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 22px;
+        min-height: 24px;
         font-weight: 700;
         font-size: 15px;
         font-variant-numeric: tabular-nums;
@@ -2433,7 +2433,7 @@ function BankBadge({ card }) {
 }
 
 const HERO_TABS = [
-  { card: "sber", left: "22%" },
+  { card: "sber", left: "23%" },
   { card: "alfa", left: "49%" },
   { card: "ozon", left: "75%" },
 ];
