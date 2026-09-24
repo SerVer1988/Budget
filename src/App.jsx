@@ -1755,22 +1755,25 @@ function AppStyles() {
       }
 
       .total-balance {
-        text-align: center;
-        padding: 16px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        text-align: left;
       }
 
       .total-balance .label {
         font-size: 12px;
         color: ${C.inkMuted};
-        margin-bottom: 4px;
+        margin-bottom: 2px;
       }
 
       .total-balance .value {
-        font-size: 27px;
+        font-size: 24px;
         line-height: 1.12;
         font-weight: 900;
         font-variant-numeric: tabular-nums;
-        margin-bottom: 12px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -1778,10 +1781,10 @@ function AppStyles() {
 
       .check-row {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
+        flex-direction: column;
+        align-items: flex-start;
+        flex: 0 0 auto;
+        gap: 6px;
       }
 
       .check-row label {
@@ -2283,8 +2286,10 @@ function TotalBalanceCard({ total, settings, onToggle }) {
 
   return (
     <div className="soft-card total-balance">
-      <div className="label">Общий баланс</div>
-      <div className="value">{formatMoney(total)}</div>
+      <div>
+        <div className="label">Общий баланс</div>
+        <div className="value">{formatMoney(total)}</div>
+      </div>
       <div className="check-row">
         {items.map((it) => (
           <label key={it.key}>
@@ -3847,6 +3852,13 @@ function AnalysisView({
         </div>
       )}
 
+      <TotalBalanceCard total={totalBalance} settings={settings} onToggle={onToggleInclude} />
+
+      <div className="stat-grid">
+        <StatBox label="Доход" value={`+${formatMoney(agg.incomeTotal)}`} color={C.sber} />
+        <StatBox label="Расходы" value={`−${formatMoney(agg.sberSpent + agg.alfaSpent + agg.ozonSpent)}`} color={C.danger} />
+      </div>
+
       {debtGroups.length > 0 && (
         <div className="panel">
           <SectionTitle>Фонд</SectionTitle>
@@ -3877,13 +3889,6 @@ function AnalysisView({
           </div>
         </div>
       )}
-
-      <TotalBalanceCard total={totalBalance} settings={settings} onToggle={onToggleInclude} />
-
-      <div className="stat-grid">
-        <StatBox label="Доход" value={`+${formatMoney(agg.incomeTotal)}`} color={C.sber} />
-        <StatBox label="Расходы" value={`−${formatMoney(agg.sberSpent + agg.alfaSpent + agg.ozonSpent)}`} color={C.danger} />
-      </div>
 
       <BankCard
         stripe={C.sber}
