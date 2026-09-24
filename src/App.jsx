@@ -1212,7 +1212,7 @@ function AppStyles() {
 
       .hero-tab-num {
         position: absolute;
-        top: 4.5%;
+        top: calc(4.5% + 3px);
         transform: translate(-50%, -50%);
         background: transparent;
         border: 0;
@@ -1398,6 +1398,7 @@ function AppStyles() {
       .cat-tile-amounts {
         font-size: 13px;
         line-height: 1.2;
+        text-align: center;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -1546,6 +1547,7 @@ function AppStyles() {
         background: ${C.surface};
         border-radius: 16px;
         padding: 12px;
+        text-align: center;
       }
 
       .stat-box .label {
@@ -1760,6 +1762,10 @@ function AppStyles() {
         gap: 12px;
         padding: 14px 16px;
         text-align: left;
+      }
+
+      .total-balance-info {
+        margin-left: 16px;
       }
 
       .total-balance .label {
@@ -2285,7 +2291,7 @@ function TotalBalanceCard({ total, settings, onToggle }) {
 
   return (
     <div className="soft-card total-balance">
-      <div>
+      <div className="total-balance-info">
         <div className="label">Общий баланс</div>
         <div className="value">{formatMoney(total)}</div>
       </div>
@@ -2573,9 +2579,9 @@ function BankBadge({ card }) {
 }
 
 const HERO_TABS = [
-{ card: "sber", left: "23%" },
-{ card: "alfa", left: "49%" },
-{ card: "ozon", left: "75%" },
+  { card: "sber", left: "23%" },
+  { card: "alfa", left: "49%" },
+  { card: "ozon", left: "75%" },
 ];
 
 /* Единый «герой» Нужды/Желания/Подушка: картинка — фон во всю ширину экрана
@@ -4364,14 +4370,14 @@ export default function App() {
         const r = await storage.get("settings");
         if (r && r.value) s = migrateSettings(JSON.parse(r.value));
       } catch (e) {
-        console.warn("Не удалось загрузить настройки", e);
+        if (e?.message !== "not found") console.warn("Не удалось загрузить настройки", e);
       }
 
       try {
         const r = await storage.get("transactions");
         if (r && r.value) t = migrateTransactions(JSON.parse(r.value), s);
       } catch (e) {
-        console.warn("Не удалось загрузить операции", e);
+        if (e?.message !== "not found") console.warn("Не удалось загрузить операции", e);
       }
 
       if (alive) {
