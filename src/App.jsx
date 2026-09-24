@@ -1143,7 +1143,6 @@ function AppStyles() {
         display: flex;
         flex-direction: column;
         gap: 14px;
-        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
       }
 
       .bank-badge {
@@ -1200,7 +1199,6 @@ function AppStyles() {
         font-weight: 700;
         font-size: 15px;
         font-variant-numeric: tabular-nums;
-        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
         color: ${C.inkMuted};
         opacity: 0.7;
         cursor: pointer;
@@ -1219,7 +1217,6 @@ function AppStyles() {
         position: absolute;
         top: calc(13% + 3px);
         line-height: 1.2;
-        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
       }
 
       .hero-flow span {
@@ -1256,7 +1253,6 @@ function AppStyles() {
         margin: 0;
         width: 100%;
         text-align: center;
-        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
         font-size: 28px;
         line-height: 1;
         font-weight: 400;
@@ -1918,7 +1914,6 @@ function AppStyles() {
         border-radius: 22px;
         background: ${C.gardenNav};
         box-shadow: 0 12px 28px rgba(22, 32, 27, 0.13);
-        font-family: 'Handgeschrieben', 'Comic Sans MS', cursive;
       }
 
       .nav-btn {
@@ -2438,9 +2433,9 @@ function BankBadge({ card }) {
 }
 
 const HERO_TABS = [
-  { card: "sber", left: "22%" },
-  { card: "alfa", left: "49%" },
-  { card: "ozon", left: "75%" },
+  { card: "sber", left: "25.2%" },
+  { card: "alfa", left: "47.9%" },
+  { card: "ozon", left: "70.9%" },
 ];
 
 /* Единый «герой» Нужды/Желания/Подушка: картинка — фон во всю ширину экрана
@@ -2490,8 +2485,6 @@ function FolderHero({
           <span>Ушло:</span>
           <b style={{ color: C.danger }}>−{formatMoney(Math.abs(outflow))}</b>
         </div>
-
-        <h2 className="hero-title" style={{ color: titleColor }}>{title}</h2>
 
         <div className="hero-badge">
           <BankBadge card={card} />
@@ -4531,7 +4524,7 @@ export default function App() {
                 onSave={persistSettings}
                 onWipeAll={() => persistTransactions([])}
                 onResetTracking={resetNeedsWantsTracking}
-              /> 
+              />
             )}
           </main>
 
