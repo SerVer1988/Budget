@@ -1190,12 +1190,12 @@ function AppStyles() {
         transform: translate(-50%, -50%);
         background: transparent;
         border: 0;
-        padding: 8px 8px;
+        padding: 7px 8px;
         margin: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 24px;
+        min-height: 22px;
         font-weight: 700;
         font-size: 15px;
         font-variant-numeric: tabular-nums;
@@ -1320,49 +1320,91 @@ function AppStyles() {
         min-width: 0;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 6px;
+        gap: 10px;
       }
 
-      .cat-row {
+      .cat-tile {
         width: 100%;
+        max-width: 180px;
+        aspect-ratio: 180 / 100;
         min-width: 0;
-        height: 52px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 6px;
+        border: 0;
+        background: ${C.surface};
+        border-radius: 20px;
+        padding: 12px 14px;
+        color: ${C.ink};
+        text-align: left;
+        box-shadow: 0 6px 16px rgba(22, 32, 27, 0.14);
+      }
+
+      .cat-tile-head {
         display: flex;
         align-items: center;
-        gap: 10px;
-        border: 1px solid ${C.gardenCardBorder};
-        background: ${C.gardenCard};
-        border-radius: 999px;
-        padding: 6px 14px 6px 6px;
-        color: ${C.ink};
-        box-shadow: 0 3px 8px rgba(22, 32, 27, 0.03);
+        gap: 8px;
+        min-width: 0;
       }
 
-      .cat-row-icon {
-        width: 38px;
-        height: 38px;
+      .cat-tile-icon {
+        width: 40px;
+        height: 40px;
         flex: 0 0 auto;
         border-radius: 999px;
         display: flex;
         align-items: center;
         justify-content: center;
+        box-shadow: 0 3px 8px rgba(22, 32, 27, 0.16);
       }
 
-      .cat-row-name {
+      .cat-tile-name {
         flex: 1;
         min-width: 0;
-        text-align: left;
+        font-size: 15px;
+        font-weight: 800;
+        line-height: 1.15;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .cat-tile-amounts {
         font-size: 13px;
-        font-weight: 700;
         line-height: 1.2;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      .cat-row-chevron {
-        flex: 0 0 auto;
+      .cat-tile-spent {
+        font-weight: 800;
+      }
+
+      .cat-tile-limit {
+        font-weight: 600;
         color: ${C.inkMuted};
+      }
+
+      .cat-tile-bar {
+        position: relative;
+        width: 100%;
+        height: 7px;
+        border-radius: 999px;
+        background: ${C.border};
+        overflow: hidden;
+        display: flex;
+      }
+
+      .cat-tile-bar-fill {
+        height: 100%;
+        background: ${C.sber};
+      }
+
+      .cat-tile-bar-fill-over {
+        height: 100%;
+        background: ${C.danger};
       }
 
       .quick-tile {
@@ -2056,21 +2098,23 @@ function AppStyles() {
         }
 
         .cat-list {
-          gap: 6px;
-        }
-
-        .cat-row {
-          height: 48px;
-          padding: 6px 12px 6px 6px;
           gap: 8px;
         }
 
-        .cat-row-icon {
-          width: 34px;
-          height: 34px;
+        .cat-tile {
+          padding: 10px 12px;
         }
 
-        .cat-row-name {
+        .cat-tile-icon {
+          width: 36px;
+          height: 36px;
+        }
+
+        .cat-tile-name {
+          font-size: 14px;
+        }
+
+        .cat-tile-amounts {
           font-size: 12px;
         }
 
@@ -2537,14 +2581,38 @@ function ListTile({ icon: Icon, color, name, amount, onClick, empty }) {
   );
 }
 
-function CategoryQuickRow({ icon: Icon, color, name, onClick }) {
+function CategoryTile({ icon: Icon, color, name, spent, limit, onClick }) {
+  const hasLimit = limit > 0;
+  const overLimit = hasLimit && spent > limit;
+  const greenPct = hasLimit
+    ? Math.max(0, Math.min(100, (Math.min(spent, limit) / (overLimit ? spent : limit)) * 100))
+    : 0;
+  const redPct = 100 - greenPct;
+
   return (
-    <button onClick={onClick} className="cat-row" type="button">
-      <div className="cat-row-icon" style={{ background: color + "22" }}>
-        <Icon size={18} style={{ color }} />
+    <button onClick={onClick} className="cat-tile" type="button">
+      <div className="cat-tile-head">
+        <div className="cat-tile-icon" style={{ background: color }}>
+          <Icon size={20} color="#fff" />
+        </div>
+        <div className="cat-tile-name">{name}</div>
       </div>
-      <div className="cat-row-name">{name}</div>
-      <ChevronRight size={16} className="cat-row-chevron" />
+
+      <div className="cat-tile-amounts">
+        <span className="cat-tile-spent" style={{ color: overLimit ? C.danger : C.ink }}>
+          {formatMoney(spent)}
+        </span>
+        {hasLimit && <span className="cat-tile-limit"> из {formatMoney(limit)}</span>}
+      </div>
+
+      {hasLimit && (
+        <div className="cat-tile-bar">
+          <div className="cat-tile-bar-fill" style={{ width: greenPct + "%" }} />
+          {overLimit && (
+            <div className="cat-tile-bar-fill-over" style={{ width: redPct + "%" }} />
+          )}
+        </div>
+      )}
     </button>
   );
 }
@@ -2729,6 +2797,11 @@ function CategoryPanel({
   const inflow = card === "sber" ? agg.sberInflow : agg.alfaInflow;
   const outflow = card === "sber" ? agg.sberOutflow : agg.alfaOutflow;
   const monthlyTotals = card === "sber" ? agg.needCatTotals : agg.wantCatTotals;
+  const bucketLimitThisMonth = card === "sber" ? agg.needsLimit : agg.wantsLimit;
+  const catLimits = useMemo(
+    () => computeCategoryLimits(transactions, settings, categories, bucket, todayMonthKey(), bucketLimitThisMonth),
+    [transactions, settings, categories, bucket, bucketLimitThisMonth]
+  );
 
   return (
     <div className="add-panel">
@@ -2756,11 +2829,13 @@ function CategoryPanel({
           const Icon = getIcon(cat.icon);
 
           return (
-            <CategoryQuickRow
+            <CategoryTile
               key={cat.name}
               icon={Icon}
               color={cat.color}
               name={cat.name}
+              spent={monthlyTotals[cat.name] || 0}
+              limit={catLimits[cat.name] || 0}
               onClick={() => {
                 onOpenFull({
                   type: "expense",
