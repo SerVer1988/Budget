@@ -81,7 +81,7 @@ const DEFAULT_NEED_CATS = [
 ];
 
 const DEFAULT_WANT_CATS = [
-  { name: "Кафе/рестораны", icon: "UtensilsCrossed", color: "#D08B5B" },
+  { name: "Кафе/рестораны", icon: "UtensilsCrossed", color: "#C97A4E" },
   { name: "Кино/развлечения", icon: "Film", color: "#9B7BA6" },
   { name: "Шоппинг", icon: "ShoppingBag", color: "#C48A93" },
   { name: "Подписки", icon: "Tv", color: "#6B93AD" },
@@ -1132,6 +1132,114 @@ function AppStyles() {
         font-weight: 700;
         color: ${C.ink};
         margin: 12px 2px 8px;
+      }
+
+      .section-title-toggle {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: transparent;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        text-align: left;
+        color: ${C.ink};
+      }
+
+      .section-title-toggle .section-title {
+        margin: 12px 0 8px;
+      }
+
+      .section-chevron {
+        flex: 0 0 auto;
+        color: ${C.inkMuted};
+        transition: transform 0.15s ease;
+      }
+
+      .section-chevron.open {
+        transform: rotate(180deg);
+      }
+
+      .cat-edit-row {
+        width: 100%;
+      }
+
+      .icon-picker {
+        width: 100%;
+        margin: 8px 0 4px;
+        padding: 12px;
+        border: 1px solid ${C.border};
+        background: ${C.surface2};
+        border-radius: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .icon-picker-name {
+        width: 100%;
+        height: 38px;
+        border: 1px solid ${C.border};
+        border-radius: 10px;
+        padding: 0 10px;
+        background: ${C.surface};
+        color: ${C.ink};
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .color-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 10px;
+        border-radius: 999px;
+        outline: none;
+        cursor: pointer;
+      }
+
+      .color-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 22px;
+        height: 22px;
+        border-radius: 999px;
+        background: ${C.surface};
+        border: 3px solid ${C.ink};
+        cursor: pointer;
+      }
+
+      .color-slider::-moz-range-thumb {
+        width: 22px;
+        height: 22px;
+        border-radius: 999px;
+        background: ${C.surface};
+        border: 3px solid ${C.ink};
+        cursor: pointer;
+      }
+
+      .icon-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .icon-grid-btn {
+        width: 100%;
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid ${C.border};
+        border-radius: 10px;
+        background: ${C.surface};
+        color: ${C.inkMuted};
+        cursor: pointer;
+      }
+
+      .icon-grid-btn.active {
+        border-width: 2px;
       }
 
       .month-nav {
@@ -4002,34 +4110,89 @@ function AnalysisView({
 }
 
 /* ============================================================ Settings */
-function CategoryRow({ cat, onChange, onDelete }) {
+function CategoryPickerPanel({ cat, onChange }) {
+  const colorIndex = Math.max(0, CATEGORY_COLORS.indexOf(cat.color));
+
+  return (
+    <div className="icon-picker">
+      <input
+        className="icon-picker-name"
+        value={cat.name}
+        onChange={(e) => onChange({ ...cat, name: e.target.value })}
+        placeholder="Название категории"
+      />
+
+      <input
+        type="range"
+        className="color-slider"
+        min={0}
+        max={CATEGORY_COLORS.length - 1}
+        step={1}
+        value={colorIndex}
+        onChange={(e) => onChange({ ...cat, color: CATEGORY_COLORS[Number(e.target.value)] })}
+        style={{ background: `linear-gradient(to right, ${CATEGORY_COLORS.join(", ")})` }}
+      />
+
+      <div className="icon-grid">
+        {ICON_KEYS.map((key) => {
+          const IconOpt = ICON_MAP[key];
+          const active = cat.icon === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              className={`icon-grid-btn${active ? " active" : ""}`}
+              style={active ? { background: cat.color + "22", borderColor: cat.color, color: cat.color } : undefined}
+              onClick={() => onChange({ ...cat, icon: key })}
+              aria-label={key}
+            >
+              <IconOpt size={18} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CategoryRow({ cat, open, onToggleOpen, onChange, onDelete }) {
   const Icon = getIcon(cat.icon);
 
   return (
-    <div className="tx-row">
-      <div className="quick-icon" style={{ width: 38, height: 38, background: cat.color + "22" }}>
-        <Icon size={18} style={{ color: cat.color }} />
+    <div className="cat-edit-row">
+      <div className="tx-row">
+        <button
+          type="button"
+          className="quick-icon"
+          style={{ width: 38, height: 38, background: cat.color + "22", border: 0, padding: 0, cursor: "pointer" }}
+          onClick={onToggleOpen}
+          aria-label="Изменить иконку и цвет"
+        >
+          <Icon size={18} style={{ color: cat.color }} />
+        </button>
+
+        <div className="tx-main">
+          <input
+            value={cat.name}
+            onChange={(e) => onChange({ ...cat, name: e.target.value })}
+            style={{
+              width: "100%",
+              height: 34,
+              border: `1px solid ${C.border}`,
+              borderRadius: 10,
+              padding: "0 10px",
+              background: C.surface2,
+              color: C.ink,
+            }}
+          />
+        </div>
+
+        <button onClick={onDelete} className="delete-btn" type="button" aria-label="Удалить">
+          <Trash2 size={14} />
+        </button>
       </div>
 
-      <div className="tx-main">
-        <input
-          value={cat.name}
-          onChange={(e) => onChange({ ...cat, name: e.target.value })}
-          style={{
-            width: "100%",
-            height: 34,
-            border: `1px solid ${C.border}`,
-            borderRadius: 10,
-            padding: "0 10px",
-            background: C.surface2,
-            color: C.ink,
-          }}
-        />
-      </div>
-
-      <button onClick={onDelete} className="delete-btn" type="button" aria-label="Удалить">
-        <Trash2 size={14} />
-      </button>
+      {open && <CategoryPickerPanel cat={cat} onChange={onChange} />}
     </div>
   );
 }
@@ -4038,6 +4201,9 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking }) {
   const [draft, setDraft] = useState(settings);
   const [daysText, setDaysText] = useState((settings.reminderDays || []).join(", "));
   const [saved, setSaved] = useState(false);
+  const [needsOpen, setNeedsOpen] = useState(true);
+  const [wantsOpen, setWantsOpen] = useState(true);
+  const [openCatKey, setOpenCatKey] = useState(null);
 
   useEffect(() => {
     setDraft(settings);
@@ -4198,61 +4364,97 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking }) {
       </div>
 
       <div className="panel">
-        <SectionTitle>Категории нужд</SectionTitle>
-        <div className="history-list">
-          {draft.needCats.map((cat, i) => (
-            <CategoryRow
-              key={`${cat.name}-${i}`}
-              cat={cat}
-              onChange={(next) => updateNeedCat(i, next)}
-              onDelete={() => setDraft((d) => ({ ...d, needCats: d.needCats.filter((_, k) => k !== i) }))}
-            />
-          ))}
-        </div>
-
         <button
-          className="btn"
           type="button"
-          style={{ width: "100%", marginTop: 10 }}
-          onClick={() => setDraft((d) => ({
-            ...d,
-            needCats: [
-              ...d.needCats,
-              { name: "Новая категория", icon: "HelpCircle", color: CATEGORY_COLORS[d.needCats.length % CATEGORY_COLORS.length] },
-            ],
-          }))}
+          className="section-title-toggle"
+          onClick={() => setNeedsOpen((v) => !v)}
         >
-          Добавить категорию
+          <SectionTitle>Категории нужд</SectionTitle>
+          <ChevronDown size={16} className={`section-chevron${needsOpen ? " open" : ""}`} />
         </button>
+
+        {needsOpen && (
+          <>
+            <div className="history-list">
+              {draft.needCats.map((cat, i) => (
+                <CategoryRow
+                  key={`${cat.name}-${i}`}
+                  cat={cat}
+                  open={openCatKey === `needs-${i}`}
+                  onToggleOpen={() => setOpenCatKey((k) => (k === `needs-${i}` ? null : `needs-${i}`))}
+                  onChange={(next) => updateNeedCat(i, next)}
+                  onDelete={() => setDraft((d) => ({ ...d, needCats: d.needCats.filter((_, k) => k !== i) }))}
+                />
+              ))}
+            </div>
+
+            <button
+              className="btn"
+              type="button"
+              style={{ width: "100%", marginTop: 10 }}
+              onClick={() => {
+                const idx = draft.needCats.length;
+                setDraft((d) => ({
+                  ...d,
+                  needCats: [
+                    ...d.needCats,
+                    { name: "Новая категория", icon: "HelpCircle", color: CATEGORY_COLORS[d.needCats.length % CATEGORY_COLORS.length] },
+                  ],
+                }));
+                setOpenCatKey(`needs-${idx}`);
+              }}
+            >
+              Добавить категорию
+            </button>
+          </>
+        )}
       </div>
 
       <div className="panel">
-        <SectionTitle>Категории Желаний</SectionTitle>
-        <div className="history-list">
-          {draft.wantCats.map((cat, i) => (
-            <CategoryRow
-              key={`${cat.name}-${i}`}
-              cat={cat}
-              onChange={(next) => updateWantCat(i, next)}
-              onDelete={() => setDraft((d) => ({ ...d, wantCats: d.wantCats.filter((_, k) => k !== i) }))}
-            />
-          ))}
-        </div>
-
         <button
-          className="btn"
           type="button"
-          style={{ width: "100%", marginTop: 10 }}
-          onClick={() => setDraft((d) => ({
-            ...d,
-            wantCats: [
-              ...d.wantCats,
-              { name: "Новая категория", icon: "HelpCircle", color: CATEGORY_COLORS[d.wantCats.length % CATEGORY_COLORS.length] },
-            ],
-          }))}
+          className="section-title-toggle"
+          onClick={() => setWantsOpen((v) => !v)}
         >
-          Добавить категорию
+          <SectionTitle>Категории Желаний</SectionTitle>
+          <ChevronDown size={16} className={`section-chevron${wantsOpen ? " open" : ""}`} />
         </button>
+
+        {wantsOpen && (
+          <>
+            <div className="history-list">
+              {draft.wantCats.map((cat, i) => (
+                <CategoryRow
+                  key={`${cat.name}-${i}`}
+                  cat={cat}
+                  open={openCatKey === `wants-${i}`}
+                  onToggleOpen={() => setOpenCatKey((k) => (k === `wants-${i}` ? null : `wants-${i}`))}
+                  onChange={(next) => updateWantCat(i, next)}
+                  onDelete={() => setDraft((d) => ({ ...d, wantCats: d.wantCats.filter((_, k) => k !== i) }))}
+                />
+              ))}
+            </div>
+
+            <button
+              className="btn"
+              type="button"
+              style={{ width: "100%", marginTop: 10 }}
+              onClick={() => {
+                const idx = draft.wantCats.length;
+                setDraft((d) => ({
+                  ...d,
+                  wantCats: [
+                    ...d.wantCats,
+                    { name: "Новая категория", icon: "HelpCircle", color: CATEGORY_COLORS[d.wantCats.length % CATEGORY_COLORS.length] },
+                  ],
+                }));
+                setOpenCatKey(`wants-${idx}`);
+              }}
+            >
+              Добавить категорию
+            </button>
+          </>
+        )}
       </div>
 
       <div className="button-row">
