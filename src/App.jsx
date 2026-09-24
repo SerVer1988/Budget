@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Home, PiggyBank,
-  ChevronLeft, ChevronRight, ChevronDown, Trash2, Check, AlertTriangle, Wallet, X, ArrowUp, ArrowDown, Pencil,
+  ChevronLeft, ChevronRight, ChevronDown, Trash2, Check, AlertTriangle, Wallet, X, ArrowUp, ArrowDown, ArrowRight, Pencil,
   ShoppingCart, ShoppingBag, UtensilsCrossed, Coffee, Zap, Droplet, Wifi, Phone,
   Car, Bus, Fuel, Plane, Train, HeartPulse, Pill, Stethoscope, Dumbbell, GraduationCap,
   Baby, PawPrint, Gift, Film, Tv, Music, Gamepad2, Book, Shirt, Smartphone, Laptop,
@@ -373,6 +373,32 @@ function syncLinkedDebt(list, tx, asDebt) {
   }
 
   return list.map((t) => (t.id === existing.id ? updated : t));
+}
+
+/* Группирует открытые долги по паре бюджетов и взаимозачитывает противоположные
+   направления (если «Желания» должны «Нуждам» 300, а потом появился долг
+   «Нужды» должны «Желаниям» 120 — в остатке одна строка «Желания → Нужды» 180),
+   чтобы не показывать много отдельных строк с одной и той же парой. */
+function aggregateOpenDebts(openDebts) {
+  const groups = {};
+  openDebts.forEach((d) => {
+    const [a, b] = [d.fromBucket, d.toBucket].sort();
+    const key = `${a}|${b}`;
+    if (!groups[key]) groups[key] = { a, b, net: 0, ids: [] };
+    // net > 0 — «b» должен «a»; net < 0 — «a» должен «b».
+    groups[key].net += d.toBucket === b ? d.remainingAmount : -d.remainingAmount;
+    groups[key].ids.push(d.id);
+  });
+
+  return Object.values(groups)
+    .filter((g) => Math.abs(g.net) >= 1)
+    .map((g) => ({
+      key: `${g.a}|${g.b}`,
+      fromBucket: g.net > 0 ? g.a : g.b,
+      toBucket: g.net > 0 ? g.b : g.a,
+      amount: Math.abs(g.net),
+      ids: g.ids,
+    }));
 }
 
 function computeBalances(transactions, settings, uptoDateInclusive) {
@@ -1195,7 +1221,7 @@ function AppStyles() {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 25px;
+        min-height: 22px;
         font-weight: 700;
         font-size: 15px;
         font-variant-numeric: tabular-nums;
@@ -1915,6 +1941,47 @@ function AppStyles() {
         text-align: right;
       }
 
+      .debt-row {
+        gap: 10px;
+      }
+
+      .debt-main {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .debt-label {
+        font-size: 12px;
+        font-weight: 700;
+        color: ${C.inkMuted};
+        flex: 0 0 auto;
+      }
+
+      .debt-icon {
+        width: 32px;
+        height: 32px;
+        flex: 0 0 auto;
+        border-radius: 999px;
+        border: 2px dashed var(--debt-color, ${C.border});
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px;
+      }
+
+      .debt-icon .bank-badge {
+        width: 100%;
+        height: 100%;
+      }
+
+      .debt-arrow {
+        flex: 0 0 auto;
+        color: ${C.inkMuted};
+      }
+
       .delete-btn {
         width: 30px;
         height: 30px;
@@ -2502,9 +2569,9 @@ function BankBadge({ card }) {
 }
 
 const HERO_TABS = [
-  { card: "sber", left: "23%" },
-  { card: "alfa", left: "49%" },
-  { card: "ozon", left: "75%" },
+{ card: "sber", left: "23%" },
+{ card: "alfa", left: "49%" },
+{ card: "ozon", left: "75%" },
 ];
 
 /* Единый «герой» Нужды/Желания/Подушка: картинка — фон во всю ширину экрана
@@ -3710,6 +3777,7 @@ function AnalysisView({
     () => transactions.filter((t) => t.type === "debt" && !t.repaid).sort((a, b) => (a.date < b.date ? 1 : -1)),
     [transactions]
   );
+  const debtGroups = useMemo(() => aggregateOpenDebts(openDebts), [openDebts]);
   const isPastMonth = selectedMonth < todayMonthKey();
   const monthNeedsLeftover = agg.needsLimit - agg.needsSpent;
   const monthWantsLeftover = agg.wantsLimit - agg.wantsSpent;
@@ -3779,24 +3847,28 @@ function AnalysisView({
         </div>
       )}
 
-      {openDebts.length > 0 && (
+      {debtGroups.length > 0 && (
         <div className="panel">
           <SectionTitle>Фонд</SectionTitle>
           <div className="history-list">
-            {openDebts.map((debt) => (
-              <div key={debt.id} className="tx-row">
-                <div className="tx-main">
-                  <div className="tx-label">«{BUCKET_LABEL[debt.toBucket]}» должны «{BUCKET_LABEL_GEN[debt.fromBucket]}»</div>
-                  <div className="tx-sub">
-                    {debt.date} · осталось {formatMoney(debt.remainingAmount)} из {formatMoney(debt.amount)} · гасится автоматически при доходе
-                  </div>
+            {debtGroups.map((g) => (
+              <div key={g.key} className="tx-row debt-row">
+                <div className="debt-main">
+                  <span className="debt-label">Долг</span>
+                  <span className="debt-icon" style={{ "--debt-color": C[BUCKET_CARD[g.toBucket]] }}>
+                    <BankBadge card={BUCKET_CARD[g.toBucket]} />
+                  </span>
+                  <ArrowRight size={16} className="debt-arrow" />
+                  <span className="debt-icon" style={{ "--debt-color": C[BUCKET_CARD[g.fromBucket]] }}>
+                    <BankBadge card={BUCKET_CARD[g.fromBucket]} />
+                  </span>
                 </div>
-                <div className="tx-amount" style={{ color: C.amber }}>{formatMoney(debt.remainingAmount)}</div>
+                <div className="tx-amount" style={{ color: C.amber }}>{formatMoney(g.amount)}</div>
                 <button
                   type="button"
                   className="btn"
                   style={{ height: 30, padding: "0 10px", fontSize: 11, flex: "0 0 auto" }}
-                  onClick={() => onToggleDebtRepaid(debt.id)}
+                  onClick={() => g.ids.forEach(onToggleDebtRepaid)}
                 >
                   Списать
                 </button>
