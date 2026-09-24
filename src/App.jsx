@@ -1195,7 +1195,7 @@ function AppStyles() {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 22px;
+        min-height: 27px;
         font-weight: 700;
         font-size: 15px;
         font-variant-numeric: tabular-nums;
@@ -1639,6 +1639,25 @@ function AppStyles() {
         line-height: 1;
         font-weight: 800;
         font-variant-numeric: tabular-nums;
+      }
+
+      .amount-row {
+        display: flex;
+        align-items: stretch;
+        gap: 8px;
+      }
+
+      .amount-row input.amount-input {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .amount-save {
+        flex: 0 0 auto;
+        height: 54px;
+        padding: 0 18px;
+        font-size: 15px;
+        white-space: nowrap;
       }
 
       .form-grid-2 {
@@ -2124,6 +2143,12 @@ function AppStyles() {
 
         .field input.amount-input {
           font-size: 24px;
+        }
+
+        .amount-save {
+          height: 48px;
+          padding: 0 12px;
+          font-size: 13px;
         }
 
         .bottom-nav {
@@ -3095,23 +3120,34 @@ function homeCardOf(bucket) { return bucket === "wants" ? "alfa" : "sber"; }
 function bucketOf(card) { return card === "alfa" ? "wants" : "needs"; }
 function catListOf(settings, bucket) { return bucket === "wants" ? settings.wantCats : settings.needCats; }
 
-function AmountField({ label, value, onChange, big }) {
+function AmountField({ label, value, onChange, big, withSave }) {
   const evaluated = evalMoneyExpr(value);
   const stripped = String(value ?? "").trim().replace(/^-/, "");
   const hasOp = /[+\-*/]/.test(stripped);
   const showPreview = String(value ?? "") !== "" && hasOp && Number.isFinite(evaluated);
 
+  const input = (
+    <input
+      className={big ? "amount-input mono" : "mono"}
+      inputMode="decimal"
+      type="text"
+      placeholder="0"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+
   return (
     <div className="field">
       <label>{label}</label>
-      <input
-        className={big ? "amount-input mono" : "mono"}
-        inputMode="decimal"
-        type="text"
-        placeholder="0"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
+      {withSave ? (
+        <div className="amount-row">
+          {input}
+          <button type="submit" className="btn primary amount-save">Сохранить</button>
+        </div>
+      ) : (
+        input
+      )}
       {showPreview && (
         <div className="small-note" style={{ marginTop: -1 }}>
           = {formatMoney(evaluated)}
@@ -3327,6 +3363,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
         value={amount}
         onChange={setAmount}
         big
+        withSave
       />
 
       <div className="field">
@@ -3519,11 +3556,6 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
       <div className="field">
         <label>Заметка</label>
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Необязательно" />
-      </div>
-
-      <div className="button-row">
-        <button type="button" onClick={onCancel} className="btn">Отмена</button>
-        <button type="submit" className="btn primary">Сохранить</button>
       </div>
     </form>
   );
