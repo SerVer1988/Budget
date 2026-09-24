@@ -1195,7 +1195,7 @@ function AppStyles() {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 27px;
+        min-height: 25px;
         font-weight: 700;
         font-size: 15px;
         font-variant-numeric: tabular-nums;
