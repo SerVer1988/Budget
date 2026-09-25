@@ -1546,11 +1546,14 @@ function AppStyles() {
       }
 
       .cat-tile-spent {
+        font-size: 14px;
         font-weight: 800;
       }
 
       .cat-tile-limit {
+        font-size: 11px;
         font-weight: 600;
+        color: ${C.inkMuted};
       }
 
       .cat-tile-bar {
@@ -2916,6 +2919,8 @@ function CategoryTile({ icon: Icon, color, name, spent, limit, onClick }) {
   const hasLimit = limit > 0;
   const overLimit = hasLimit && spent > limit;
   const pct = hasLimit ? Math.max(0, Math.min(100, (spent / limit) * 100)) : 0;
+  const withinPct = overLimit ? (limit / spent) * 100 : pct;
+  const overPct = 100 - withinPct;
 
   return (
     <button onClick={onClick} className="cat-tile" type="button" style={{ borderLeftColor: color }}>
@@ -2924,27 +2929,25 @@ function CategoryTile({ icon: Icon, color, name, spent, limit, onClick }) {
           <Icon size={18} style={{ color }} />
         </div>
         <div className="cat-tile-name">{name}</div>
-        <span className="cat-tile-chevron">
+        <span className="cat-tile-chevron" style={{ background: color + "22", color }}>
           <ChevronRight size={13} />
         </span>
       </div>
 
-      <div className="cat-tile-amounts" style={{ color }}>
-        <span className="cat-tile-spent">{formatMoney(spent)}</span>
+      <div className="cat-tile-amounts">
+        <span className="cat-tile-spent" style={{ color }}>{formatMoney(spent)}</span>
         {hasLimit && <span className="cat-tile-limit"> из {formatMoney(limit)}</span>}
       </div>
 
       {hasLimit && (
         <div className="cat-tile-bar" style={{ background: color + "22" }}>
-          <div
-            className="cat-tile-bar-fill"
-            style={{
-              width: pct + "%",
-              background: overLimit
-                ? `linear-gradient(to right, ${color}, ${darkenColor(color, 0.4)})`
-                : color,
-            }}
-          />
+          <div className="cat-tile-bar-fill" style={{ width: withinPct + "%", background: color }} />
+          {overLimit && (
+            <div
+              className="cat-tile-bar-fill"
+              style={{ width: overPct + "%", background: darkenColor(color, 0.4) }}
+            />
+          )}
         </div>
       )}
     </button>
