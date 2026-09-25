@@ -2314,6 +2314,11 @@ function AppStyles() {
         color: ${C.ink};
       }
 
+      .day-total-sep {
+        color: ${C.inkMuted};
+        font-weight: 700;
+      }
+
       .history-list > .day-total-header:first-child {
         margin-top: 4px;
       }
@@ -4149,7 +4154,16 @@ function AnalysisView({
       }
       groups[groups.length - 1].items.push(tx);
     });
-    return groups.map((g) => ({ ...g, total: g.items.reduce((sum, t) => sum + txNetImpact(t), 0) }));
+    return groups.map((g) => {
+      let income = 0;
+      let expense = 0;
+      g.items.forEach((t) => {
+        const impact = txNetImpact(t);
+        if (impact >= 0) income += impact;
+        else expense += impact;
+      });
+      return { ...g, income, expense };
+    });
   }, [filteredItems]);
 
   return (
@@ -4318,7 +4332,16 @@ function AnalysisView({
             {groupedItems.map((g) => (
               <React.Fragment key={g.date}>
                 <div className="day-total-header">
-                  {g.total >= 0 ? "+" : "−"}{formatMoney(Math.abs(g.total))}
+                  {g.income > 0 && (
+                    <span style={{ color: C.sber }}>+{formatMoney(g.income)}</span>
+                  )}
+                  {g.income > 0 && g.expense < 0 && <span className="day-total-sep"> / </span>}
+                  {g.expense < 0 && (
+                    <span style={{ color: C.danger }}>−{formatMoney(Math.abs(g.expense))}</span>
+                  )}
+                  {g.income === 0 && g.expense === 0 && (
+                    <span style={{ color: C.inkMuted }}>0 ₽</span>
+                  )}
                 </div>
                 {g.items.map((tx) => (
                   <TxRow key={tx.id} tx={tx} onDelete={onDelete} onEdit={onEditTx} />
