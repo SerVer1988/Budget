@@ -121,6 +121,10 @@ function yesterdayStr() {
 function dayOfMonth(dateStr) { return parseInt(dateStr.slice(8, 10), 10); }
 function monthKeyOf(dateStr) { return dateStr.slice(0, 7); }
 function todayMonthKey() { return todayStr().slice(0, 7); }
+function daysInMonth(mk) {
+  const [y, m] = mk.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
 
 function shiftMonth(mk, delta) {
   let [y, m] = mk.split("-").map(Number);
@@ -1997,6 +2001,82 @@ function AppStyles() {
         height: 220px;
         min-width: 0;
         overflow: hidden;
+        position: relative;
+      }
+
+      .chart-box-nav {
+        padding: 0 22px;
+      }
+
+      .chart-day-arrow {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 26px;
+        height: 26px;
+        border: 0;
+        border-radius: 999px;
+        background: ${C.surface2};
+        color: ${C.inkMuted};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 1;
+      }
+
+      .chart-day-arrow-prev {
+        left: 0;
+      }
+
+      .chart-day-arrow-next {
+        right: 0;
+      }
+
+      .chart-carousel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+      }
+
+      .chart-carousel-header .section-title {
+        margin: 12px 0 8px;
+        flex: 1;
+        text-align: center;
+      }
+
+      .chart-carousel-arrow {
+        flex: 0 0 auto;
+        width: 26px;
+        height: 26px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: ${C.inkMuted};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+
+      .chart-carousel-dots {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin-top: 6px;
+      }
+
+      .chart-carousel-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: ${C.border};
+      }
+
+      .chart-carousel-dot.active {
+        background: ${C.ink};
       }
 
       .tx-row {
@@ -2977,6 +3057,123 @@ function CategoryDonut({ categories, totals, bucketLabel, transactions, bucket, 
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/* Столбчатый график по дням месяца: Нужды и Желания в стопке друг на друге.
+   Показывает окно из нескольких дней подряд, стрелки по краям листают окно
+   вперёд/назад (если в месяце дней больше, чем помещается). */
+function DailyExpenseChart({ monthItems, monthKey }) {
+  const total = daysInMonth(monthKey);
+  const WINDOW = 15;
+  const defaultStart = Math.max(1, total - WINDOW + 1);
+  const [start, setStart] = useState(defaultStart);
+
+  useEffect(() => {
+    setStart(Math.max(1, daysInMonth(monthKey) - WINDOW + 1));
+  }, [monthKey]);
+
+  const byDay = {};
+  monthItems.forEach((t) => {
+    if (t.type !== "expense") return;
+    const day = dayOfMonth(t.date);
+    if (!byDay[day]) byDay[day] = { needs: 0, wants: 0 };
+    if (t.bucket === "wants") byDay[day].wants += t.amount;
+    else byDay[day].needs += t.amount;
+  });
+
+  const end = Math.min(total, start + WINDOW - 1);
+  const data = [];
+  for (let d = start; d <= end; d++) {
+    data.push({ day: String(d), Нужды: byDay[d]?.needs || 0, Желания: byDay[d]?.wants || 0 });
+  }
+
+  const canPrev = start > 1;
+  const canNext = end < total;
+
+  return (
+    <div className="chart-box chart-box-nav">
+      {canPrev && (
+        <button
+          type="button"
+          className="chart-day-arrow chart-day-arrow-prev"
+          onClick={() => setStart((s) => Math.max(1, s - WINDOW))}
+          aria-label="Более ранние дни"
+        >
+          <ChevronLeft size={16} />
+        </button>
+      )}
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 10, right: 4, bottom: 4, left: -18 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+          <XAxis dataKey="day" tick={{ fontSize: 11, fill: C.inkMuted }} />
+          <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} width={42} />
+          <Tooltip formatter={(v) => formatMoney(v)} />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Bar dataKey="Нужды" stackId="d" fill={C.sber} />
+          <Bar dataKey="Желания" stackId="d" fill={C.alfa} radius={[6, 6, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+      {canNext && (
+        <button
+          type="button"
+          className="chart-day-arrow chart-day-arrow-next"
+          onClick={() => setStart((s) => Math.min(Math.max(1, total - WINDOW + 1), s + WINDOW))}
+          aria-label="Более поздние дни"
+        >
+          <ChevronRight size={16} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* Карусель графиков в «Анализе»: заголовок со стрелками листает слайды по тапу,
+   сам график при этом остаётся кликабельным (тултипы/бары не конфликтуют
+   с переключением, т.к. стрелки — отдельные кнопки в шапке). */
+function ChartsCarousel({ slides }) {
+  const [index, setIndex] = useState(0);
+  const n = slides.length;
+  if (!n) return null;
+  const safeIndex = index % n;
+  const current = slides[safeIndex];
+
+  return (
+    <div className="panel">
+      <div className="chart-carousel-header">
+        {n > 1 && (
+          <button
+            type="button"
+            className="chart-carousel-arrow"
+            onClick={() => setIndex((i) => (i - 1 + n) % n)}
+            aria-label="Предыдущий график"
+          >
+            <ChevronLeft size={16} />
+          </button>
+        )}
+        <SectionTitle>{current.title}</SectionTitle>
+        {n > 1 && (
+          <button
+            type="button"
+            className="chart-carousel-arrow"
+            onClick={() => setIndex((i) => (i + 1) % n)}
+            aria-label="Следующий график"
+          >
+            <ChevronRight size={16} />
+          </button>
+        )}
+      </div>
+
+      {current.render()}
+
+      {n > 1 && (
+        <div className="chart-carousel-dots">
+          {slides.map((_, i) => (
+            <span key={i} className={`chart-carousel-dot${i === safeIndex ? " active" : ""}`} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -4040,21 +4237,31 @@ function AnalysisView({
         sub={`Цель: ${formatMoney(settings.goal)}`}
       />
 
-      <div className="panel">
-        <SectionTitle>Структура месяца</SectionTitle>
-        <div className="chart-box">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 10, right: 4, bottom: 4, left: -18 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: C.inkMuted }} />
-              <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} width={42} />
-              <Tooltip formatter={(v) => formatMoney(v)} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="value" name="Сумма" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      <ChartsCarousel
+        slides={[
+          {
+            title: "Структура месяца",
+            render: () => (
+              <div className="chart-box">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 10, right: 4, bottom: 4, left: -18 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: C.inkMuted }} />
+                    <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} width={42} />
+                    <Tooltip formatter={(v) => formatMoney(v)} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="value" name="Сумма" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ),
+          },
+          {
+            title: "Динамика расходов",
+            render: () => <DailyExpenseChart monthItems={monthItems} monthKey={selectedMonth} />,
+          },
+        ]}
+      />
 
       <div>
         <SectionTitle>Операции</SectionTitle>
