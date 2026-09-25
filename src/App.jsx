@@ -147,6 +147,19 @@ function monthLabelShort(mk) {
   const [y, m] = mk.split("-").map(Number);
   return MONTHS_SHORT[m - 1] + " " + String(y).slice(2);
 }
+function darkenColor(hex, amount) {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const num = parseInt(full, 16);
+  let r = (num >> 16) & 255;
+  let g = (num >> 8) & 255;
+  let b = num & 255;
+  r = Math.max(0, Math.round(r * (1 - amount)));
+  g = Math.max(0, Math.round(g * (1 - amount)));
+  b = Math.max(0, Math.round(b * (1 - amount)));
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+
 function formatMoney(n) {
   const v = Math.round(n || 0);
   return v.toLocaleString("ru-RU") + " ₽";
@@ -1468,16 +1481,17 @@ function AppStyles() {
       .cat-tile {
         width: 100%;
         max-width: 180px;
-        aspect-ratio: 180 / 100;
+        aspect-ratio: 180 / 84;
         min-width: 0;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        gap: 6px;
+        gap: 5px;
         border: 0;
+        border-left: 5px solid transparent;
         background: ${C.surface};
-        border-radius: 20px;
-        padding: 12px 14px;
+        border-radius: 18px;
+        padding: 10px 12px;
         color: ${C.ink};
         text-align: left;
         box-shadow: 0 6px 16px rgba(22, 32, 27, 0.14);
@@ -1491,8 +1505,8 @@ function AppStyles() {
       }
 
       .cat-tile-icon {
-        width: 40px;
-        height: 40px;
+        width: 34px;
+        height: 34px;
         flex: 0 0 auto;
         border-radius: 999px;
         display: flex;
@@ -1503,7 +1517,7 @@ function AppStyles() {
       .cat-tile-name {
         flex: 1;
         min-width: 0;
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 800;
         line-height: 1.15;
         overflow: hidden;
@@ -1511,10 +1525,21 @@ function AppStyles() {
         white-space: nowrap;
       }
 
+      .cat-tile-chevron {
+        flex: 0 0 auto;
+        width: 20px;
+        height: 20px;
+        border-radius: 999px;
+        background: ${C.surface2};
+        color: ${C.inkMuted};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
       .cat-tile-amounts {
-        font-size: 13px;
+        font-size: 12px;
         line-height: 1.2;
-        text-align: center;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -1526,7 +1551,6 @@ function AppStyles() {
 
       .cat-tile-limit {
         font-weight: 600;
-        color: ${C.inkMuted};
       }
 
       .cat-tile-bar {
@@ -1534,19 +1558,12 @@ function AppStyles() {
         width: 100%;
         height: 7px;
         border-radius: 999px;
-        background: ${C.border};
         overflow: hidden;
         display: flex;
       }
 
       .cat-tile-bar-fill {
         height: 100%;
-        background: ${C.sber};
-      }
-
-      .cat-tile-bar-fill-over {
-        height: 100%;
-        background: ${C.danger};
       }
 
       .quick-tile {
@@ -2408,20 +2425,20 @@ function AppStyles() {
         }
 
         .cat-tile {
-          padding: 10px 12px;
+          padding: 9px 10px;
         }
 
         .cat-tile-icon {
-          width: 36px;
-          height: 36px;
+          width: 30px;
+          height: 30px;
         }
 
         .cat-tile-name {
-          font-size: 14px;
+          font-size: 13px;
         }
 
         .cat-tile-amounts {
-          font-size: 12px;
+          font-size: 11px;
         }
 
         .operation-tabs button {
@@ -2898,33 +2915,36 @@ function ListTile({ icon: Icon, color, name, amount, onClick, empty }) {
 function CategoryTile({ icon: Icon, color, name, spent, limit, onClick }) {
   const hasLimit = limit > 0;
   const overLimit = hasLimit && spent > limit;
-  const greenPct = hasLimit
-    ? Math.max(0, Math.min(100, (Math.min(spent, limit) / (overLimit ? spent : limit)) * 100))
-    : 0;
-  const redPct = 100 - greenPct;
+  const pct = hasLimit ? Math.max(0, Math.min(100, (spent / limit) * 100)) : 0;
 
   return (
-    <button onClick={onClick} className="cat-tile" type="button">
+    <button onClick={onClick} className="cat-tile" type="button" style={{ borderLeftColor: color }}>
       <div className="cat-tile-head">
-        <div className="cat-tile-icon" style={{ background: color + "22" }}>
-          <Icon size={20} style={{ color }} />
+        <div className="cat-tile-icon" style={{ background: color + "26" }}>
+          <Icon size={18} style={{ color }} />
         </div>
         <div className="cat-tile-name">{name}</div>
+        <span className="cat-tile-chevron">
+          <ChevronRight size={13} />
+        </span>
       </div>
 
-      <div className="cat-tile-amounts">
-        <span className="cat-tile-spent" style={{ color: overLimit ? C.danger : C.ink }}>
-          {formatMoney(spent)}
-        </span>
+      <div className="cat-tile-amounts" style={{ color }}>
+        <span className="cat-tile-spent">{formatMoney(spent)}</span>
         {hasLimit && <span className="cat-tile-limit"> из {formatMoney(limit)}</span>}
       </div>
 
       {hasLimit && (
-        <div className="cat-tile-bar">
-          <div className="cat-tile-bar-fill" style={{ width: greenPct + "%" }} />
-          {overLimit && (
-            <div className="cat-tile-bar-fill-over" style={{ width: redPct + "%" }} />
-          )}
+        <div className="cat-tile-bar" style={{ background: color + "22" }}>
+          <div
+            className="cat-tile-bar-fill"
+            style={{
+              width: pct + "%",
+              background: overLimit
+                ? `linear-gradient(to right, ${color}, ${darkenColor(color, 0.4)})`
+                : color,
+            }}
+          />
         </div>
       )}
     </button>
