@@ -2303,6 +2303,21 @@ function AppStyles() {
         padding: 4px 12px;
       }
 
+      .day-total-header {
+        margin: 8px -12px;
+        padding: 6px 12px;
+        background: ${C.surface2};
+        border-radius: 10px;
+        text-align: center;
+        font-weight: 800;
+        font-size: 14px;
+        color: ${C.ink};
+      }
+
+      .history-list > .day-total-header:first-child {
+        margin-top: 4px;
+      }
+
       .type-filter {
         display: flex;
         flex-wrap: wrap;
@@ -4062,11 +4077,6 @@ const TX_TYPE_FILTERS = [
   { id: "debt", label: "Долги" },
 ];
 
-const TX_DATE_FILTERS = [
-  { id: "today", label: "Сегодня" },
-  { id: "yesterday", label: "Вчера" },
-];
-
 function txNetImpact(t) {
   if (t.type === "expense") return -t.amount;
   if (t.type === "income") return t.amount;
@@ -4118,22 +4128,29 @@ function AnalysisView({
 
   const monthItems = agg.items;
   const [typeFilters, setTypeFilters] = useState([]);
-  const [dateFilters, setDateFilters] = useState([]);
 
   function toggleFilter(list, setList, id) {
     setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   }
 
   const filteredItems = monthItems.filter((t) => {
-    const typeOk = typeFilters.length === 0 || typeFilters.includes(t.type);
-    const dateOk =
-      dateFilters.length === 0 ||
-      (dateFilters.includes("today") && t.date === todayStr()) ||
-      (dateFilters.includes("yesterday") && t.date === yesterdayStr());
-    return typeOk && dateOk;
+    return typeFilters.length === 0 || typeFilters.includes(t.type);
   });
 
   const filteredTotal = filteredItems.reduce((sum, t) => sum + txNetImpact(t), 0);
+
+  const groupedItems = useMemo(() => {
+    const groups = [];
+    let currentDate = null;
+    filteredItems.forEach((tx) => {
+      if (tx.date !== currentDate) {
+        currentDate = tx.date;
+        groups.push({ date: tx.date, items: [] });
+      }
+      groups[groups.length - 1].items.push(tx);
+    });
+    return groups.map((g) => ({ ...g, total: g.items.reduce((sum, t) => sum + txNetImpact(t), 0) }));
+  }, [filteredItems]);
 
   return (
     <div className="screen-stack">
@@ -4287,18 +4304,6 @@ function AnalysisView({
                 </button>
               ))}
             </div>
-            <div className="type-filter">
-              {TX_DATE_FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  className={`type-filter-chip ${dateFilters.includes(f.id) ? "active" : ""}`}
-                  onClick={() => toggleFilter(dateFilters, setDateFilters, f.id)}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
           </>
         )}
 
@@ -4310,8 +4315,15 @@ function AnalysisView({
           </div>
         ) : (
           <div className="history-list">
-            {filteredItems.map((tx) => (
-              <TxRow key={tx.id} tx={tx} onDelete={onDelete} onEdit={onEditTx} />
+            {groupedItems.map((g) => (
+              <React.Fragment key={g.date}>
+                <div className="day-total-header">
+                  {g.total >= 0 ? "+" : "−"}{formatMoney(Math.abs(g.total))}
+                </div>
+                {g.items.map((tx) => (
+                  <TxRow key={tx.id} tx={tx} onDelete={onDelete} onEdit={onEditTx} />
+                ))}
+              </React.Fragment>
             ))}
           </div>
         )}
