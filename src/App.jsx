@@ -3601,6 +3601,8 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
   const [note, setNote] = useState(initial?.note || "");
   // Галочка «Считать долгом» у перевода: по умолчанию включена (initial.debt === false её выключает).
   const [asDebt, setAsDebt] = useState(initial?.debt ?? true);
+  // Галочка «Отображать в операциях» у корректировки: по умолчанию выключена.
+  const [showInHistory, setShowInHistory] = useState(initial?.type === "adjustment" ? !initial?.hidden : false);
 
   const [split, setSplit] = useState(false);
   const [splitAmount2, setSplitAmount2] = useState("");
@@ -3620,6 +3622,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
     setCategory(initial?.category || defaultCategoryFor(b));
     setNote(initial?.note || "");
     setAsDebt(initial?.debt ?? true);
+    setShowInHistory(initial?.type === "adjustment" ? !initial?.hidden : false);
     setSplit(false);
     setSplitAmount2("");
     setSplitCategory2("");
@@ -3750,6 +3753,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
         amount: amountNum,
         card,
         note: note.trim() || "Сверка баланса",
+        hidden: !showInHistory,
       });
     } else if (type === "adjustment") {
       if (!hasRealBalanceInput) {
@@ -3766,6 +3770,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
         amount: balanceDiff,
         card,
         note: note.trim() || "Сверка баланса",
+        hidden: !showInHistory,
       });
     }
   }
@@ -3940,6 +3945,18 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
           <div className="field">
             <label>Карта</label>
             <CardPicker options={ALL_CARDS} value={card} onChange={setCard} />
+          </div>
+
+          <div className="field" style={{ marginBottom: 11 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={showInHistory}
+                onChange={(e) => setShowInHistory(e.target.checked)}
+                style={{ width: "auto", height: "auto" }}
+              />
+              <span style={{ textTransform: "none", letterSpacing: 0 }}>Отображать в операциях</span>
+            </label>
           </div>
 
           {isEdit ? (
@@ -4121,7 +4138,7 @@ function AnalysisView({
   onEditTx,
   onToggleInclude,
   onCloseMonth,
-  onToggleDebtRepaid,
+  onWriteOffDebtGroup,
   goToAdd,
 }) {
   const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
@@ -4248,7 +4265,7 @@ function AnalysisView({
                   type="button"
                   className="btn"
                   style={{ height: 30, padding: "0 10px", fontSize: 11, flex: "0 0 auto" }}
-                  onClick={() => g.ids.forEach(onToggleDebtRepaid)}
+                  onClick={() => onWriteOffDebtGroup(g)}
                 >
                   Списать
                 </button>
@@ -4931,14 +4948,27 @@ export default function App() {
     setTimeout(() => setToast(null), 1200);
   }
 
-  function toggleDebtRepaid(id) {
-    const tx = transactions.find((t) => t.id === id);
-    if (!tx) return;
-    updateTransaction(id, {
-      ...tx,
-      repaid: !tx.repaid,
-      remainingAmount: !tx.repaid ? 0 : tx.amount,
-    });
+  // Списание долга между бюджетами: создаёт реальный перевод денег с карты
+  // должника на карту кредитора (без обратного учёта как нового долга) и
+  // одновременно закрывает все операции долга, вошедшие в этот взаимозачёт.
+  function writeOffDebtGroup(group) {
+    const debtorCard = BUCKET_CARD[group.toBucket];
+    const creditorCard = BUCKET_CARD[group.fromBucket];
+    const settleTx = {
+      type: "transfer",
+      date: todayStr(),
+      amount: Math.round(group.amount),
+      fromCard: debtorCard,
+      toCard: creditorCard,
+      note: "Погашение долга",
+      id: uid(),
+    };
+    const updated = transactions.map((t) =>
+      group.ids.includes(t.id) ? { ...t, repaid: true, remainingAmount: 0 } : t
+    );
+    persistTransactions([...updated, settleTx]);
+    setToast("Долг погашен переводом");
+    setTimeout(() => setToast(null), 1200);
   }
 
   function closeMonth(mk, mode, leftoverNeeds, leftoverWants) {
@@ -5084,7 +5114,7 @@ export default function App() {
 
   function handleTouchStart(e) {
     if (formInitial || pageIndex === 4) return;
-    if (e.target.closest && e.target.closest("input, textarea, select, button")) return;
+    if (e.target.closest && e.target.closest("input, textarea, select")) return;
     const t = e.touches[0];
     touchRef.current = { x: t.clientX, y: t.clientY };
   }
@@ -5162,7 +5192,7 @@ export default function App() {
                 onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx, transactions))}
                 onToggleInclude={toggleIncludeInTotal}
                 onCloseMonth={closeMonth}
-                onToggleDebtRepaid={toggleDebtRepaid}
+                onWriteOffDebtGroup={writeOffDebtGroup}
                 goToAdd={() => selectPage(1)}
               />
             ) : pageIndex >= 1 && pageIndex <= 3 ? (
