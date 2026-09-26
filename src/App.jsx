@@ -1487,7 +1487,7 @@ function AppStyles() {
         flex-direction: column;
         justify-content: space-between;
         gap: 5px;
-        border: 0;
+        border: 1px solid ${C.border};
         border-left: 5px solid transparent;
         background: ${C.surface};
         border-radius: 18px;
@@ -3656,7 +3656,6 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
   const formTouchRef = useRef(null);
 
   function handleFormTouchStart(e) {
-    if (e.target.closest && e.target.closest("input, textarea, select")) return;
     const t = e.touches[0];
     formTouchRef.current = { x: t.clientX, y: t.clientY };
   }
@@ -4690,7 +4689,7 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking }) {
             <div className="history-list">
               {draft.needCats.map((cat, i) => (
                 <CategoryRow
-                  key={`${cat.name}-${i}`}
+                  key={`needs-${i}`}
                   cat={cat}
                   open={openCatKey === `needs-${i}`}
                   onToggleOpen={() => setOpenCatKey((k) => (k === `needs-${i}` ? null : `needs-${i}`))}
@@ -4737,7 +4736,7 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking }) {
             <div className="history-list">
               {draft.wantCats.map((cat, i) => (
                 <CategoryRow
-                  key={`${cat.name}-${i}`}
+                  key={`wants-${i}`}
                   cat={cat}
                   open={openCatKey === `wants-${i}`}
                   onToggleOpen={() => setOpenCatKey((k) => (k === `wants-${i}` ? null : `wants-${i}`))}
