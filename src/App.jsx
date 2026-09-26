@@ -1494,7 +1494,6 @@ function AppStyles() {
         padding: 10px 12px;
         color: ${C.ink};
         text-align: left;
-        box-shadow: 0 6px 16px rgba(22, 32, 27, 0.14);
       }
 
       .cat-tile-head {
