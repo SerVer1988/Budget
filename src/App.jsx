@@ -3652,6 +3652,33 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
 
   const isEdit = !!initial?.editId;
 
+  // Свайп влево/вправо по форме листает вкладки Трата → Доход → Перевод → Коррекция и обратно.
+  const OPERATION_TAB_ORDER = ["expense", "income", "transfer", "adjustment"];
+  const formTouchRef = useRef(null);
+
+  function handleFormTouchStart(e) {
+    if (e.target.closest && e.target.closest("input, textarea, select")) return;
+    const t = e.touches[0];
+    formTouchRef.current = { x: t.clientX, y: t.clientY };
+  }
+
+  function handleFormTouchEnd(e) {
+    const start = formTouchRef.current;
+    formTouchRef.current = null;
+    if (!start) return;
+
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+
+    if (Math.abs(dx) < 50) return;
+    if (Math.abs(dx) < Math.abs(dy) * 1.3) return;
+
+    const idx = OPERATION_TAB_ORDER.indexOf(type);
+    const next = (idx + (dx < 0 ? 1 : -1) + OPERATION_TAB_ORDER.length) % OPERATION_TAB_ORDER.length;
+    setType(OPERATION_TAB_ORDER[next]);
+  }
+
   // Части траты, оплаченные картой «чужого» бюджета, — каждая такая часть станет внутренним долгом.
   const expenseParts = type === "expense"
     ? [{ bucket, amount: amountNum }, ...(split ? [{ bucket: bucket2, amount: splitAmountNum }] : [])]
@@ -3776,7 +3803,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
   }
 
   return (
-    <form className="form-card" onSubmit={submit}>
+    <form className="form-card" onSubmit={submit} onTouchStart={handleFormTouchStart} onTouchEnd={handleFormTouchEnd}>
       <div className="form-title-row">
         <h2>{isEdit ? "Изменить операцию" : "Новая операция"}</h2>
         <button type="button" onClick={onCancel} className="icon-button" aria-label="Закрыть">
@@ -5113,7 +5140,7 @@ export default function App() {
   }
 
   function handleTouchStart(e) {
-    if (formInitial || pageIndex === 4) return;
+    if (formInitial) return;
     if (e.target.closest && e.target.closest("input, textarea, select")) return;
     const t = e.touches[0];
     touchRef.current = { x: t.clientX, y: t.clientY };
