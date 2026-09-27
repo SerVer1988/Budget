@@ -1938,22 +1938,12 @@ function AppStyles() {
       .bank-card {
         width: 100%;
         min-width: 0;
-        display: flex;
-        overflow: hidden;
         border: 1px solid ${C.border};
+        border-left: 4px solid transparent;
         background: ${C.surface};
         border-radius: 18px;
-      }
-
-      .bank-stripe {
-        width: 5px;
-        flex: 0 0 auto;
-      }
-
-      .bank-body {
-        min-width: 0;
-        flex: 1;
-        padding: 13px;
+        padding: 12px 13px;
+        cursor: pointer;
       }
 
       .bank-row {
@@ -1986,22 +1976,28 @@ function AppStyles() {
         white-space: nowrap;
       }
 
-      .bank-subrow {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        margin-top: 2px;
-        margin-bottom: 9px;
-        font-size: 11px;
+      .bank-chevron {
+        flex: 0 0 auto;
         color: ${C.inkMuted};
+        transition: transform 0.15s ease;
+      }
+
+      .bank-chevron.open {
+        transform: rotate(180deg);
+      }
+
+      .bank-detail {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid ${C.border};
       }
 
       .bank-progress {
+        flex: 1;
+        min-width: 0;
         height: 7px;
         border-radius: 999px;
         overflow: hidden;
-        margin-bottom: 7px;
       }
 
       .bank-progress div {
@@ -2542,31 +2538,61 @@ function TotalBalanceCard({ total, settings, onToggle }) {
   );
 }
 
-function BankCard({ stripe, soft, name, role, bigLabel, bigValue, pct, sub, footnote, note }) {
+function BankCard({ stripe, name, bigValue, expanded, onToggle, children }) {
   return (
-    <div className="bank-card">
-      <div className="bank-stripe" style={{ background: stripe }} />
-      <div className="bank-body">
-        <div className="bank-row">
-          <span className="bank-name">{name}</span>
+    <div
+      className="bank-card"
+      style={{ borderLeftColor: stripe }}
+      onClick={onToggle}
+      role="button"
+      tabIndex={0}
+    >
+      <div className="bank-row">
+        <span className="bank-name">{name}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span className="bank-value">{formatMoney(bigValue)}</span>
+          <ChevronDown size={16} className={`bank-chevron${expanded ? " open" : ""}`} />
         </div>
-        <div className="bank-subrow">
-          <span>{role}</span>
-          <span>{bigLabel}</span>
-        </div>
-        <div className="bank-progress" style={{ background: soft }}>
-          <div style={{ width: `${clampPct(pct) * 100}%`, background: stripe }} />
-        </div>
-        <div className="small-note mono">{sub}</div>
-        {footnote && <div className="small-note" style={{ marginTop: 4 }}>{footnote}</div>}
-        {note && note.type !== "ok" && (
-          <div className="small-note" style={{ marginTop: 4, fontWeight: 700, color: note.color }}>
-            {note.type === "over" ? "🔴" : note.type === "under" ? "🟡" : "🟢"} {note.text}
-          </div>
-        )}
       </div>
+      {expanded && <div className="bank-detail">{children}</div>}
     </div>
+  );
+}
+
+/* Строка деталей внутри развёрнутой карточки банка: мини-бар + остаток в день
+   (или «превышен») + сравнение с прошлым месяцем — вместо старой вкладки
+   с фиксированным % распределения бюджета, который и так известен заранее. */
+function BankCardDetail({ stripe, soft, spent, avail, prevSpent, daysLeft, isCurrentMonth, dangerColor }) {
+  const over = avail > 0 && spent > avail;
+  const pct = avail > 0 ? Math.min(100, (spent / avail) * 100) : spent > 0 ? 100 : 0;
+  const barColor = over ? dangerColor : stripe;
+
+  let statusText = null;
+  if (over) {
+    statusText = <span style={{ color: dangerColor }}>превышен на {formatMoney(spent - avail)}</span>;
+  } else if (isCurrentMonth && daysLeft > 0 && avail > 0) {
+    statusText = <span style={{ color: stripe }}>≈ {formatMoney((avail - spent) / daysLeft)}/день</span>;
+  }
+
+  let trendText = null;
+  if (prevSpent > 0) {
+    const diffPct = Math.round(((spent - prevSpent) / prevSpent) * 100);
+    trendText = diffPct === 0 ? "как в прошлом мес." : `${diffPct > 0 ? "+" : ""}${diffPct}% к прошлому мес.`;
+  }
+
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="bank-progress" style={{ background: soft }}>
+          <div style={{ width: `${pct}%`, background: barColor }} />
+        </div>
+        {statusText && <span className="small-note mono" style={{ whiteSpace: "nowrap" }}>{statusText}</span>}
+      </div>
+      <div className="small-note" style={{ marginTop: 4 }}>
+        {formatMoney(spent)} из {formatMoney(Math.max(0, avail))}
+        {trendText && <> · {trendText}</>}
+      </div>
+    </>
   );
 }
 
@@ -4167,6 +4193,15 @@ function AnalysisView({
   goToAdd,
 }) {
   const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
+  const prevAgg = useMemo(
+    () => aggregateMonth(shiftMonth(selectedMonth, -1), transactions, settings),
+    [selectedMonth, transactions, settings]
+  );
+  const isCurrentMonth = selectedMonth === todayMonthKey();
+  const daysLeftInMonth = isCurrentMonth
+    ? Math.max(1, daysInMonth(selectedMonth) - dayOfMonth(todayStr()) + 1)
+    : 0;
+  const [expandedCard, setExpandedCard] = useState(null);
   const balances = useMemo(
     () => computeBalances(transactions, settings, endOfMonthStr(selectedMonth)),
     [transactions, settings, selectedMonth]
@@ -4302,36 +4337,70 @@ function AnalysisView({
 
       <BankCard
         stripe={C.sber}
-        soft={C.sberSoft}
         name="Сбер"
-        role={`Нужды · ${needPctOf(settings)}%`}
-        bigLabel="баланс"
         bigValue={balances.sber}
-        pct={agg.sberAvail > 0 ? agg.sberSpent / agg.sberAvail : 0}
-        sub={`Потрачено ${formatMoney(agg.sberSpent)} из ${formatMoney(Math.max(0, agg.sberAvail))}`}
-      />
+        expanded={expandedCard === "sber"}
+        onToggle={() => setExpandedCard((k) => (k === "sber" ? null : "sber"))}
+      >
+        <BankCardDetail
+          stripe={C.sber}
+          soft={C.sberSoft}
+          spent={agg.sberSpent}
+          avail={agg.sberAvail}
+          prevSpent={prevAgg.sberSpent}
+          daysLeft={daysLeftInMonth}
+          isCurrentMonth={isCurrentMonth}
+          dangerColor={C.danger}
+        />
+      </BankCard>
 
       <BankCard
         stripe={C.alfa}
-        soft={C.alfaSoft}
         name="Альфа"
-        role={`Желания · ${settings.wantPct}%`}
-        bigLabel="баланс"
         bigValue={balances.alfa}
-        pct={agg.alfaAvail > 0 ? agg.alfaSpent / agg.alfaAvail : 0}
-        sub={`Потрачено ${formatMoney(agg.alfaSpent)} из ${formatMoney(Math.max(0, agg.alfaAvail))}`}
-      />
+        expanded={expandedCard === "alfa"}
+        onToggle={() => setExpandedCard((k) => (k === "alfa" ? null : "alfa"))}
+      >
+        <BankCardDetail
+          stripe={C.alfa}
+          soft={C.alfaSoft}
+          spent={agg.alfaSpent}
+          avail={agg.alfaAvail}
+          prevSpent={prevAgg.alfaSpent}
+          daysLeft={daysLeftInMonth}
+          isCurrentMonth={isCurrentMonth}
+          dangerColor={C.danger}
+        />
+      </BankCard>
 
       <BankCard
         stripe={C.ozon}
-        soft={C.ozonSoft}
         name="Озон"
-        role={`Подушка · ${settings.savePct}%`}
-        bigLabel="баланс"
         bigValue={balances.ozon}
-        pct={settings.goal > 0 ? balances.ozon / settings.goal : 0}
-        sub={`Цель: ${formatMoney(settings.goal)}`}
-      />
+        expanded={expandedCard === "ozon"}
+        onToggle={() => setExpandedCard((k) => (k === "ozon" ? null : "ozon"))}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="bank-progress" style={{ background: C.ozonSoft }}>
+            <div
+              style={{
+                width: `${settings.goal > 0 ? Math.min(100, (balances.ozon / settings.goal) * 100) : 0}%`,
+                background: C.ozon,
+              }}
+            />
+          </div>
+        </div>
+        <div className="small-note" style={{ marginTop: 4 }}>
+          Цель: {formatMoney(settings.goal)} · за месяц {agg.ozonNet >= 0 ? "+" : ""}{formatMoney(agg.ozonNet)}
+          {prevAgg.ozonNet !== 0 && (
+            <>
+              {" "}
+              ({agg.ozonNet - prevAgg.ozonNet >= 0 ? "+" : ""}
+              {Math.round(((agg.ozonNet - prevAgg.ozonNet) / Math.abs(prevAgg.ozonNet)) * 100)}% к прошлому мес.)
+            </>
+          )}
+        </div>
+      </BankCard>
 
       <ChartsCarousel
         slides={[
