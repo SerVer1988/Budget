@@ -2338,7 +2338,13 @@ function AppStyles() {
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
-        margin: 0 0 10px;
+        margin: 0 -12px 10px;
+        padding: 8px 12px;
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: ${C.bg};
+        border-bottom: 1px solid ${C.border};
       }
 
       .type-filter-chip {
