@@ -1964,15 +1964,11 @@ function AppStyles() {
       }
 
       .bank-value {
-        flex: 0 1 auto;
-        min-width: 0;
-        max-width: 54%;
+        flex: 0 0 auto;
         text-align: right;
         font-size: 15px;
         font-weight: 900;
         font-variant-numeric: tabular-nums;
-        overflow: hidden;
-        text-overflow: ellipsis;
         white-space: nowrap;
       }
 
@@ -4201,7 +4197,10 @@ function AnalysisView({
   const daysLeftInMonth = isCurrentMonth
     ? Math.max(1, daysInMonth(selectedMonth) - dayOfMonth(todayStr()) + 1)
     : 0;
-  const [expandedCard, setExpandedCard] = useState(null);
+  const [expandedCards, setExpandedCards] = useState({});
+  function toggleCard(key) {
+    setExpandedCards((s) => ({ ...s, [key]: !s[key] }));
+  }
   const balances = useMemo(
     () => computeBalances(transactions, settings, endOfMonthStr(selectedMonth)),
     [transactions, settings, selectedMonth]
@@ -4339,8 +4338,8 @@ function AnalysisView({
         stripe={C.sber}
         name="Сбер"
         bigValue={balances.sber}
-        expanded={expandedCard === "sber"}
-        onToggle={() => setExpandedCard((k) => (k === "sber" ? null : "sber"))}
+        expanded={!!expandedCards.sber}
+        onToggle={() => toggleCard("sber")}
       >
         <BankCardDetail
           stripe={C.sber}
@@ -4358,8 +4357,8 @@ function AnalysisView({
         stripe={C.alfa}
         name="Альфа"
         bigValue={balances.alfa}
-        expanded={expandedCard === "alfa"}
-        onToggle={() => setExpandedCard((k) => (k === "alfa" ? null : "alfa"))}
+        expanded={!!expandedCards.alfa}
+        onToggle={() => toggleCard("alfa")}
       >
         <BankCardDetail
           stripe={C.alfa}
@@ -4377,8 +4376,8 @@ function AnalysisView({
         stripe={C.ozon}
         name="Озон"
         bigValue={balances.ozon}
-        expanded={expandedCard === "ozon"}
-        onToggle={() => setExpandedCard((k) => (k === "ozon" ? null : "ozon"))}
+        expanded={!!expandedCards.ozon}
+        onToggle={() => toggleCard("ozon")}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div className="bank-progress" style={{ background: C.ozonSoft }}>
