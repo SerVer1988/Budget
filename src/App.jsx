@@ -1083,7 +1083,7 @@ function AppStyles() {
         min-height: 100svh;
         background: ${C.bg};
         color: ${C.ink};
-        overflow-x: hidden;
+        overflow-x: clip;
       }
 
       .app-shell {
@@ -1094,7 +1094,7 @@ function AppStyles() {
         display: flex;
         flex-direction: column;
         position: relative;
-        overflow-x: hidden;
+        overflow-x: clip;
       }
 
       .app-main {
@@ -1102,9 +1102,8 @@ function AppStyles() {
         min-height: 0;
         width: 100%;
         padding: calc(8px + env(safe-area-inset-top)) 12px calc(94px + env(safe-area-inset-bottom));
-        overflow-y: auto;
-        overflow-x: hidden;
-        -webkit-overflow-scrolling: touch;
+        overflow-y: visible;
+        overflow-x: clip;
         background: ${C.bg};
         transition: background-color 0.25s ease;
       }
@@ -2341,7 +2340,7 @@ function AppStyles() {
         margin: 0 -12px 10px;
         padding: 8px 12px;
         position: sticky;
-        top: 0;
+        top: env(safe-area-inset-top, 0px);
         z-index: 5;
         background: ${C.bg};
         border-bottom: 1px solid ${C.border};
@@ -2393,6 +2392,13 @@ function AppStyles() {
 
       @media (max-width: 360px) {
         .app-main {
+          padding-left: 9px;
+          padding-right: 9px;
+        }
+
+        .type-filter {
+          margin-left: -9px;
+          margin-right: -9px;
           padding-left: 9px;
           padding-right: 9px;
         }
