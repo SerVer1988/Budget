@@ -12,7 +12,7 @@ import {
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import { storage } from "./storage.js";
+import { storage, auth } from "./storage.js";
 
 /* Оформление «дачный уголок»: иллюстрации, значки и шрифт под новый стиль.
    Файлы лежат в ./assets — если у тебя другая структура проекта, просто
@@ -2333,6 +2333,37 @@ function AppStyles() {
         margin-top: 4px;
       }
 
+      .sync-banner {
+        position: fixed;
+        top: env(safe-area-inset-top, 0px);
+        left: 0;
+        right: 0;
+        max-width: 430px;
+        margin: 0 auto;
+        z-index: 300;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 12px;
+        background: ${C.amberSoft};
+        color: ${C.amber};
+        border-bottom: 1px solid ${C.amber};
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .sync-banner button {
+        flex: 0 0 auto;
+        border: 0;
+        border-radius: 999px;
+        padding: 6px 12px;
+        background: ${C.amber};
+        color: #fff;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
       .type-filter {
         display: flex;
         flex-wrap: wrap;
@@ -4588,7 +4619,7 @@ function CategoryRow({ cat, open, onToggleOpen, onChange, onDelete }) {
   );
 }
 
-function SettingsView({ settings, onSave, onWipeAll, onResetTracking }) {
+function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail, onSignOut }) {
   const [draft, setDraft] = useState(settings);
   const [daysText, setDaysText] = useState((settings.reminderDays || []).join(", "));
   const [saved, setSaved] = useState(false);
@@ -4865,6 +4896,16 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking }) {
           Очистить
         </button>
       </div>
+
+      <div className="panel">
+        <SectionTitle>Аккаунт</SectionTitle>
+        <div className="muted" style={{ fontSize: 12, marginBottom: 10, wordBreak: "break-all" }}>
+          {userEmail ? `Вы вошли как ${userEmail}.` : "Вы вошли."} Данные синхронизируются между устройствами.
+        </div>
+        <button className="btn" type="button" style={{ width: "100%" }} onClick={onSignOut}>
+          Выйти
+        </button>
+      </div>
     </div>
   );
 }
@@ -4935,6 +4976,83 @@ function TabBar({ pageIndex, onSelectAdd, onSelectAnalysis, onSelectSettings }) 
   );
 }
 
+/* ============================================================ Вход */
+function AuthScreen() {
+  const [mode, setMode] = useState("login"); // login | signup
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    setInfo("");
+    if (!email.trim() || !password) {
+      setError("Введите почту и пароль");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (mode === "login") {
+        await auth.signIn(email.trim(), password);
+      } else {
+        const r = await auth.signUp(email.trim(), password);
+        if (r.needsConfirm) setInfo("Мы отправили письмо для подтверждения. Подтвердите почту и войдите.");
+      }
+    } catch (err) {
+      setError(err.message || "Не удалось выполнить вход");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="form-card" onSubmit={submit} style={{ marginTop: 40 }}>
+      <div className="form-title-row">
+        <h2>{mode === "login" ? "Вход" : "Регистрация"}</h2>
+      </div>
+
+      <div className="field">
+        <label>Почта</label>
+        <input
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </div>
+
+      <div className="field">
+        <label>Пароль</label>
+        <input
+          type="password"
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      </div>
+
+      {error && <div className="small-note" style={{ color: C.danger, fontWeight: 700 }}>{error}</div>}
+      {info && <div className="small-note" style={{ color: C.sber, fontWeight: 700 }}>{info}</div>}
+
+      <button className="btn primary" type="submit" disabled={busy} style={{ width: "100%", marginTop: 8 }}>
+        {busy ? "Подождите…" : mode === "login" ? "Войти" : "Создать аккаунт"}
+      </button>
+      <button
+        className="btn"
+        type="button"
+        style={{ width: "100%", marginTop: 8 }}
+        onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); setInfo(""); }}
+      >
+        {mode === "login" ? "Создать аккаунт" : "У меня уже есть аккаунт"}
+      </button>
+    </form>
+  );
+}
+
 /* ============================================================ App */
 export default function App() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -4947,13 +5065,42 @@ export default function App() {
   const [selectedMonth, setSelectedMonth] = useState(todayMonthKey());
   const [toast, setToast] = useState(null);
   const touchRef = useRef(null);
+  const [authUser, setAuthUser] = useState(undefined); // undefined — проверяем сессию, null — не вошли
+  const [stale, setStale] = useState(false); // на другом устройстве данные уже изменились
+
+  useEffect(() => {
+    let alive = true;
+    auth.init().then((u) => { if (alive) setAuthUser(u); });
+    const unsub = auth.subscribe((u) => setAuthUser(u));
+    return () => { alive = false; unsub(); };
+  }, []);
+
+  // Возвращаемся в приложение или запись отклонена как устаревшая — предлагаем обновиться.
+  useEffect(() => {
+    if (!authUser) return undefined;
+    function check() {
+      if (document.visibilityState === "visible") {
+        storage.checkStale().then((isStale) => { if (isStale) setStale(true); });
+      }
+    }
+    function onConflict() { setStale(true); }
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("budget-conflict", onConflict);
+    return () => {
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("budget-conflict", onConflict);
+    };
+  }, [authUser?.id]);
 
   useEffect(() => {
     if (pageIndex >= 1 && pageIndex <= 3) setLastAddPage(pageIndex);
   }, [pageIndex]);
 
   useEffect(() => {
+    if (!authUser) return undefined;
     let alive = true;
+    setLoaded(false);
+    setStale(false);
 
     (async () => {
       let s = DEFAULT_SETTINGS;
@@ -4981,7 +5128,7 @@ export default function App() {
     })();
 
     return () => { alive = false; };
-  }, []);
+  }, [authUser?.id]);
 
   async function persistTransactions(next) {
     setTransactions(next);
@@ -5239,7 +5386,22 @@ export default function App() {
     goPage(dx < 0 ? 1 : -1);
   }
 
-  if (!loaded) {
+  if (authUser === null) {
+    return (
+      <>
+        <AppStyles />
+        <div className="app-viewport">
+          <div className="app-shell">
+            <main className="app-main">
+              <AuthScreen />
+            </main>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (authUser === undefined || !loaded) {
     return (
       <>
         <AppStyles />
@@ -5258,6 +5420,13 @@ export default function App() {
   return (
     <>
       <AppStyles />
+
+      {stale && (
+        <div className="sync-banner">
+          <span>Данные изменились на другом устройстве. Обновите, чтобы не потерять правки.</span>
+          <button type="button" onClick={() => window.location.reload()}>Обновить</button>
+        </div>
+      )}
 
       <div className="app-viewport">
         <div className="app-shell">
@@ -5320,6 +5489,11 @@ export default function App() {
                 onSave={persistSettings}
                 onWipeAll={() => persistTransactions([])}
                 onResetTracking={resetNeedsWantsTracking}
+                userEmail={authUser?.email}
+                onSignOut={async () => {
+                  await auth.signOut();
+                  window.location.reload();
+                }}
               />
             )}
           </main>
