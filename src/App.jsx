@@ -5068,6 +5068,14 @@ export default function App() {
   const [authUser, setAuthUser] = useState(undefined); // undefined — проверяем сессию, null — не вошли
   const [stale, setStale] = useState(false); // на другом устройстве данные уже изменились
 
+  // Картинки трёх страниц (Нужды/Желания/Подушка) и значки банков — в кэш браузера сразу,
+  // ещё до первого свайпа, иначе при переключении страниц был бы короткий мерцающий момент.
+  useEffect(() => {
+    [cardNeedsImg, cardWantsImg, cardSavingsImg, bottomPlantsImg, badgeSberImg, badgeAlfaImg, badgeOzonImg].forEach(
+      (src) => { const img = new Image(); img.src = src; }
+    );
+  }, []);
+
   useEffect(() => {
     let alive = true;
     auth.init().then((u) => { if (alive) setAuthUser(u); });
