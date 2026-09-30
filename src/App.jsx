@@ -7,7 +7,7 @@ import {
   Baby, PawPrint, Gift, Film, Tv, Music, Gamepad2, Book, Shirt, Smartphone, Laptop,
   Wrench, Scissors, Coins, Users, User, HelpCircle, MoreHorizontal, Sparkles, Umbrella, Wine,
   Cigarette, Cat, Dog, Pizza, Sandwich, Disc3, PartyPopper, Trophy, Bike,
-  Palmtree, Tent, Sofa, Lightbulb, Landmark, CreditCard,
+  Palmtree, Tent, Sofa, Lightbulb, Landmark, CreditCard, Upload,
 } from "lucide-react";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -104,6 +104,16 @@ const DEFAULT_SETTINGS = {
   wantCats: DEFAULT_WANT_CATS,
   closedMonths: [],
   needsWantsResetDate: null,
+  // Названия и иконки трёх бюджетов (50/30/20). card — внутренний идентификатор
+  // «слота» в данных (не меняется), icon — какую картинку показывать:
+  // { type: "builtin", key: "sber"|"alfa"|"ozon" } — один из готовых логотипов,
+  // { type: "custom", dataUrl } — свой загруженный значок.
+  bucketNames: { needs: "Нужды", wants: "Желания", savings: "Подушка" },
+  bucketIcons: {
+    needs: { type: "builtin", key: "sber" },
+    wants: { type: "builtin", key: "alfa" },
+    savings: { type: "builtin", key: "ozon" },
+  },
 };
 
 /* ============================================================ helpers */
@@ -243,8 +253,17 @@ function moneyNum(raw) {
   return Number.isFinite(v) ? v : 0;
 }
 function clampPct(p) { return Math.max(0, Math.min(1, p || 0)); }
-function cardLabel(card) {
-  return card === "sber" ? "Сбер" : card === "alfa" ? "Альфа" : card === "ozon" ? "Озон" : card;
+function bucketName(settings, bucket) {
+  return settings?.bucketNames?.[bucket] || BUCKET_LABEL[bucket] || bucket;
+}
+function cardLabel(settings, card) {
+  return bucketName(settings, CARD_BUCKET[card]);
+}
+function bucketIconSrc(settings, bucket) {
+  const icon = settings?.bucketIcons?.[bucket];
+  if (icon?.type === "custom" && icon.dataUrl) return icon.dataUrl;
+  const key = icon?.key || BUCKET_CARD[bucket];
+  return BADGE_IMG[key] || BADGE_IMG[BUCKET_CARD[bucket]];
 }
 function formatDateRu(dateStr) {
   if (!dateStr) return "";
@@ -575,7 +594,7 @@ function computeCumulativeAllocation(transactions, settings) {
 
 const SMART_NOTE_THRESHOLD = 50;
 
-function smartNoteFor(bucketLabel, card, balance, target, overspend, sinceLabel) {
+function smartNoteFor(settings, bucketLabel, card, balance, target, overspend, sinceLabel) {
   const suffix = sinceLabel ? ` (с ${sinceLabel})` : "";
 
   if (overspend > 0) {
@@ -594,7 +613,7 @@ function smartNoteFor(bucketLabel, card, balance, target, overspend, sinceLabel)
       type: "under",
       color: C.amber,
       soft: C.amberSoft,
-      text: `Вы забыли перевести деньги! На карте ${cardLabel(card)} на ${formatMoney(-diff)} меньше, чем запланировано по бюджету «${bucketLabel}»${suffix}.`,
+      text: `Вы забыли перевести деньги! На карте ${cardLabel(settings, card)} на ${formatMoney(-diff)} меньше, чем запланировано по бюджету «${bucketLabel}»${suffix}.`,
     };
   }
 
@@ -603,7 +622,7 @@ function smartNoteFor(bucketLabel, card, balance, target, overspend, sinceLabel)
       type: "excess",
       color: "#2D8C6F",
       soft: "#E4F2EC",
-      text: `Баланс карты ${cardLabel(card)} выше плана «${bucketLabel}» на ${formatMoney(diff)}${suffix}. Возможно, вы забыли распределить эти деньги по другим картам.`,
+      text: `Баланс карты ${cardLabel(settings, card)} выше плана «${bucketLabel}» на ${formatMoney(diff)}${suffix}. Возможно, вы забыли распределить эти деньги по другим картам.`,
     };
   }
 
@@ -611,7 +630,7 @@ function smartNoteFor(bucketLabel, card, balance, target, overspend, sinceLabel)
     type: "ok",
     color: C.inkMuted,
     soft: C.surface2,
-    text: `Баланс ${cardLabel(card)} соответствует плану «${bucketLabel}».`,
+    text: `Баланс ${cardLabel(settings, card)} соответствует плану «${bucketLabel}».`,
   };
 }
 
@@ -625,9 +644,9 @@ function computeSmartNotes(transactions, settings) {
   const saveOver = alloc.saveTarget < 0 ? -alloc.saveTarget : 0;
 
   return {
-    sber: smartNoteFor("Нужды", "sber", balances.sber - alloc.baselineSber, alloc.needsTarget, needsOver, sinceLabel),
-    alfa: smartNoteFor("Желания", "alfa", balances.alfa - alloc.baselineAlfa, alloc.wantsTarget, wantsOver, sinceLabel),
-    ozon: smartNoteFor("Сбережения", "ozon", balances.ozon, alloc.saveTarget, saveOver, null),
+    sber: smartNoteFor(settings, bucketName(settings, "needs"), "sber", balances.sber - alloc.baselineSber, alloc.needsTarget, needsOver, sinceLabel),
+    alfa: smartNoteFor(settings, bucketName(settings, "wants"), "alfa", balances.alfa - alloc.baselineAlfa, alloc.wantsTarget, wantsOver, sinceLabel),
+    ozon: smartNoteFor(settings, bucketName(settings, "savings"), "ozon", balances.ozon, alloc.saveTarget, saveOver, null),
   };
 }
 
@@ -782,7 +801,7 @@ function computeAllInsights(transactions, settings) {
         id: "payday-today",
         color: C.amber,
         soft: C.amberSoft,
-        text: "Сегодня день выплаты — не забудьте занести доход на вкладке «Добавить», приложение подскажет, сколько перевести в Альфа и Озон.",
+        text: `Сегодня день выплаты — не забудьте занести доход на вкладке «Добавить», приложение подскажет, сколько перевести в «${bucketName(settings, "wants")}» и «${bucketName(settings, "savings")}».`,
       });
     } else {
       const split = computeIncomeSplit(todayIncome, settings);
@@ -791,7 +810,7 @@ function computeAllInsights(transactions, settings) {
         id: "payday-distribute",
         color: C.amber,
         soft: C.amberSoft,
-        text: `Из сегодняшнего дохода (${formatMoney(todayIncome)}): ${formatMoney(split.toAlfa)} в Альфа, ${formatMoney(split.toOzon)} в Озон. Остальное (${needPct}%) остаётся на карте зачисления.`,
+        text: `Из сегодняшнего дохода (${formatMoney(todayIncome)}): ${formatMoney(split.toAlfa)} в «${bucketName(settings, "wants")}», ${formatMoney(split.toOzon)} в «${bucketName(settings, "savings")}». Остальное (${needPct}%) остаётся на карте зачисления.`,
       });
     }
   } else {
@@ -812,7 +831,7 @@ function computeAllInsights(transactions, settings) {
       id: `debt-${debt.id}`,
       color: C.amber,
       soft: C.amberSoft,
-      text: `«${BUCKET_LABEL[debt.toBucket]}» должны «${BUCKET_LABEL_GEN[debt.fromBucket]}» ${formatMoney(debt.remainingAmount)}. Гасится автоматически при следующем доходе.`,
+      text: `Долг: «${bucketName(settings, debt.toBucket)}» → «${bucketName(settings, debt.fromBucket)}» ${formatMoney(debt.remainingAmount)}. Гасится автоматически при следующем доходе.`,
     });
   });
 
@@ -982,6 +1001,8 @@ function migrateSettings(raw) {
     wantCats: migrateCategoryList(raw.wantCats, DEFAULT_WANT_CATS),
     openingBalance: { ...DEFAULT_SETTINGS.openingBalance, ...(raw.openingBalance || {}) },
     includeInTotal: { ...DEFAULT_SETTINGS.includeInTotal, ...(raw.includeInTotal || {}) },
+    bucketNames: { ...DEFAULT_SETTINGS.bucketNames, ...(raw.bucketNames || {}) },
+    bucketIcons: { ...DEFAULT_SETTINGS.bucketIcons, ...(raw.bucketIcons || {}) },
     closedMonths: Array.isArray(raw.closedMonths) ? raw.closedMonths : [],
     needsWantsResetDate: raw.needsWantsResetDate || null,
   };
@@ -1260,6 +1281,48 @@ function AppStyles() {
 
       .icon-grid-btn.active {
         border-width: 2px;
+      }
+
+      .bucket-config-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .bucket-config-row:last-child {
+        margin-bottom: 0;
+      }
+
+      .bank-icon-picker {
+        display: flex;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+
+      .bank-icon-option {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 auto;
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background: ${C.surface2};
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: ${C.inkMuted};
+        cursor: pointer;
+      }
+
+      .bank-icon-option img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .bank-icon-option.active {
+        border-color: ${C.ink};
       }
 
       .month-nav {
@@ -1962,6 +2025,14 @@ function AppStyles() {
         white-space: nowrap;
       }
 
+      .bank-card-icon {
+        width: 22px;
+        height: 22px;
+        flex: 0 0 auto;
+        border-radius: 999px;
+        object-fit: cover;
+      }
+
       .bank-value {
         flex: 0 0 auto;
         text-align: right;
@@ -2550,9 +2621,9 @@ function MonthNav({ value, onChange }) {
 
 function TotalBalanceCard({ total, settings, onToggle }) {
   const items = [
-    { key: "sber", label: "Сбер", color: C.sber },
-    { key: "alfa", label: "Альфа", color: C.alfa },
-    { key: "ozon", label: "Озон", color: C.ozon },
+    { key: "sber", label: bucketName(settings, "needs"), color: C.sber },
+    { key: "alfa", label: bucketName(settings, "wants"), color: C.alfa },
+    { key: "ozon", label: bucketName(settings, "savings"), color: C.ozon },
   ];
 
   return (
@@ -2577,7 +2648,7 @@ function TotalBalanceCard({ total, settings, onToggle }) {
   );
 }
 
-function BankCard({ stripe, name, bigValue, expanded, onToggle, children }) {
+function BankCard({ stripe, icon, name, bigValue, expanded, onToggle, children }) {
   return (
     <div
       className="bank-card"
@@ -2587,7 +2658,10 @@ function BankCard({ stripe, name, bigValue, expanded, onToggle, children }) {
       tabIndex={0}
     >
       <div className="bank-row">
-        <span className="bank-name">{name}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          {icon && <img src={icon} alt="" className="bank-card-icon" />}
+          <span className="bank-name">{name}</span>
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span className="bank-value">{formatMoney(bigValue)}</span>
           <ChevronDown size={16} className={`bank-chevron${expanded ? " open" : ""}`} />
@@ -2635,7 +2709,7 @@ function BankCardDetail({ stripe, soft, spent, avail, prevSpent, daysLeft, isCur
   );
 }
 
-function TxRow({ tx, onDelete, onEdit }) {
+function TxRow({ tx, settings, onDelete, onEdit }) {
   const color = tx.type === "income" ? C.sber
     : tx.type === "expense" ? (tx.card === "sber" ? C.sber : C.alfa)
     : tx.type === "transfer" ? C.amber
@@ -2647,11 +2721,11 @@ function TxRow({ tx, onDelete, onEdit }) {
     : tx.type === "debt" ? ""
     : (tx.type === "adjustment" && tx.amount < 0) ? "−" : "+";
 
-  const label = tx.type === "income" ? (tx.note || `Доход (${cardLabel(tx.card)})`)
+  const label = tx.type === "income" ? (tx.note || `Доход (${cardLabel(settings, tx.card)})`)
     : tx.type === "expense" ? (tx.note || tx.category)
-    : tx.type === "transfer" ? (tx.note || `${cardLabel(tx.fromCard)} → ${cardLabel(tx.toCard)}`)
-    : tx.type === "debt" ? (tx.note || `Долг: «${BUCKET_LABEL[tx.toBucket]}» у «${BUCKET_LABEL_GEN[tx.fromBucket]}»${tx.repaid ? " · погашено" : ` · осталось ${formatMoney(tx.remainingAmount)}`}`)
-    : (tx.note || `Корректировка (${cardLabel(tx.card)})`);
+    : tx.type === "transfer" ? (tx.note || `${cardLabel(settings, tx.fromCard)} → ${cardLabel(settings, tx.toCard)}`)
+    : tx.type === "debt" ? (tx.note || `Долг: «${bucketName(settings, tx.toBucket)}» → «${bucketName(settings, tx.fromBucket)}»${tx.repaid ? " · погашено" : ` · осталось ${formatMoney(tx.remainingAmount)}`}`)
+    : (tx.note || `Корректировка (${cardLabel(settings, tx.card)})`);
 
   const day = tx.date.slice(8, 10);
   const editable = tx.type !== "debt";
@@ -2743,15 +2817,15 @@ function IncomeDistributionModal({ incomeTx, settings, transactions, onDistribut
 
         <div style={{ background: C.bg, borderRadius: 16, padding: 16, marginBottom: hasRepayments ? 10 : 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В Нужды ({pctOf(split.toSber)}%)</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В «{bucketName(settings, "needs")}» ({pctOf(split.toSber)}%)</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: C.sber }}>{formatMoney(split.toSber)}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В Желания ({pctOf(split.toAlfa)}%)</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В «{bucketName(settings, "wants")}» ({pctOf(split.toAlfa)}%)</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: C.alfa }}>{formatMoney(split.toAlfa)}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В Сбережения ({pctOf(split.toOzon)}%)</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>В «{bucketName(settings, "savings")}» ({pctOf(split.toOzon)}%)</span>
             <span style={{ fontSize: 13, fontWeight: 800, color: C.ozon }}>{formatMoney(split.toOzon)}</span>
           </div>
         </div>
@@ -2866,10 +2940,10 @@ function InsightsCarousel({ insights }) {
 /* ============================================================ Add carousel parts */
 const BADGE_IMG = { sber: badgeSberImg, alfa: badgeAlfaImg, ozon: badgeOzonImg };
 
-function BankBadge({ card }) {
+function BankBadge({ src }) {
   return (
     <div className="bank-badge">
-      <img src={BADGE_IMG[card]} alt="" />
+      <img src={src} alt="" />
     </div>
   );
 }
@@ -2888,6 +2962,7 @@ const HERO_TABS = [
 function FolderHero({
   art,
   card,
+  settings,
   title,
   titleColor,
   inflow,
@@ -2929,7 +3004,7 @@ function FolderHero({
         </div>
 
         <div className="hero-badge">
-          <BankBadge card={card} />
+          <BankBadge src={bucketIconSrc(settings, CARD_BUCKET[card])} />
         </div>
 
         <button
@@ -3018,7 +3093,7 @@ function CategoryTile({ icon: Icon, color, name, spent, limit, onClick }) {
   );
 }
 
-function CategoryDonut({ categories, totals, bucketLabel, transactions, bucket, onDeleteTx, onEditTx }) {
+function CategoryDonut({ categories, totals, bucketLabel, transactions, bucket, settings, onDeleteTx, onEditTx }) {
   const [expandedCat, setExpandedCat] = useState(null);
 
   const data = useMemo(
@@ -3154,6 +3229,7 @@ function CategoryDonut({ categories, totals, bucketLabel, transactions, bucket, 
                     <TxRow
                       key={t.id}
                       tx={t}
+                      settings={settings}
                       onDelete={onDeleteTx || (() => {})}
                       onEdit={onEditTx || (() => {})}
                     />
@@ -3326,6 +3402,7 @@ function CategoryPanel({
       <FolderHero
         art={style.art}
         card={card}
+        settings={settings}
         title={title}
         titleColor={style.titleColor}
         inflow={inflow}
@@ -3374,6 +3451,7 @@ function CategoryPanel({
         bucketLabel={title}
         transactions={transactions}
         bucket={bucket}
+        settings={settings}
         onDeleteTx={onDeleteTx}
         onEditTx={onEditTx}
       />
@@ -3424,7 +3502,8 @@ function OzonPanel({
       <FolderHero
         art={BUCKET_STYLE.savings.art}
         card="ozon"
-        title="Подушка"
+        settings={settings}
+        title={bucketName(settings, "savings")}
         titleColor={BUCKET_STYLE.savings.titleColor}
         inflow={agg.ozonInflow}
         outflow={agg.ozonOutflow}
@@ -3468,7 +3547,7 @@ function OzonPanel({
 
       <div className="ozon-detail">
         <div className="soft-card" style={{ padding: 14, textAlign: "center" }}>
-          <div style={{ fontSize: 12, color: C.inkMuted, marginBottom: 4 }}>Баланс на Озон</div>
+          <div style={{ fontSize: 12, color: C.inkMuted, marginBottom: 4 }}>Баланс «{bucketName(settings, "savings")}»</div>
           <div className="mono" style={{ fontSize: 27, lineHeight: 1.1, fontWeight: 900, color: C.ozon }}>
             {formatMoney(balance)}
           </div>
@@ -3519,10 +3598,10 @@ function OzonPanel({
         </div>
 
         <div>
-          <div className="section-title">История по Озон</div>
+          <div className="section-title">История «{bucketName(settings, "savings")}»</div>
           {ozonEntries.length === 0 ? (
             <div className="history-list" style={{ padding: 16, textAlign: "center", fontSize: 12, color: C.inkMuted }}>
-              Переводы и корректировки, которые касаются Озон, появятся здесь.
+              Переводы и корректировки, которые касаются «{bucketName(settings, "savings")}», появятся здесь.
             </div>
           ) : (
             <div className="history-list">
@@ -3531,8 +3610,8 @@ function OzonPanel({
                 const signedAmt = isTransferOut ? -t.amount : t.amount;
                 const label = t.type === "adjustment"
                   ? (t.note || (t.amount < 0 ? "Списание" : "Пополнение"))
-                  : isTransferOut ? (t.note || `Перевод в ${cardLabel(t.toCard)}`)
-                  : (t.note || `Перевод из ${cardLabel(t.fromCard)}`);
+                  : isTransferOut ? (t.note || `Перевод в ${cardLabel(settings, t.toCard)}`)
+                  : (t.note || `Перевод из ${cardLabel(settings, t.fromCard)}`);
 
                 return (
                   <div key={t.id} className="tx-row">
@@ -3555,11 +3634,13 @@ function OzonPanel({
 }
 
 /* ============================================================ Add form */
-const ALL_CARDS = [
-  { id: "sber", label: "Сбер", color: C.sber, soft: C.sberSoft },
-  { id: "alfa", label: "Альфа", color: C.alfa, soft: C.alfaSoft },
-  { id: "ozon", label: "Озон", color: C.ozon, soft: C.ozonSoft },
-];
+function cardOptionsFor(settings) {
+  return [
+    { id: "sber", label: bucketName(settings, "needs"), color: C.sber, soft: C.sberSoft },
+    { id: "alfa", label: bucketName(settings, "wants"), color: C.alfa, soft: C.alfaSoft },
+    { id: "ozon", label: bucketName(settings, "savings"), color: C.ozon, soft: C.ozonSoft },
+  ];
+}
 
 function CardPicker({ options, value, onChange }) {
   return (
@@ -3651,6 +3732,7 @@ function AmountField({ label, value, onChange, big, withSave }) {
 }
 
 function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
+  const cardOptions = cardOptionsFor(settings);
   const defaultCategoryFor = (bucket) => catListOf(settings, bucket)[0]?.name || "";
   const initialBucket = initial?.bucket || bucketOf(initial?.card || "sber");
 
@@ -3913,7 +3995,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
 
           <div className="field">
             <label>Карта списания</label>
-            <CardPicker options={ALL_CARDS} value={card} onChange={setCard} />
+            <CardPicker options={cardOptions} value={card} onChange={setCard} />
           </div>
 
           {anomalyParts.length > 0 && (
@@ -3982,7 +4064,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
       {type === "income" && (
         <div className="field">
           <label>Куда пришёл доход</label>
-          <CardPicker options={ALL_CARDS} value={card} onChange={setCard} />
+          <CardPicker options={cardOptions} value={card} onChange={setCard} />
         </div>
       )}
 
@@ -3991,7 +4073,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
           <div className="field">
             <label>Откуда</label>
             <select value={fromCard} onChange={(e) => setFromCard(e.target.value)}>
-              {ALL_CARDS.map((c) => (
+              {cardOptions.map((c) => (
                 <option key={c.id} value={c.id}>{c.label}</option>
               ))}
             </select>
@@ -3999,7 +4081,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
           <div className="field">
             <label>Куда</label>
             <select value={toCard} onChange={(e) => setToCard(e.target.value)}>
-              {ALL_CARDS.map((c) => (
+              {cardOptions.map((c) => (
                 <option key={c.id} value={c.id}>{c.label}</option>
               ))}
             </select>
@@ -4034,7 +4116,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
         <>
           <div className="field">
             <label>Карта</label>
-            <CardPicker options={ALL_CARDS} value={card} onChange={setCard} />
+            <CardPicker options={cardOptions} value={card} onChange={setCard} />
           </div>
 
           <div className="field" style={{ marginBottom: 11 }}>
@@ -4117,7 +4199,7 @@ function AddPageContent({
     {
       render: () => (
         <CategoryPanel
-          title="Нужды"
+          title={bucketName(settings, "needs")}
           card="sber"
           categories={settings.needCats}
           transactions={transactions}
@@ -4138,7 +4220,7 @@ function AddPageContent({
     {
       render: () => (
         <CategoryPanel
-          title="Желания"
+          title={bucketName(settings, "wants")}
           card="alfa"
           categories={settings.wantCats}
           transactions={transactions}
@@ -4317,8 +4399,8 @@ function AnalysisView({
         <div className="notice" style={{ borderColor: C.ozon, background: C.ozonSoft, color: "#0F3E70" }}>
           <div style={{ fontWeight: 800, marginBottom: 4 }}>{monthLabel(selectedMonth)} завершён</div>
           <div style={{ marginBottom: 10 }}>
-            Остаток: Нужды {formatMoney(Math.max(0, monthNeedsLeftover))}, Желания {formatMoney(Math.max(0, monthWantsLeftover))}.
-            Перенести на текущий месяц или отправить в Сбережения?
+            Остаток: {bucketName(settings, "needs")} {formatMoney(Math.max(0, monthNeedsLeftover))}, {bucketName(settings, "wants")} {formatMoney(Math.max(0, monthWantsLeftover))}.
+            Перенести на текущий месяц или отправить в «{bucketName(settings, "savings")}»?
           </div>
           <div className="button-row" style={{ marginTop: 0 }}>
             <button
@@ -4355,11 +4437,11 @@ function AnalysisView({
                 <div className="debt-main">
                   <span className="debt-label">Долг</span>
                   <span className="debt-icon" style={{ "--debt-color": C[BUCKET_CARD[g.toBucket]] }}>
-                    <BankBadge card={BUCKET_CARD[g.toBucket]} />
+                    <BankBadge src={bucketIconSrc(settings, g.toBucket)} />
                   </span>
                   <ArrowRight size={16} className="debt-arrow" />
                   <span className="debt-icon" style={{ "--debt-color": C[BUCKET_CARD[g.fromBucket]] }}>
-                    <BankBadge card={BUCKET_CARD[g.fromBucket]} />
+                    <BankBadge src={bucketIconSrc(settings, g.fromBucket)} />
                   </span>
                 </div>
                 <div className="tx-amount" style={{ color: C.amber }}>{formatMoney(g.amount)}</div>
@@ -4379,7 +4461,8 @@ function AnalysisView({
 
       <BankCard
         stripe={C.sber}
-        name="Сбер"
+        icon={bucketIconSrc(settings, "needs")}
+        name={bucketName(settings, "needs")}
         bigValue={balances.sber}
         expanded={!!expandedCards.sber}
         onToggle={() => toggleCard("sber")}
@@ -4398,7 +4481,8 @@ function AnalysisView({
 
       <BankCard
         stripe={C.alfa}
-        name="Альфа"
+        icon={bucketIconSrc(settings, "wants")}
+        name={bucketName(settings, "wants")}
         bigValue={balances.alfa}
         expanded={!!expandedCards.alfa}
         onToggle={() => toggleCard("alfa")}
@@ -4417,7 +4501,8 @@ function AnalysisView({
 
       <BankCard
         stripe={C.ozon}
-        name="Озон"
+        icon={bucketIconSrc(settings, "savings")}
+        name={bucketName(settings, "savings")}
         bigValue={balances.ozon}
         expanded={!!expandedCards.ozon}
         onToggle={() => toggleCard("ozon")}
@@ -4520,7 +4605,7 @@ function AnalysisView({
                   )}
                 </div>
                 {g.items.map((tx) => (
-                  <TxRow key={tx.id} tx={tx} onDelete={onDelete} onEdit={onEditTx} />
+                  <TxRow key={tx.id} tx={tx} settings={settings} onDelete={onDelete} onEdit={onEditTx} />
                 ))}
               </React.Fragment>
             ))}
@@ -4532,6 +4617,51 @@ function AnalysisView({
 }
 
 /* ============================================================ Settings */
+/* Выбор банка для одного из трёх бюджетов (50/30/20): три готовых логотипа
+   (Сбер/Альфа/Озон) плюс кнопка загрузки своей картинки. */
+function BankIconPicker({ icon, onChange }) {
+  const fileRef = useRef(null);
+  const presets = [
+    { key: "sber", src: badgeSberImg },
+    { key: "alfa", src: badgeAlfaImg },
+    { key: "ozon", src: badgeOzonImg },
+  ];
+
+  function handleFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => onChange({ type: "custom", dataUrl: reader.result });
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <div className="bank-icon-picker">
+      {presets.map((p) => (
+        <button
+          key={p.key}
+          type="button"
+          className={`bank-icon-option${icon?.type !== "custom" && (icon?.key || "sber") === p.key ? " active" : ""}`}
+          onClick={() => onChange({ type: "builtin", key: p.key })}
+          aria-label={p.key}
+        >
+          <img src={p.src} alt="" />
+        </button>
+      ))}
+      <button
+        type="button"
+        className={`bank-icon-option${icon?.type === "custom" ? " active" : ""}`}
+        onClick={() => fileRef.current?.click()}
+        aria-label="Свой значок"
+      >
+        {icon?.type === "custom" && icon.dataUrl ? <img src={icon.dataUrl} alt="" /> : <Upload size={16} />}
+      </button>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFile} />
+    </div>
+  );
+}
+
 function CategoryPickerPanel({ cat, onChange }) {
   const colorIndex = Math.max(0, CATEGORY_COLORS.indexOf(cat.color));
 
@@ -4680,11 +4810,40 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
   return (
     <div className="screen-stack">
       <div className="panel">
+        <SectionTitle>Банки бюджета (50/30/20)</SectionTitle>
+        <div className="small-note" style={{ marginBottom: 10 }}>
+          Выберите банк (или свой значок) и название для каждой части дохода — они будут
+          использоваться везде в приложении: в заголовках, балансах и операциях.
+        </div>
+
+        {[
+          { bucket: "needs", pct: 100 - Number(draft.wantPct || 0) - Number(draft.savePct || 0) },
+          { bucket: "wants", pct: Number(draft.wantPct || 0) },
+          { bucket: "savings", pct: Number(draft.savePct || 0) },
+        ].map(({ bucket, pct }) => (
+          <div key={bucket} className="bucket-config-row">
+            <BankIconPicker
+              icon={draft.bucketIcons?.[bucket]}
+              onChange={(icon) => setDraft((d) => ({ ...d, bucketIcons: { ...d.bucketIcons, [bucket]: icon } }))}
+            />
+            <div className="field" style={{ flex: 1, marginBottom: 0 }}>
+              <label>{pct}% дохода</label>
+              <input
+                value={draft.bucketNames?.[bucket] ?? ""}
+                onChange={(e) => setDraft((d) => ({ ...d, bucketNames: { ...d.bucketNames, [bucket]: e.target.value } }))}
+                placeholder={BUCKET_LABEL[bucket]}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="panel">
         <SectionTitle>Правило распределения</SectionTitle>
 
         <div className="form-grid-2">
           <div className="field">
-            <label>Желания, %</label>
+            <label>{bucketName(draft, "wants")}, %</label>
             <input
               type="number"
               value={draft.wantPct}
@@ -4692,7 +4851,7 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
             />
           </div>
           <div className="field">
-            <label>Подушка, %</label>
+            <label>{bucketName(draft, "savings")}, %</label>
             <input
               type="number"
               value={draft.savePct}
@@ -4702,7 +4861,7 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
         </div>
 
         <div className="notice" style={{ marginBottom: 12 }}>
-          На нужды остаётся {needPctOf({ ...draft, wantPct: Number(draft.wantPct), savePct: Number(draft.savePct) })}% дохода.
+          На «{bucketName(draft, "needs")}» остаётся {needPctOf({ ...draft, wantPct: Number(draft.wantPct), savePct: Number(draft.savePct) })}% дохода.
         </div>
 
         <div className="field">
@@ -4721,9 +4880,9 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
       </div>
 
       <div className="panel">
-        <SectionTitle>Сверка Нужд и Желаний</SectionTitle>
+        <SectionTitle>Сверка «{bucketName(draft, "needs")}» и «{bucketName(draft, "wants")}»</SectionTitle>
         <div className="small-note" style={{ marginBottom: 10 }}>
-          Подсказки по Сбер/Альфа считают излишки и недокиды с {settings.needsWantsResetDate
+          Подсказки по «{bucketName(draft, "needs")}»/«{bucketName(draft, "wants")}» считают излишки и недокиды с {settings.needsWantsResetDate
             ? `${formatDateRu(settings.needsWantsResetDate)}`
             : "самого начала"}. Каждое «Закрыть месяц» в Анализе сдвигает эту точку вперёд
           автоматически. Если цифры накопились и выглядят непропорционально — сбросьте отсчёт
@@ -4749,7 +4908,7 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
 
         <div className="form-grid-2">
           <div className="field">
-            <label>Сбер</label>
+            <label>{bucketName(draft, "needs")}</label>
             <input
               type="number"
               value={draft.openingBalance?.sber ?? 0}
@@ -4760,7 +4919,7 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
             />
           </div>
           <div className="field">
-            <label>Альфа</label>
+            <label>{bucketName(draft, "wants")}</label>
             <input
               type="number"
               value={draft.openingBalance?.alfa ?? 0}
@@ -4773,7 +4932,7 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
         </div>
 
         <div className="field">
-          <label>Озон</label>
+          <label>{bucketName(draft, "savings")}</label>
           <input
             type="number"
             value={draft.openingBalance?.ozon ?? 0}
