@@ -642,7 +642,9 @@ function smartNoteFor(settings, bucketLabel, card, balance, target, overspend, s
     };
   }
 
-  if (diff > SMART_NOTE_THRESHOLD) {
+  // «Сбережения» копятся нарастающим итогом, и баланс выше плана там — это хорошо
+  // (остатки месяцев, стартовый баланс), поэтому напоминание про излишек только для Нужд/Желаний.
+  if (diff > SMART_NOTE_THRESHOLD && card !== "ozon") {
     return {
       type: "excess",
       color: "#2D8C6F",
@@ -851,12 +853,12 @@ function computeAllInsights(transactions, settings) {
   });
 
   const openDebts = transactions.filter((t) => t.type === "debt" && !t.repaid && t.remainingAmount > 0);
-  openDebts.forEach((debt) => {
+  aggregateOpenDebts(openDebts).forEach((g) => {
     insights.push({
-      id: `debt-${debt.id}`,
+      id: `debt-${g.key}`,
       color: C.amber,
       soft: C.amberSoft,
-      text: `Долг: «${bucketName(settings, debt.toBucket)}» → «${bucketName(settings, debt.fromBucket)}» ${formatMoney(debt.remainingAmount)}. Гасится автоматически при следующем доходе.`,
+      text: `Долг: «${bucketName(settings, g.toBucket)}» → «${bucketName(settings, g.fromBucket)}» ${formatMoney(g.amount)}. Гасится автоматически при следующем доходе.`,
     });
   });
 
@@ -2990,24 +2992,6 @@ const HERO_TABS = [
    баланса-вкладки, Пришло/Ушло, значок банка и заголовок лежат поверх неё
    абсолютным позиционированием — в процентах от картинки, чтобы не съезжать
    на разных экранах. Проценты подобраны под нарисованные в картинке плашки. */
-/* Веточка-украшение по бокам заголовка (раньше была нарисована в картинке). */
-function HeroLeaf({ flip }) {
-  return (
-    <svg
-      width="30"
-      height="26"
-      viewBox="0 0 30 26"
-      aria-hidden="true"
-      style={{ flex: "none", transform: flip ? "scaleX(-1)" : undefined }}
-    >
-      <path d="M2 21 C10 20 19 14 27 5" fill="none" stroke="#5E9A52" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M6 20 C3 14 4 9 8 5 C11 10 10 16 6 20 Z" fill="#8BBF74" stroke="#5E9A52" strokeWidth="1" />
-      <path d="M13 16 C11 10 14 5 19 3 C20 9 18 13 13 16 Z" fill="#8BBF74" stroke="#5E9A52" strokeWidth="1" />
-      <path d="M17 17 C22 15 25 18 26 23 C21 24 18 21 17 17 Z" fill="#8BBF74" stroke="#5E9A52" strokeWidth="1" />
-    </svg>
-  );
-}
-
 function FolderHero({
   art,
   card,
@@ -3044,9 +3028,7 @@ function FolderHero({
         ))}
 
         <div className="hero-title" style={{ color: titleColor }}>
-          <HeroLeaf />
           <span>{title}</span>
-          <HeroLeaf flip />
         </div>
 
         <div className="hero-flow hero-flow-in">
