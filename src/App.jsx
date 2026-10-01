@@ -3968,6 +3968,8 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
 
   const amountNum = moneyNum(amount);
   const splitAmountNum = moneyNum(splitAmount2);
+  // При разбивке «Сумма» — это общая сумма траты, а часть 1 = всего − часть 2.
+  const part1Num = split ? amountNum - splitAmountNum : amountNum;
   const categories = catListOf(settings, bucket);
   const categories2 = catListOf(settings, bucket2);
 
@@ -4001,7 +4003,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
 
   // Части траты, оплаченные картой «чужого» бюджета, — каждая такая часть станет внутренним долгом.
   const expenseParts = type === "expense"
-    ? [{ bucket, amount: amountNum }, ...(split ? [{ bucket: bucket2, amount: splitAmountNum }] : [])]
+    ? [{ bucket, amount: part1Num }, ...(split ? [{ bucket: bucket2, amount: splitAmountNum }] : [])]
     : [];
   const anomalyParts = expenseParts.filter((p) => CARD_BUCKET[card] !== p.bucket);
 
@@ -4033,12 +4035,16 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
         window.alert("Укажите сумму второй части разбивки");
         return;
       }
+      if (splitAmountNum >= amountNum) {
+        window.alert("Вторая часть должна быть меньше общей суммы");
+        return;
+      }
       const groupId = uid();
       onSubmit([
         {
           type: "expense",
           date,
-          amount: amountNum,
+          amount: part1Num,
           card,
           bucket,
           category,
@@ -4138,7 +4144,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
           type === "adjustment"
             ? (isEdit ? "Сумма корректировки" : "Реальный баланс карты сейчас")
             : type === "expense" && split
-            ? "Сумма (часть 1)"
+            ? "Сумма (всего)"
             : "Сумма"
         }
         value={amount}
@@ -4224,7 +4230,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
                 </select>
               </div>
               <div className="small-note" style={{ marginBottom: 11 }}>
-                Итого спишется с «{cardLabel(settings, card)}»: {formatMoney(amountNum + splitAmountNum)}
+                Часть 1: {formatMoney(Math.max(0, part1Num))} · спишется с «{cardLabel(settings, card)}»: {formatMoney(amountNum)}
               </div>
             </>
           )}
@@ -4980,7 +4986,87 @@ function CategoryRow({ cat, open, onToggleOpen, onChange, onDelete }) {
   );
 }
 
-function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail, onSignOut }) {
+/* ---------- Резервная копия: экспорт / импорт ---------- */
+const BACKUP_VERSION = 1;
+
+function downloadFile(filename, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function exportJsonBackup(settings, transactions) {
+  const payload = {
+    app: "budget",
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    settings,
+    transactions,
+  };
+  downloadFile(`budget-backup-${todayStr()}.json`, JSON.stringify(payload, null, 2), "application/json");
+}
+
+const TX_TYPE_RU = { expense: "Трата", income: "Доход", transfer: "Перевод", adjustment: "Коррекция", debt: "Долг" };
+
+function csvCell(v) {
+  const str = v === null || v === undefined ? "" : String(v);
+  return /[";\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+/* CSV для Excel: разделитель «;», кодировка UTF-8 с BOM (иначе кириллица «поедет»). */
+function exportCsv(settings, transactions) {
+  const header = ["Дата", "Тип", "Сумма", "Карта", "Куда (для перевода)", "Бюджет", "Категория", "Заметка", "Остаток долга"];
+  const rows = [...transactions]
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+    .map((t) => {
+      const cards = txCardsOf(t);
+      const isDebt = t.type === "debt";
+      return [
+        t.date,
+        TX_TYPE_RU[t.type] || t.type,
+        isDebt ? t.amount : t.type === "expense" ? -Math.abs(t.amount) : t.amount,
+        t.type === "transfer" ? cardLabel(settings, t.fromCard) : cards[0] ? cardLabel(settings, cards[0]) : "",
+        t.type === "transfer" ? cardLabel(settings, t.toCard) : isDebt && cards[1] ? cardLabel(settings, cards[1]) : "",
+        t.bucket ? bucketName(settings, t.bucket) : "",
+        t.category || "",
+        t.note || "",
+        isDebt ? (t.repaid ? 0 : t.remainingAmount ?? "") : "",
+      ];
+    });
+  const text = [header, ...rows].map((r) => r.map(csvCell).join(";")).join("\r\n");
+  downloadFile(`budget-operations-${todayStr()}.csv`, "\uFEFF" + text, "text/csv;charset=utf-8");
+}
+
+function SettingsView({ settings, transactions, onImport, onSave, onWipeAll, onResetTracking, userEmail, onSignOut }) {
+  const importInputRef = useRef(null);
+  const [importMsg, setImportMsg] = useState("");
+
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (!data || data.app !== "budget" || !Array.isArray(data.transactions) || typeof data.settings !== "object") {
+        setImportMsg("Это не резервная копия приложения.");
+        return;
+      }
+      const ok = window.confirm(
+        `Заменить текущие данные (операций: ${(transactions || []).length}) данными из файла (операций: ${data.transactions.length})? Сначала сохраните копию текущих данных, если они нужны.`
+      );
+      if (!ok) return;
+      onImport(data);
+      setImportMsg(`Восстановлено: операций ${data.transactions.length}.`);
+    } catch {
+      setImportMsg("Не удалось прочитать файл.");
+    }
+  }
   const [draft, setDraft] = useState(settings);
   const [daysText, setDaysText] = useState((settings.reminderDays || []).join(", "));
   const [saved, setSaved] = useState(false);
@@ -5273,6 +5359,31 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
       </div>
 
       <div className="panel">
+        <SectionTitle>Данные</SectionTitle>
+        <div className="button-row" style={{ marginBottom: 8 }}>
+          <button className="btn" type="button" onClick={() => exportJsonBackup(settings, transactions || [])}>
+            Резервная копия (JSON)
+          </button>
+          <button className="btn" type="button" onClick={() => exportCsv(settings, transactions || [])}>
+            Таблица (CSV)
+          </button>
+        </div>
+        <button className="btn" type="button" style={{ width: "100%" }} onClick={() => importInputRef.current?.click()}>
+          Восстановить из копии
+        </button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: "none" }}
+          onChange={handleImportFile}
+        />
+        {importMsg && (
+          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{importMsg}</div>
+        )}
+      </div>
+
+      <div className="panel">
         <SectionTitle>Аккаунт</SectionTitle>
         <div className="muted" style={{ fontSize: 12, marginBottom: 10, wordBreak: "break-all" }}>
           {userEmail ? `Вы вошли как ${userEmail}.` : "Вы вошли."}
@@ -5529,6 +5640,15 @@ export default function App() {
     } catch (e) {
       console.warn("Не удалось сохранить настройки", e);
     }
+  }
+
+  // Восстановление из JSON-копии: заменяет настройки и операции.
+  function importBackup(data) {
+    const s = migrateSettings(data.settings);
+    persistSettings(s);
+    persistTransactions(migrateTransactions(data.transactions, s));
+    setToast("Данные восстановлены");
+    setTimeout(() => setToast(null), 1400);
   }
 
   // Добавляет сразу несколько операций одним обновлением состояния. Важно делать это
@@ -5900,6 +6020,8 @@ export default function App() {
             ) : (
               <SettingsView
                 settings={settings}
+                transactions={transactions}
+                onImport={importBackup}
                 onSave={persistSettings}
                 onWipeAll={() => persistTransactions([])}
                 onResetTracking={resetNeedsWantsTracking}
