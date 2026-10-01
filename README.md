@@ -61,13 +61,23 @@ npm run dev
 
 ## Структура проекта
 
+Все файлы лежат в `src/` одной папкой (так их проще загружать через сайт GitHub).
+
 ```
 src/
-  App.jsx        — всё приложение (дашборд, добавление операций, накопления,
-                    анализ, настройки)
-  storage.js     — облачное хранилище на Supabase: вход, кэш, офлайн-очередь
-  main.jsx       — точка входа React
-  index.css      — Tailwind + шрифты
+  App.jsx          — корневой компонент: загрузка/сохранение данных, навигация
+  constants.js     — цвета, значки, настройки по умолчанию, списки и константы
+  storage.js       — облачное хранилище на Supabase: вход, кэш, офлайн-очередь
+  main.jsx, index.css — точка входа React, Tailwind и шрифты
+  format.js        — даты, деньги, названия бюджетов и карт, склонение
+  debts.js         — внутренние долги между бюджетами и их погашение
+  finance.js       — балансы, итоги месяца, накопительное распределение, статистика
+  insights.js      — заметки и подсказки для карусели, прогноз «на сколько хватит»
+  migrate.js       — приведение старых данных к текущему формату
+  backup.js        — экспорт в JSON/CSV
+  ui.jsx, cards.jsx, charts.jsx, panels.jsx, form.jsx, TabBar.jsx — компоненты
+  AnalysisView.jsx, SettingsView.jsx, AuthScreen.jsx — экраны
+  AppStyles.jsx    — все стили приложения
 supabase-security.sql        — правила RLS для таблицы app_data
 .github/workflows/deploy.yml — автосборка и публикация на GitHub Pages
 ```
