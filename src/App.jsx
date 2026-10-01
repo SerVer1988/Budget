@@ -440,30 +440,55 @@ function syncLinkedDebt(list, tx, asDebt) {
   return list.map((t) => (t.id === existing.id ? updated : t));
 }
 
-/* Группирует открытые долги по паре бюджетов и взаимозачитывает противоположные
-   направления (если «Желания» должны «Нуждам» 300, а потом появился долг
-   «Нужды» должны «Желаниям» 120 — в остатке одна строка «Желания → Нужды» 180),
-   чтобы не показывать много отдельных строк с одной и той же парой. */
+/* План погашения долгов между бюджетами без «посредников».
+   Считаем итоговую позицию каждого бюджета (сколько ему должны минус сколько должен он сам)
+   и сводим всё к минимальному числу переводов: например, если «Потребности» должны «Хотениям»
+   105, а «Хотения» должны «Сбережениям» 174, то «Потребности» платят «Сбережениям» напрямую
+   (105), а «Хотения» доплачивают остаток (69). Первыми платят «Потребности» — основная карта,
+   на которую приходит доход. Возвращает строки: fromBucket — кому должны (кредитор),
+   toBucket — кто должен (должник); ids — все открытые долги, вошедшие в расчёт. */
+const DEBT_PAYER_ORDER = { needs: 0, wants: 1, savings: 2 };
+
 function aggregateOpenDebts(openDebts) {
-  const groups = {};
+  const net = {};
+  const ids = [];
   openDebts.forEach((d) => {
-    const [a, b] = [d.fromBucket, d.toBucket].sort();
-    const key = `${a}|${b}`;
-    if (!groups[key]) groups[key] = { a, b, net: 0, ids: [] };
-    // net > 0 — «b» должен «a»; net < 0 — «a» должен «b».
-    groups[key].net += d.toBucket === b ? d.remainingAmount : -d.remainingAmount;
-    groups[key].ids.push(d.id);
+    const amt = Number(d.remainingAmount) || 0;
+    if (amt <= 0) return;
+    // fromBucket — кредитор, toBucket — должник
+    net[d.fromBucket] = (net[d.fromBucket] || 0) + amt;
+    net[d.toBucket] = (net[d.toBucket] || 0) - amt;
+    ids.push(d.id);
   });
 
-  return Object.values(groups)
-    .filter((g) => Math.abs(g.net) >= 1)
-    .map((g) => ({
-      key: `${g.a}|${g.b}`,
-      fromBucket: g.net > 0 ? g.a : g.b,
-      toBucket: g.net > 0 ? g.b : g.a,
-      amount: Math.abs(g.net),
-      ids: g.ids,
-    }));
+  const debtors = Object.keys(net)
+    .filter((b) => net[b] <= -1)
+    .map((b) => ({ b, left: -net[b] }))
+    .sort((x, y) => (DEBT_PAYER_ORDER[x.b] ?? 9) - (DEBT_PAYER_ORDER[y.b] ?? 9));
+  const creditors = Object.keys(net)
+    .filter((b) => net[b] >= 1)
+    .map((b) => ({ b, left: net[b] }))
+    .sort((x, y) => y.left - x.left);
+
+  const plan = [];
+  debtors.forEach((d) => {
+    creditors.forEach((c) => {
+      if (d.left < 1 || c.left < 1) return;
+      const amount = Math.min(d.left, c.left);
+      d.left -= amount;
+      c.left -= amount;
+      if (Math.round(amount) >= 1) {
+        plan.push({
+          key: `${d.b}>${c.b}`,
+          fromBucket: c.b,
+          toBucket: d.b,
+          amount: Math.round(amount),
+          ids,
+        });
+      }
+    });
+  });
+  return plan;
 }
 
 function computeBalances(transactions, settings, uptoDateInclusive) {
@@ -5559,24 +5584,55 @@ export default function App() {
   }
 
   // Списание долга между бюджетами: создаёт реальный перевод денег с карты
-  // должника на карту кредитора (без обратного учёта как нового долга) и
-  // одновременно закрывает все операции долга, вошедшие в этот взаимозачёт.
+  // должника на карту кредитора (без учёта как нового долга). Остальные открытые
+  // долги пересчитываются как «план без посредников»: старые записи закрываются,
+  // а то, что осталось платить по другим направлениям, остаётся одной записью на направление.
   function writeOffDebtGroup(group) {
     const debtorCard = BUCKET_CARD[group.toBucket];
     const creditorCard = BUCKET_CARD[group.fromBucket];
+    const today = todayStr();
     const settleTx = {
       type: "transfer",
-      date: todayStr(),
+      date: today,
       amount: Math.round(group.amount),
       fromCard: debtorCard,
       toCard: creditorCard,
       note: "Погашение долга",
       id: uid(),
     };
+
+    const open = transactions.filter((t) => t.type === "debt" && !t.repaid && t.remainingAmount > 0);
+    const rest = aggregateOpenDebts(open).filter((g) => g.key !== group.key);
+
+    // Если оставшееся направление уже есть отдельной записью на ту же сумму — не трогаем её.
+    const keep = new Set();
+    const created = [];
+    rest.forEach((g) => {
+      const same = open.find(
+        (t) => !keep.has(t.id) && t.fromBucket === g.fromBucket && t.toBucket === g.toBucket && Math.round(t.remainingAmount) === g.amount
+      );
+      if (same) {
+        keep.add(same.id);
+      } else {
+        created.push({
+          id: uid(),
+          type: "debt",
+          date: today,
+          amount: g.amount,
+          remainingAmount: g.amount,
+          fromBucket: g.fromBucket,
+          toBucket: g.toBucket,
+          repaid: false,
+          note: "",
+        });
+      }
+    });
+
+    const closeIds = new Set(group.ids.filter((id) => !keep.has(id)));
     const updated = transactions.map((t) =>
-      group.ids.includes(t.id) ? { ...t, repaid: true, remainingAmount: 0 } : t
+      closeIds.has(t.id) ? { ...t, repaid: true, remainingAmount: 0 } : t
     );
-    persistTransactions([...updated, settleTx]);
+    persistTransactions([...updated, ...created, settleTx]);
     setToast("Долг погашен переводом");
     setTimeout(() => setToast(null), 1200);
   }
