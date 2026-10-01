@@ -7,7 +7,7 @@ import {
   Baby, PawPrint, Gift, Film, Tv, Music, Gamepad2, Book, Shirt, Smartphone, Laptop,
   Wrench, Scissors, Coins, Users, User, HelpCircle, MoreHorizontal, Sparkles, Umbrella, Wine,
   Cigarette, Cat, Dog, Pizza, Sandwich, Disc3, PartyPopper, Trophy, Bike,
-  Palmtree, Tent, Sofa, Lightbulb, Landmark, CreditCard, Upload,
+  Palmtree, Tent, Sofa, Lightbulb, Landmark, CreditCard, Upload, Search,
 } from "lucide-react";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -2515,27 +2515,98 @@ function AppStyles() {
         font-weight: 800;
       }
 
-      .type-filter {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin: 0 -12px 10px;
-        padding: 8px 12px;
+      /* Операции: поиск + фильтры + итог — одна компактная залипающая зона */
+      .ops-sticky {
+        margin: 0 -12px 8px;
+        padding: 6px 12px 7px;
         position: sticky;
         top: env(safe-area-inset-top, 0px);
         z-index: 5;
         background: ${C.bg};
         border-bottom: 1px solid ${C.border};
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .ops-search {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 10px;
+        border: 1px solid ${C.border};
+        border-radius: 10px;
+        background: ${C.surface};
+        color: ${C.inkMuted};
+      }
+
+      .ops-search input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        font-size: 13px;
+        color: ${C.ink};
+        padding: 0;
+      }
+
+      .ops-search button {
+        display: flex;
+        align-items: center;
+        border: 0;
+        background: transparent;
+        color: ${C.inkMuted};
+        padding: 2px;
+      }
+
+      .ops-chips {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .ops-chips-scroll {
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+
+      .ops-chips-scroll::-webkit-scrollbar {
+        display: none;
+      }
+
+      .ops-chips .type-filter-chip {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .chip-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex: 0 0 auto;
+      }
+
+      .ops-total {
+        margin-left: auto;
+        padding-left: 6px;
+        font-size: 14px;
+        font-weight: 900;
+        white-space: nowrap;
       }
 
       .type-filter-chip {
-        padding: 6px 12px;
+        padding: 4px 9px;
         border-radius: 999px;
         border: 1px solid ${C.border};
         background: ${C.surface};
         color: ${C.inkMuted};
-        font-size: 12px;
+        font-size: 11.5px;
         font-weight: 700;
+        line-height: 1.3;
       }
 
       .type-filter-chip.active {
@@ -2578,7 +2649,7 @@ function AppStyles() {
           padding-right: 9px;
         }
 
-        .type-filter {
+        .ops-sticky {
           margin-left: -9px;
           margin-right: -9px;
           padding-left: 9px;
@@ -4358,6 +4429,31 @@ const TX_TYPE_FILTERS = [
   { id: "debt", label: "Долги" },
 ];
 
+/* Карты, которых касается операция (для фильтра по картам). */
+function txCardsOf(t) {
+  if (t.type === "transfer") return [t.fromCard, t.toCard];
+  if (t.type === "debt") return [BUCKET_CARD[t.fromBucket], BUCKET_CARD[t.toBucket]].filter(Boolean);
+  return t.card ? [t.card] : [];
+}
+
+/* Строка, по которой ищем: заметка, категория, названия карт, сумма. */
+function txSearchText(t, settings) {
+  const cards = txCardsOf(t).map((c) => cardLabel(settings, c));
+  return [t.note, t.category, ...cards, String(Math.abs(t.amount ?? 0)), formatMoney(Math.abs(t.amount ?? 0))]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+/* Влияние операции на сумму. Если выбраны карты, перевод между выбранной и
+   невыбранной картой тоже учитывается; между двумя выбранными — взаимно гасится. */
+function txImpactFor(t, cardFilters) {
+  if (t.type === "transfer" && cardFilters.length > 0) {
+    return (cardFilters.includes(t.toCard) ? t.amount : 0) - (cardFilters.includes(t.fromCard) ? t.amount : 0);
+  }
+  return txNetImpact(t);
+}
+
 function txNetImpact(t) {
   if (t.type === "expense") return -t.amount;
   if (t.type === "income") return t.amount;
@@ -4421,16 +4517,25 @@ function AnalysisView({
 
   const monthItems = agg.items;
   const [typeFilters, setTypeFilters] = useState([]);
+  const [cardFilters, setCardFilters] = useState([]);
+  const [searchText, setSearchText] = useState("");
 
   function toggleFilter(list, setList, id) {
     setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   }
 
+  const searchWords = searchText.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const filteredItems = monthItems.filter((t) => {
-    return typeFilters.length === 0 || typeFilters.includes(t.type);
+    if (typeFilters.length > 0 && !typeFilters.includes(t.type)) return false;
+    if (cardFilters.length > 0 && !txCardsOf(t).some((c) => cardFilters.includes(c))) return false;
+    if (searchWords.length > 0) {
+      const hay = txSearchText(t, settings);
+      if (!searchWords.every((w) => hay.includes(w))) return false;
+    }
+    return true;
   });
 
-  const filteredTotal = filteredItems.reduce((sum, t) => sum + txNetImpact(t), 0);
+  const filteredTotal = filteredItems.reduce((sum, t) => sum + txImpactFor(t, cardFilters), 0);
 
   const groupedItems = useMemo(() => {
     const groups = [];
@@ -4624,24 +4729,61 @@ function AnalysisView({
 
         {monthItems.length > 0 && (
           <>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "0 2px 10px" }}>
-              <span className="muted" style={{ fontSize: 12 }}>Итого по показанным</span>
-              <span className="mono" style={{ fontSize: 16, fontWeight: 900, color: filteredTotal >= 0 ? C.sber : C.danger }}>
-                {filteredTotal >= 0 ? "+" : "−"}{formatMoney(Math.abs(filteredTotal))}
-              </span>
-            </div>
+            <div className="ops-sticky">
+              <div className="ops-search">
+                <Search size={15} />
+                <input
+                  type="text"
+                  inputMode="search"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  placeholder="Поиск по заметке, категории, сумме"
+                  aria-label="Поиск по операциям"
+                />
+                {searchText && (
+                  <button type="button" onClick={() => setSearchText("")} aria-label="Очистить поиск">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
 
-            <div className="type-filter">
-              {TX_TYPE_FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  className={`type-filter-chip ${typeFilters.includes(f.id) ? "active" : ""}`}
-                  onClick={() => toggleFilter(typeFilters, setTypeFilters, f.id)}
+              <div className="ops-chips ops-chips-scroll">
+                {TX_TYPE_FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={`type-filter-chip ${typeFilters.includes(f.id) ? "active" : ""}`}
+                    onClick={() => toggleFilter(typeFilters, setTypeFilters, f.id)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="ops-chips ops-chips-cards">
+                {[
+                  { id: "sber", bucket: "needs", color: C.sber },
+                  { id: "alfa", bucket: "wants", color: C.alfa },
+                  { id: "ozon", bucket: "savings", color: C.ozon },
+                ].map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`type-filter-chip ${cardFilters.includes(c.id) ? "active" : ""}`}
+                    onClick={() => toggleFilter(cardFilters, setCardFilters, c.id)}
+                  >
+                    <span className="chip-dot" style={{ background: c.color }} />
+                    {bucketName(settings, c.bucket)}
+                  </button>
+                ))}
+                <span
+                  className="mono ops-total"
+                  style={{ color: filteredTotal >= 0 ? C.sber : C.danger }}
+                  title="Итого по показанным"
                 >
-                  {f.label}
-                </button>
-              ))}
+                  {filteredTotal >= 0 ? "+" : "−"}{formatMoney(Math.abs(filteredTotal))}
+                </span>
+              </div>
             </div>
           </>
         )}
