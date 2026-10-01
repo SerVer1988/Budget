@@ -809,6 +809,31 @@ function computeCategoryInsights(transactions, settings) {
   return insights;
 }
 
+/* Короткие финансовые советы для заметок. Показывается один в день: по очереди,
+   в зависимости от числа года, чтобы карусель не раздувалась. */
+const FINANCE_TIPS = [
+  "Сначала заплати себе: откладывайте в сбережения в день дохода, а не то, что осталось в конце месяца.",
+  "Подушка безопасности — это расходы на 3–6 месяцев жизни. Начните с одного месяца, потом наращивайте.",
+  "Правило 24 часов: незапланированную крупную покупку отложите на сутки. Часто желание уходит само.",
+  "Погашайте сначала самый дорогой долг, то есть с самым высоким процентом, а не самый маленький.",
+  "Раз в квартал просматривайте подписки и автоплатежи. Ненужные списания незаметно съедают бюджет.",
+  "Мелкие траты складываются: кофе за 250 ₽ каждый будний день — это около 5 000 ₽ в месяц.",
+  "Цель с суммой и сроком работает лучше, чем «накопить побольше»: ясно, сколько откладывать в месяц.",
+  "Годовые платежи (страховка, налоги, отпуск) разделите на 12 и откладывайте понемногу каждый месяц.",
+  "Выросли доходы — не повышайте расходы пропорционально. Разницу лучше направить в сбережения.",
+  "Не вкладывайте деньги в то, что не понимаете. Инвестиции — только после того, как есть подушка.",
+  "Держите подушку там, где её не съест инфляция и куда трудно залезть случайно: на отдельном накопительном счёте.",
+  "Сверяйте баланс карт с приложением хотя бы раз в неделю: расхождение проще найти, пока операций немного.",
+  "Автоматизируйте перевод в сбережения: решение, принятое один раз, работает лучше, чем каждый раз выбирать заново.",
+  "Сравнивайте не цену, а стоимость использования: вещь за 10 000 ₽ на пять лет дешевле, чем за 3 000 ₽ на полгода.",
+  "Перед кредитом посчитайте полную переплату, а не только ежемесячный платёж.",
+];
+
+function dayOfYear(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return Math.floor((Date.UTC(y, m - 1, d) - Date.UTC(y, 0, 0)) / 86400000);
+}
+
 /* Собирает все подсказки в один список для карусели: аванс, баланс карт
    относительно плана, разбор категорий, непогашенные внутренние долги. */
 function computeAllInsights(transactions, settings) {
@@ -863,6 +888,28 @@ function computeAllInsights(transactions, settings) {
   });
 
   insights.push(...computeCategoryInsights(transactions, settings));
+
+  // Сколько прожить на «Сбережения» без работы, и правило неприкосновенности.
+  const avgMonthlyNeeds = estimateAvgMonthlyNeeds(transactions, settings, todayMonthKey());
+  insights.push({
+    id: "runway",
+    color: C.ozon,
+    soft: C.ozonSoft,
+    text: runwayText(settings, balances.ozon, avgMonthlyNeeds),
+  });
+  insights.push({
+    id: "savings-rule",
+    color: C.ozon,
+    soft: C.ozonSoft,
+    text: `Деньги из «${bucketName(settings, "savings")}» не трогаем ни при каких условиях, кроме реального форс-мажора — потери работы или проблем со здоровьем.`,
+  });
+
+  insights.push({
+    id: "tip",
+    color: "#2D8C6F",
+    soft: "#E4F2EC",
+    text: `Совет: ${FINANCE_TIPS[dayOfYear(today) % FINANCE_TIPS.length]}`,
+  });
 
   return insights;
 }
@@ -967,7 +1014,7 @@ function ruPlural(n, one, few, many) {
 
 function runwayText(settings, balance, avgMonthlyNeeds) {
   if (avgMonthlyNeeds <= 0) {
-    return `Добавьте несколько трат в «${bucketName(settings, "needs")}» — тогда посчитаем, на сколько хватит ${bucketNameGen(settings, "savings").toLowerCase()}.`;
+    return `Добавьте несколько трат в «${bucketName(settings, "needs")}» — тогда посчитаем, на сколько хватит «${bucketName(settings, "savings")}».`;
   }
 
   const totalMonths = Math.max(0, balance) / avgMonthlyNeeds;
@@ -982,7 +1029,7 @@ function runwayText(settings, balance, avgMonthlyNeeds) {
   if (months > 0) parts.push(`${months} ${ruPlural(months, "месяц", "месяца", "месяцев")}`);
   if (days > 0) parts.push(`${days} ${ruPlural(days, "день", "дня", "дней")}`);
 
-  return `Ваша подушка безопасности позволит вам полностью не работать ${parts.join(" и ")}.`;
+  return `«${bucketName(settings, "savings")}» позволит вам полностью не работать ${parts.join(" и ")}.`;
 }
 
 function getAllMonthKeys(transactions) {
@@ -3521,8 +3568,6 @@ function OzonPanel({
   const rate = useMemo(() => estimateMonthlyRate(transactions, settings, todayMonthKey()), [transactions, settings]);
   const monthsLeft = left <= 0 ? 0 : (rate > 0 ? Math.ceil(left / rate) : null);
   const thisMonth = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
-  const avgMonthlyNeeds = useMemo(() => estimateAvgMonthlyNeeds(transactions, settings, todayMonthKey()), [transactions, settings]);
-  const runwayMessage = useMemo(() => runwayText(settings, balance, avgMonthlyNeeds), [settings, balance, avgMonthlyNeeds]);
 
   const ozonEntries = useMemo(() => {
     const list = transactions.filter((t) =>
@@ -3596,9 +3641,6 @@ function OzonPanel({
           <div className="progress">
             <div style={{ width: `${clampPct(pct) * 100}%` }} />
           </div>
-          <div className="small-note" style={{ marginTop: 8, lineHeight: 1.4 }}>
-            {runwayMessage}
-          </div>
           <div style={{
             display: "flex",
             justifyContent: "space-between",
@@ -3630,10 +3672,6 @@ function OzonPanel({
             value={monthsLeft === 0 ? "готово" : monthsLeft ? `~${monthsLeft} мес.` : "—"}
             color={C.ozon}
           />
-        </div>
-
-        <div className="notice">
-          Деньги из {bucketNameGen(settings, "savings").toLowerCase()} не трогаем ни при каких условиях, кроме реального форс-мажора — потери работы или проблем со здоровьем.
         </div>
 
         <div>
@@ -4089,11 +4127,6 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
                   ))}
                 </select>
               </div>
-              {isEdit && (
-                <div className="small-note" style={{ marginBottom: 7 }}>
-                  Часть 1 заменит эту операцию, часть 2 добавится отдельной новой записью.
-                </div>
-              )}
               <div className="small-note" style={{ marginBottom: 11 }}>
                 Итого спишется с «{cardLabel(settings, card)}»: {formatMoney(amountNum + splitAmountNum)}
               </div>
@@ -4144,12 +4177,6 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
             </label>
           </div>
 
-          {transferDebtActive && (
-            <div className="small-note" style={{ marginBottom: 11 }}>
-              «{bucketName(settings, CARD_BUCKET[toCard])}» должны «{bucketNameGen(settings, CARD_BUCKET[fromCard])}»
-              {amountNum > 0 ? ` ${formatMoney(amountNum)}` : ""}. Долг погасится автоматически из следующего дохода.
-            </div>
-          )}
         </>
       )}
 
@@ -4172,11 +4199,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
             </label>
           </div>
 
-          {isEdit ? (
-            <div className="notice" style={{ marginBottom: 11 }}>
-              Меняете сумму этой записи напрямую. Положительное число — пополнение, отрицательное — списание.
-            </div>
-          ) : (
+          {!isEdit && (
             <div
               className="notice"
               style={
@@ -4852,10 +4875,6 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
     <div className="screen-stack">
       <div className="panel">
         <SectionTitle>Банки бюджета (50/30/20)</SectionTitle>
-        <div className="small-note" style={{ marginBottom: 10 }}>
-          Выберите банк (или свой значок) и название для каждой части дохода — они будут
-          использоваться везде в приложении: в заголовках, балансах и операциях.
-        </div>
 
         {[
           { bucket: "needs", pct: 100 - Number(draft.wantPct || 0) - Number(draft.savePct || 0) },
@@ -4901,9 +4920,6 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
           </div>
         </div>
 
-        <div className="notice" style={{ marginBottom: 12 }}>
-          На «{bucketName(draft, "needs")}» остаётся {needPctOf({ ...draft, wantPct: Number(draft.wantPct), savePct: Number(draft.savePct) })}% дохода.
-        </div>
 
         <div className="field">
           <label>Дни напоминаний</label>
@@ -4922,14 +4938,6 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
 
       <div className="panel">
         <SectionTitle>Сверка «{bucketName(draft, "needs")}» и «{bucketName(draft, "wants")}»</SectionTitle>
-        <div className="small-note" style={{ marginBottom: 10 }}>
-          Подсказки по «{bucketName(draft, "needs")}»/«{bucketName(draft, "wants")}» считают излишки и недокиды с {settings.needsWantsResetDate
-            ? `${formatDateRu(settings.needsWantsResetDate)}`
-            : "самого начала"}. Каждое «Закрыть месяц» в Анализе сдвигает эту точку вперёд
-          автоматически. Если цифры накопились и выглядят непропорционально — сбросьте отсчёт
-          на сегодня (баланс на сейчас будет принят за новую точку отсчёта, старые остатки
-          никуда не денутся физически, просто перестанут считаться «излишком»/«недокидом»).
-        </div>
         <button
           className="btn"
           type="button"
@@ -5100,7 +5108,7 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
       <div className="panel">
         <SectionTitle>Аккаунт</SectionTitle>
         <div className="muted" style={{ fontSize: 12, marginBottom: 10, wordBreak: "break-all" }}>
-          {userEmail ? `Вы вошли как ${userEmail}.` : "Вы вошли."} Данные синхронизируются между устройствами.
+          {userEmail ? `Вы вошли как ${userEmail}.` : "Вы вошли."}
         </div>
         <button className="btn" type="button" style={{ width: "100%" }} onClick={onSignOut}>
           Выйти
