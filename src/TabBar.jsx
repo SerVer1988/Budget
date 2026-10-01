@@ -1,5 +1,5 @@
 import React from "react";
-import bottomPlantsImg from "../assets/bottom-plants.webp";
+import bottomPlantsImg from "./assets/bottom-plants.webp";
 
 /* ============================================================ Bottom nav */
 /* Иконки нижней панели — из присланных SVG, перекрашиваются через currentColor */

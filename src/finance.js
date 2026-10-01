@@ -1,4 +1,4 @@
-import { BUCKET_CARD } from "../constants.js";
+import { BUCKET_CARD } from "./constants.js";
 import { bucketOf, cardLabel, dayOfMonth, formatMoney, monthKeyOf, needPctOf, shiftMonth, todayMonthKey } from "./format.js";
 
 export function computeBalances(transactions, settings, uptoDateInclusive) {

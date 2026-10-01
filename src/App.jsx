@@ -7,18 +7,18 @@ import bottomPlantsImg from "./assets/bottom-plants.webp";
 import badgeSberImg from "./assets/badge-sber.webp";
 import badgeAlfaImg from "./assets/badge-alfa.webp";
 import badgeOzonImg from "./assets/badge-ozon.webp";
-import { TabBar } from "./components/TabBar.jsx";
-import { AddPageContent, FullAddForm, deriveFormInitialFromTx } from "./components/form.jsx";
-import { IncomeDistributionModal } from "./components/panels.jsx";
-import { Toast } from "./components/ui.jsx";
+import { TabBar } from "./TabBar.jsx";
+import { AddPageContent, FullAddForm, deriveFormInitialFromTx } from "./form.jsx";
+import { IncomeDistributionModal } from "./panels.jsx";
+import { Toast } from "./ui.jsx";
 import { BUCKET_CARD, BUCKET_STYLE, C, DEFAULT_SETTINGS } from "./constants.js";
-import { aggregateOpenDebts, computeIncomeSplitWithDebts, syncLinkedDebt } from "./lib/debts.js";
-import { bucketName, endOfMonthStr, monthLabel, todayMonthKey, todayStr, uid } from "./lib/format.js";
-import { migrateSettings, migrateTransactions } from "./lib/migrate.js";
-import { AppStyles } from "./styles/AppStyles.jsx";
-import { AnalysisView } from "./views/AnalysisView.jsx";
-import { AuthScreen } from "./views/AuthScreen.jsx";
-import { SettingsView } from "./views/SettingsView.jsx";
+import { aggregateOpenDebts, computeIncomeSplitWithDebts, syncLinkedDebt } from "./debts.js";
+import { bucketName, endOfMonthStr, monthLabel, todayMonthKey, todayStr, uid } from "./format.js";
+import { migrateSettings, migrateTransactions } from "./migrate.js";
+import { AppStyles } from "./AppStyles.jsx";
+import { AnalysisView } from "./AnalysisView.jsx";
+import { AuthScreen } from "./AuthScreen.jsx";
+import { SettingsView } from "./SettingsView.jsx";
 
 /* ============================================================ App */
 export default function App() {

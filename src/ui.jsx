@@ -5,8 +5,8 @@ import {
   Check,
   Wallet,
 } from "lucide-react";
-import { C } from "../constants.js";
-import { darkenColor, formatMoney, monthLabel, shiftMonth } from "../lib/format.js";
+import { C } from "./constants.js";
+import { darkenColor, formatMoney, monthLabel, shiftMonth } from "./format.js";
 
 /* ============================================================ small UI parts */
 export function SectionTitle({ children }) {

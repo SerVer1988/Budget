@@ -1,4 +1,4 @@
-import { BACKUP_VERSION, TX_TYPE_RU } from "../constants.js";
+import { BACKUP_VERSION, TX_TYPE_RU } from "./constants.js";
 import { txCardsOf } from "./finance.js";
 import { bucketName, cardLabel, todayStr } from "./format.js";
 

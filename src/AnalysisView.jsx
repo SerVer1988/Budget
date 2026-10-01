@@ -14,14 +14,14 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { BankCard, BankCardDetail, TotalBalanceCard, TxRow } from "../components/cards.jsx";
-import { ChartsCarousel, DailyExpenseChart, InsightsCarousel } from "../components/charts.jsx";
-import { BankBadge, EmptyState, MonthNav, SectionTitle, StatBox } from "../components/ui.jsx";
-import { BUCKET_CARD, C, TX_TYPE_FILTERS } from "../constants.js";
-import { aggregateOpenDebts } from "../lib/debts.js";
-import { aggregateMonth, computeBalances, txCardsOf, txImpactFor, txNetImpact, txSearchText } from "../lib/finance.js";
-import { bucketIconSrc, bucketName, dayOfMonth, daysInMonth, endOfMonthStr, formatMoney, monthLabel, shiftMonth, todayMonthKey, todayStr } from "../lib/format.js";
-import { computeAllInsights } from "../lib/insights.js";
+import { BankCard, BankCardDetail, TotalBalanceCard, TxRow } from "./cards.jsx";
+import { ChartsCarousel, DailyExpenseChart, InsightsCarousel } from "./charts.jsx";
+import { BankBadge, EmptyState, MonthNav, SectionTitle, StatBox } from "./ui.jsx";
+import { BUCKET_CARD, C, TX_TYPE_FILTERS } from "./constants.js";
+import { aggregateOpenDebts } from "./debts.js";
+import { aggregateMonth, computeBalances, txCardsOf, txImpactFor, txNetImpact, txSearchText } from "./finance.js";
+import { bucketIconSrc, bucketName, dayOfMonth, daysInMonth, endOfMonthStr, formatMoney, monthLabel, shiftMonth, todayMonthKey, todayStr } from "./format.js";
+import { computeAllInsights } from "./insights.js";
 
 export function AnalysisView({
   settings,

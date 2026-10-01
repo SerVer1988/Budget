@@ -1,4 +1,4 @@
-import { C, FINANCE_TIPS, SMART_NOTE_THRESHOLD } from "../constants.js";
+import { C, FINANCE_TIPS, SMART_NOTE_THRESHOLD } from "./constants.js";
 import { aggregateOpenDebts, computeIncomeSplit } from "./debts.js";
 import { aggregateMonth, computeBalances, computeCategoryLimits, computeCumulativeAllocation, estimateAvgMonthlyNeeds } from "./finance.js";
 import { bucketName, bucketNameGen, cardLabel, dayOfMonth, dayOfYear, formatDateRu, formatMoney, needPctOf, ruPlural, todayMonthKey, todayStr } from "./format.js";

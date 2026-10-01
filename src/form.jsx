@@ -3,9 +3,9 @@ import {
   X,
 } from "lucide-react";
 import { CategoryPanel, OzonPanel } from "./panels.jsx";
-import { C, CARD_BUCKET } from "../constants.js";
-import { computeBalances } from "../lib/finance.js";
-import { bucketName, bucketNameGen, bucketOf, cardLabel, catListOf, evalMoneyExpr, formatMoney, homeCardOf, moneyNum, todayStr, uid } from "../lib/format.js";
+import { C, CARD_BUCKET } from "./constants.js";
+import { computeBalances } from "./finance.js";
+import { bucketName, bucketNameGen, bucketOf, cardLabel, catListOf, evalMoneyExpr, formatMoney, homeCardOf, moneyNum, todayStr, uid } from "./format.js";
 
 /* ============================================================ Add form */
 export function cardOptionsFor(settings) {

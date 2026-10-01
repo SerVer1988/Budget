@@ -1,4 +1,4 @@
-import { BADGE_IMG, BUCKET_CARD, BUCKET_LABEL, CARD_BUCKET, MONTHS_RU, MONTHS_SHORT } from "../constants.js";
+import { BADGE_IMG, BUCKET_CARD, BUCKET_LABEL, CARD_BUCKET, MONTHS_RU, MONTHS_SHORT } from "./constants.js";
 
 /* ============================================================ helpers */
 export function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }

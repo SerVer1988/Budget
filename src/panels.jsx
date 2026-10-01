@@ -6,10 +6,10 @@ import {
 import { FolderHero } from "./cards.jsx";
 import { CategoryDonut } from "./charts.jsx";
 import { CategoryTile, ListTile, StatBox } from "./ui.jsx";
-import { BUCKET_STYLE, C, getIcon } from "../constants.js";
-import { computeIncomeSplitWithDebts } from "../lib/debts.js";
-import { aggregateMonth, categoryStats, computeCategoryLimits, estimateMonthlyRate, ozonDayStats } from "../lib/finance.js";
-import { bucketName, bucketOf, cardLabel, clampPct, formatMoney, todayMonthKey } from "../lib/format.js";
+import { BUCKET_STYLE, C, getIcon } from "./constants.js";
+import { computeIncomeSplitWithDebts } from "./debts.js";
+import { aggregateMonth, categoryStats, computeCategoryLimits, estimateMonthlyRate, ozonDayStats } from "./finance.js";
+import { bucketName, bucketOf, cardLabel, clampPct, formatMoney, todayMonthKey } from "./format.js";
 
 /* ============================================================ NEW: Income Modal & Limit Status */
 export function IncomeDistributionModal({ incomeTx, settings, transactions, onDistribute, onClose }) {

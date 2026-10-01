@@ -4,8 +4,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { BankBadge } from "./ui.jsx";
-import { C, CARD_BUCKET } from "../constants.js";
-import { bucketIconSrc, bucketName, cardLabel, formatMoney } from "../lib/format.js";
+import { C, CARD_BUCKET } from "./constants.js";
+import { bucketIconSrc, bucketName, cardLabel, formatMoney } from "./format.js";
 
 export function TotalBalanceCard({ total, settings, onToggle }) {
   const items = [

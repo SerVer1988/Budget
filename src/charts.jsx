@@ -19,8 +19,8 @@ import {
 } from "recharts";
 import { TxRow } from "./cards.jsx";
 import { SectionTitle } from "./ui.jsx";
-import { C } from "../constants.js";
-import { bucketName, bucketOf, dayOfMonth, daysInMonth, formatMoney, monthKeyOf, todayMonthKey } from "../lib/format.js";
+import { C } from "./constants.js";
+import { bucketName, bucketOf, dayOfMonth, daysInMonth, formatMoney, monthKeyOf, todayMonthKey } from "./format.js";
 
 /* Единая карусель подсказок: аванс, аналитика по категориям, баланс карт
    относительно плана. Листается только тапом: левая половина карточки —

@@ -4,13 +4,13 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import badgeSberImg from "../assets/badge-sber.webp";
-import badgeAlfaImg from "../assets/badge-alfa.webp";
-import badgeOzonImg from "../assets/badge-ozon.webp";
-import { SectionTitle } from "../components/ui.jsx";
-import { BUCKET_LABEL, C, CATEGORY_COLORS, ICON_KEYS, ICON_MAP, getIcon } from "../constants.js";
-import { exportCsv, exportJsonBackup } from "../lib/backup.js";
-import { bucketName, bucketNameGen } from "../lib/format.js";
+import badgeSberImg from "./assets/badge-sber.webp";
+import badgeAlfaImg from "./assets/badge-alfa.webp";
+import badgeOzonImg from "./assets/badge-ozon.webp";
+import { SectionTitle } from "./ui.jsx";
+import { BUCKET_LABEL, C, CATEGORY_COLORS, ICON_KEYS, ICON_MAP, getIcon } from "./constants.js";
+import { exportCsv, exportJsonBackup } from "./backup.js";
+import { bucketName, bucketNameGen } from "./format.js";
 
 /* ============================================================ Settings */
 /* Выбор банка для одного из трёх бюджетов (50/30/20): три готовых логотипа

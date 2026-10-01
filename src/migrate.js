@@ -1,4 +1,4 @@
-import { CATEGORY_COLORS, DEFAULT_NEED_CATS, DEFAULT_SETTINGS, DEFAULT_WANT_CATS } from "../constants.js";
+import { CATEGORY_COLORS, DEFAULT_NEED_CATS, DEFAULT_SETTINGS, DEFAULT_WANT_CATS } from "./constants.js";
 import { computeIncomeSplit } from "./debts.js";
 import { uid } from "./format.js";
 

@@ -1,6 +1,6 @@
 import React from "react";
-import handwrittenFontUrl from "../assets/font-handwritten.ttf";
-import { C } from "../constants.js";
+import handwrittenFontUrl from "./assets/font-handwritten.ttf";
+import { C } from "./constants.js";
 
 /* ============================================================ CSS */
 export function AppStyles() {

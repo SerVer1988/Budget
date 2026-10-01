@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { auth } from "../storage.js";
-import { C } from "../constants.js";
+import { auth } from "./storage.js";
+import { C } from "./constants.js";
 
 /* ============================================================ Вход */
 export function AuthScreen() {

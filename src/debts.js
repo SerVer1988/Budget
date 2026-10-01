@@ -1,4 +1,4 @@
-import { CARD_BUCKET, DEBT_PAYER_ORDER, DEBT_REPAY_CAP } from "../constants.js";
+import { CARD_BUCKET, DEBT_PAYER_ORDER, DEBT_REPAY_CAP } from "./constants.js";
 import { bucketOf, uid } from "./format.js";
 
 export function computeIncomeSplit(amount, settings) {
