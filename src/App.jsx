@@ -256,6 +256,32 @@ function clampPct(p) { return Math.max(0, Math.min(1, p || 0)); }
 function bucketName(settings, bucket) {
   return settings?.bucketNames?.[bucket] || BUCKET_LABEL[bucket] || bucket;
 }
+/* Родительный падеж названия бюджета («Потребности» → «Потребностей»). Известные
+   названия — по таблице, остальные — по простым правилам окончаний; если правило
+   не подошло, остаётся исходное слово. */
+const GENITIVE_KNOWN = {
+  "потребности": "потребностей", "хотения": "хотений", "сбережения": "сбережений",
+  "нужды": "нужд", "желания": "желаний", "подушка": "подушки",
+};
+function genitiveWord(word) {
+  const lw = word.toLowerCase();
+  let g;
+  if (GENITIVE_KNOWN[lw]) g = GENITIVE_KNOWN[lw];
+  else if (/ости$/.test(lw)) g = lw.slice(0, -1) + "ей";
+  else if (/(ия|ие)$/.test(lw)) g = lw.slice(0, -2) + "ий";
+  else if (/[бвгджзклмнпрстфхцчшщ]ы$/.test(lw)) g = lw.slice(0, -1);
+  else if (/[кгхжчшщ]а$/.test(lw)) g = lw.slice(0, -1) + "и";
+  else if (/а$/.test(lw)) g = lw.slice(0, -1) + "ы";
+  else if (/я$/.test(lw)) g = lw.slice(0, -1) + "и";
+  else g = lw;
+  return word[0] === word[0].toUpperCase() ? g[0].toUpperCase() + g.slice(1) : g;
+}
+function bucketNameGen(settings, bucket) {
+  const name = String(bucketName(settings, bucket)).trim();
+  const parts = name.split(/\s+/);
+  parts[parts.length - 1] = genitiveWord(parts[parts.length - 1]);
+  return parts.join(" ");
+}
 function cardLabel(settings, card) {
   return bucketName(settings, CARD_BUCKET[card]);
 }
@@ -282,14 +308,13 @@ function computeIncomeSplit(amount, settings) {
 const BUCKET_CARD = { needs: "sber", wants: "alfa", savings: "ozon" };
 const CARD_BUCKET = { sber: "needs", alfa: "wants", ozon: "savings" };
 const BUCKET_LABEL = { needs: "Нужды", wants: "Желания", savings: "Подушка" };
-const BUCKET_LABEL_GEN = { needs: "Нужд", wants: "Желаний", savings: "Подушки" };
 
 // Оформление экранов «Добавить» под каждый бакет: картинка-иллюстрация, фон
 // «папки» и цвет заголовка — все три взяты из присланных макетов/картинок.
 const BUCKET_STYLE = {
-  needs: { card: "sber", art: cardNeedsImg, folderBg: "#F1F6E8", titleColor: "#1F5C34" },
-  wants: { card: "alfa", art: cardWantsImg, folderBg: "#FEF2DF", titleColor: "#AE3523" },
-  savings: { card: "ozon", art: cardSavingsImg, folderBg: "#E3F0F8", titleColor: "#1E5478" },
+  needs: { card: "sber", art: cardNeedsImg, folderBg: "#F1F6E8", titleColor: "rgb(0, 102, 51)" },
+  wants: { card: "alfa", art: cardWantsImg, folderBg: "#FEF2DF", titleColor: "rgb(232, 47, 34)" },
+  savings: { card: "ozon", art: cardSavingsImg, folderBg: "#E3F0F8", titleColor: "rgb(0, 51, 153)" },
 };
 const DEBT_REPAY_CAP = 0.5; // максимум половины обычной доли бакета-должника уходит на погашение за раз
 
@@ -733,7 +758,7 @@ function computePaydayCountdownInsight(settings, balances) {
     id: "payday-countdown",
     color: C.amber,
     soft: C.amberSoft,
-    text: `До аванса ${info.day}-го числа осталось ${info.daysLeft} ${ruPlural(info.daysLeft, "день", "дня", "дней")}. Ваш безопасный лимит на день по карте Нужд — ${formatMoney(dailyLimit)}.`,
+    text: `До аванса ${info.day}-го числа осталось ${info.daysLeft} ${ruPlural(info.daysLeft, "день", "дня", "дней")}. Ваш безопасный лимит на день по карте ${bucketNameGen(settings, "needs")} — ${formatMoney(dailyLimit)}.`,
   };
 }
 
@@ -776,8 +801,8 @@ function computeCategoryInsights(transactions, settings) {
     }
   }
 
-  buildFor("needs", "Нужды", settings.needCats, agg.needCatTotals, agg.needsLimit);
-  buildFor("wants", "Желания", settings.wantCats, agg.wantCatTotals, agg.wantsLimit);
+  buildFor("needs", bucketName(settings, "needs"), settings.needCats, agg.needCatTotals, agg.needsLimit);
+  buildFor("wants", bucketName(settings, "wants"), settings.wantCats, agg.wantCatTotals, agg.wantsLimit);
 
   return insights;
 }
@@ -938,9 +963,9 @@ function ruPlural(n, one, few, many) {
   return many;
 }
 
-function runwayText(balance, avgMonthlyNeeds) {
+function runwayText(settings, balance, avgMonthlyNeeds) {
   if (avgMonthlyNeeds <= 0) {
-    return "Добавьте несколько трат по «Нуждам» — тогда посчитаем, на сколько хватит подушки.";
+    return `Добавьте несколько трат в «${bucketName(settings, "needs")}» — тогда посчитаем, на сколько хватит ${bucketNameGen(settings, "savings").toLowerCase()}.`;
   }
 
   const totalMonths = Math.max(0, balance) / avgMonthlyNeeds;
@@ -948,7 +973,7 @@ function runwayText(balance, avgMonthlyNeeds) {
   const days = Math.round((totalMonths - months) * 30);
 
   if (months === 0 && days === 0) {
-    return "Подушка пока не покрывает даже дня обязательных расходов.";
+    return `«${bucketName(settings, "savings")}» пока не покрывает даже дня обязательных расходов.`;
   }
 
   const parts = [];
@@ -1469,8 +1494,14 @@ function AppStyles() {
         transform: translate(-50%, -50%);
         margin: 0;
         width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        pointer-events: none;
         text-align: center;
-        font-size: 28px;
+        font-family: 'Handgeschrieben', cursive;
+        font-size: 24px;
         line-height: 1;
         font-weight: 400;
         white-space: nowrap;
@@ -2585,7 +2616,7 @@ function AppStyles() {
         }
 
         .hero-title {
-          font-size: 26px;
+          font-size: 24px;
         }
 
         .quick-tile {
@@ -2959,6 +2990,24 @@ const HERO_TABS = [
    баланса-вкладки, Пришло/Ушло, значок банка и заголовок лежат поверх неё
    абсолютным позиционированием — в процентах от картинки, чтобы не съезжать
    на разных экранах. Проценты подобраны под нарисованные в картинке плашки. */
+/* Веточка-украшение по бокам заголовка (раньше была нарисована в картинке). */
+function HeroLeaf({ flip }) {
+  return (
+    <svg
+      width="30"
+      height="26"
+      viewBox="0 0 30 26"
+      aria-hidden="true"
+      style={{ flex: "none", transform: flip ? "scaleX(-1)" : undefined }}
+    >
+      <path d="M2 21 C10 20 19 14 27 5" fill="none" stroke="#5E9A52" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M6 20 C3 14 4 9 8 5 C11 10 10 16 6 20 Z" fill="#8BBF74" stroke="#5E9A52" strokeWidth="1" />
+      <path d="M13 16 C11 10 14 5 19 3 C20 9 18 13 13 16 Z" fill="#8BBF74" stroke="#5E9A52" strokeWidth="1" />
+      <path d="M17 17 C22 15 25 18 26 23 C21 24 18 21 17 17 Z" fill="#8BBF74" stroke="#5E9A52" strokeWidth="1" />
+    </svg>
+  );
+}
+
 function FolderHero({
   art,
   card,
@@ -2993,6 +3042,12 @@ function FolderHero({
             {formatMoney(balances?.[t.card] || 0)}
           </button>
         ))}
+
+        <div className="hero-title" style={{ color: titleColor }}>
+          <HeroLeaf />
+          <span>{title}</span>
+          <HeroLeaf flip />
+        </div>
 
         <div className="hero-flow hero-flow-in">
           <span>Пришло:</span>
@@ -3247,7 +3302,9 @@ function CategoryDonut({ categories, totals, bucketLabel, transactions, bucket, 
 /* Столбчатый график по дням месяца: Нужды и Желания в стопке друг на друге.
    Показывает окно из нескольких дней подряд, стрелки по краям листают окно
    вперёд/назад (если в месяце дней больше, чем помещается). */
-function DailyExpenseChart({ monthItems, monthKey }) {
+function DailyExpenseChart({ monthItems, monthKey, settings }) {
+  const needsName = bucketName(settings, "needs");
+  const wantsName = bucketName(settings, "wants");
   const total = daysInMonth(monthKey);
   const WINDOW = 15;
   const defaultStart = Math.max(1, total - WINDOW + 1);
@@ -3269,7 +3326,7 @@ function DailyExpenseChart({ monthItems, monthKey }) {
   const end = Math.min(total, start + WINDOW - 1);
   const data = [];
   for (let d = start; d <= end; d++) {
-    data.push({ day: String(d), Нужды: byDay[d]?.needs || 0, Желания: byDay[d]?.wants || 0 });
+    data.push({ day: String(d), [needsName]: byDay[d]?.needs || 0, [wantsName]: byDay[d]?.wants || 0 });
   }
 
   const canPrev = start > 1;
@@ -3294,8 +3351,8 @@ function DailyExpenseChart({ monthItems, monthKey }) {
           <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} width={42} />
           <Tooltip formatter={(v) => formatMoney(v)} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey="Нужды" stackId="d" fill={C.sber} />
-          <Bar dataKey="Желания" stackId="d" fill={C.alfa} radius={[6, 6, 0, 0]} />
+          <Bar dataKey={needsName} stackId="d" fill={C.sber} />
+          <Bar dataKey={wantsName} stackId="d" fill={C.alfa} radius={[6, 6, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
       {canNext && (
@@ -3483,7 +3540,7 @@ function OzonPanel({
   const monthsLeft = left <= 0 ? 0 : (rate > 0 ? Math.ceil(left / rate) : null);
   const thisMonth = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
   const avgMonthlyNeeds = useMemo(() => estimateAvgMonthlyNeeds(transactions, settings, todayMonthKey()), [transactions, settings]);
-  const runwayMessage = useMemo(() => runwayText(balance, avgMonthlyNeeds), [balance, avgMonthlyNeeds]);
+  const runwayMessage = useMemo(() => runwayText(settings, balance, avgMonthlyNeeds), [settings, balance, avgMonthlyNeeds]);
 
   const ozonEntries = useMemo(() => {
     const list = transactions.filter((t) =>
@@ -3594,7 +3651,7 @@ function OzonPanel({
         </div>
 
         <div className="notice">
-          Деньги из подушки не трогаем ни при каких условиях, кроме реального форс-мажора — потери работы или проблем со здоровьем.
+          Деньги из {bucketNameGen(settings, "savings").toLowerCase()} не трогаем ни при каких условиях, кроме реального форс-мажора — потери работы или проблем со здоровьем.
         </div>
 
         <div>
@@ -3685,10 +3742,12 @@ function OperationTabs({ value, onChange }) {
   );
 }
 
-const BUCKET_OPTIONS = [
-  { id: "needs", label: "Нужды", color: C.sber, soft: C.sberSoft },
-  { id: "wants", label: "Желания", color: C.alfa, soft: C.alfaSoft },
-];
+function bucketOptions(settings) {
+  return [
+    { id: "needs", label: bucketName(settings, "needs"), color: C.sber, soft: C.sberSoft },
+    { id: "wants", label: bucketName(settings, "wants"), color: C.alfa, soft: C.alfaSoft },
+  ];
+}
 
 function homeCardOf(bucket) { return bucket === "wants" ? "alfa" : "sber"; }
 function bucketOf(card) { return card === "alfa" ? "wants" : "needs"; }
@@ -3981,7 +4040,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
         <>
           <div className="field">
             <label>{split ? "Категория бюджета (часть 1)" : "Категория бюджета"}</label>
-            <CardPicker options={BUCKET_OPTIONS} value={bucket} onChange={setBucket} />
+            <CardPicker options={bucketOptions(settings)} value={bucket} onChange={setBucket} />
           </div>
 
           <div className="field">
@@ -4003,10 +4062,10 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
               className="notice"
               style={{ borderColor: C.amber, background: C.amberSoft, marginBottom: 11 }}
             >
-              ⚠️ Вы платите картой {cardLabel(card)} («{BUCKET_LABEL[CARD_BUCKET[card]]}») за другой бюджет — это запишется как долг:
+              ⚠️ Вы платите картой «{cardLabel(settings, card)}» за другой бюджет — это запишется как долг:
               {anomalyParts.map((p, i) => (
                 <div key={i} style={{ fontWeight: 700, marginTop: 3 }}>
-                  «{BUCKET_LABEL[p.bucket]}» должны «{BUCKET_LABEL_GEN[CARD_BUCKET[card]]}»{p.amount > 0 ? ` ${formatMoney(p.amount)}` : ""}
+                  «{bucketName(settings, p.bucket)}» должны «{bucketNameGen(settings, CARD_BUCKET[card])}»{p.amount > 0 ? ` ${formatMoney(p.amount)}` : ""}
                 </div>
               ))}
               <div style={{ marginTop: 3 }}>Долг погасится автоматически из следующего дохода.</div>
@@ -4038,7 +4097,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
               />
               <div className="field">
                 <label>Категория бюджета (часть 2)</label>
-                <CardPicker options={BUCKET_OPTIONS} value={bucket2} onChange={setBucket2} />
+                <CardPicker options={bucketOptions(settings)} value={bucket2} onChange={setBucket2} />
               </div>
               <div className="field">
                 <label>Категория (часть 2)</label>
@@ -4054,7 +4113,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
                 </div>
               )}
               <div className="small-note" style={{ marginBottom: 11 }}>
-                Итого спишется с {cardLabel(card)}: {formatMoney(amountNum + splitAmountNum)}
+                Итого спишется с «{cardLabel(settings, card)}»: {formatMoney(amountNum + splitAmountNum)}
               </div>
             </>
           )}
@@ -4105,7 +4164,7 @@ function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
 
           {transferDebtActive && (
             <div className="small-note" style={{ marginBottom: 11 }}>
-              «{BUCKET_LABEL[CARD_BUCKET[toCard]]}» должны «{BUCKET_LABEL_GEN[CARD_BUCKET[fromCard]]}»
+              «{bucketName(settings, CARD_BUCKET[toCard])}» должны «{bucketNameGen(settings, CARD_BUCKET[fromCard])}»
               {amountNum > 0 ? ` ${formatMoney(amountNum)}` : ""}. Долг погасится автоматически из следующего дохода.
             </div>
           )}
@@ -4350,9 +4409,9 @@ function AnalysisView({
   }, 0);
 
   const chartData = [
-    { name: "Нужды", value: agg.needsSpent, fill: C.sber },
-    { name: "Желания", value: agg.wantsSpent, fill: C.alfa },
-    { name: "Подушка", value: Math.max(0, agg.ozonNet), fill: C.ozon },
+    { name: bucketName(settings, "needs"), value: agg.needsSpent, fill: C.sber },
+    { name: bucketName(settings, "wants"), value: agg.wantsSpent, fill: C.alfa },
+    { name: bucketName(settings, "savings"), value: Math.max(0, agg.ozonNet), fill: C.ozon },
   ];
 
   const monthItems = agg.items;
@@ -4415,7 +4474,7 @@ function AnalysisView({
               className="btn primary"
               onClick={() => onCloseMonth(selectedMonth, "toSavings", monthNeedsLeftover, monthWantsLeftover)}
             >
-              В сбережения
+              В «{bucketName(settings, "savings")}»
             </button>
           </div>
         </div>
@@ -4550,7 +4609,7 @@ function AnalysisView({
           },
           {
             title: "Динамика расходов",
-            render: () => <DailyExpenseChart monthItems={monthItems} monthKey={selectedMonth} />,
+            render: () => <DailyExpenseChart monthItems={monthItems} monthKey={selectedMonth} settings={settings} />,
           },
         ]}
       />
@@ -4870,7 +4929,7 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
         </div>
 
         <div className="field">
-          <label>Цель подушки</label>
+          <label>Цель {bucketNameGen(draft, "savings").toLowerCase()}</label>
           <input
             type="number"
             value={draft.goal}
@@ -4894,7 +4953,7 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
           type="button"
           style={{ width: "100%" }}
           onClick={() => {
-            if (window.confirm("Сбросить точку отсчёта Нужд/Желаний на сегодня?")) {
+            if (window.confirm(`Сбросить точку отсчёта ${bucketNameGen(draft, "needs")}/${bucketNameGen(draft, "wants")} на сегодня?`)) {
               onResetTracking();
             }
           }}
@@ -4950,7 +5009,7 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
           className="section-title-toggle"
           onClick={() => setNeedsOpen((v) => !v)}
         >
-          <SectionTitle>Категории нужд</SectionTitle>
+          <SectionTitle>Категории {bucketNameGen(draft, "needs").toLowerCase()}</SectionTitle>
           <ChevronDown size={16} className={`section-chevron${needsOpen ? " open" : ""}`} />
         </button>
 
@@ -4997,7 +5056,7 @@ function SettingsView({ settings, onSave, onWipeAll, onResetTracking, userEmail,
           className="section-title-toggle"
           onClick={() => setWantsOpen((v) => !v)}
         >
-          <SectionTitle>Категории Желаний</SectionTitle>
+          <SectionTitle>Категории {bucketNameGen(draft, "wants").toLowerCase()}</SectionTitle>
           <ChevronDown size={16} className={`section-chevron${wantsOpen ? " open" : ""}`} />
         </button>
 
@@ -5395,10 +5454,10 @@ export default function App() {
       const date = endOfMonthStr(mk);
       const extra = [];
       if (leftoverNeeds > 1) {
-        extra.push({ type: "transfer", date, amount: Math.round(leftoverNeeds), fromCard: "sber", toCard: "ozon", note: `Остаток «Нужды» за ${monthLabel(mk)}`, id: uid() });
+        extra.push({ type: "transfer", date, amount: Math.round(leftoverNeeds), fromCard: "sber", toCard: "ozon", note: `Остаток «${bucketName(settings, "needs")}» за ${monthLabel(mk)}`, id: uid() });
       }
       if (leftoverWants > 1) {
-        extra.push({ type: "transfer", date, amount: Math.round(leftoverWants), fromCard: "alfa", toCard: "ozon", note: `Остаток «Желания» за ${monthLabel(mk)}`, id: uid() });
+        extra.push({ type: "transfer", date, amount: Math.round(leftoverWants), fromCard: "alfa", toCard: "ozon", note: `Остаток «${bucketName(settings, "wants")}» за ${monthLabel(mk)}`, id: uid() });
       }
       if (extra.length) persistTransactions([...transactions, ...extra]);
     }
