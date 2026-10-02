@@ -74,11 +74,13 @@ src/
   finance.js       — балансы, итоги месяца, накопительное распределение, статистика
   insights.js      — заметки и подсказки для карусели, прогноз «на сколько хватит»
   forecast.js      — прогноз до аванса и сравнение расходов с прошлыми месяцами
+  savings.js       — динамика сбережений, дата достижения цели, цели-копилки
   migrate.js       — приведение старых данных к текущему формату
   backup.js        — экспорт в JSON/CSV
   ui.jsx, cards.jsx, charts.jsx, panels.jsx, form.jsx, TabBar.jsx — компоненты
   AnalysisView.jsx, SettingsView.jsx, AuthScreen.jsx — экраны
   ForecastPanel.jsx — панели «Прогноз до аванса» и «Сравнение с прошлыми месяцами»
+  SavingsPanel.jsx — график роста сбережений и панель целей
   AppStyles.jsx    — все стили приложения
 supabase-security.sql        — правила RLS для таблицы app_data
 .github/workflows/deploy.yml — автосборка и публикация на GitHub Pages
