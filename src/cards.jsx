@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useContext } from "react";
+import { Paperclip, ReceiptContext } from "./ReceiptViewer.jsx";
 import {
   ChevronDown,
   Trash2,
@@ -98,6 +99,7 @@ export function BankCardDetail({ stripe, soft, spent, avail, prevSpent, daysLeft
 }
 
 export function TxRow({ tx, settings, onDelete, onEdit }) {
+  const openReceipt = useContext(ReceiptContext);
   const color = tx.type === "income" ? C.sber
     : tx.type === "expense" ? (tx.card === "sber" ? C.sber : C.alfa)
     : tx.type === "transfer" ? C.amber
@@ -129,7 +131,19 @@ export function TxRow({ tx, settings, onDelete, onEdit }) {
       <div className="tx-day">{day}</div>
       <div className="tx-dot" style={{ background: color }} />
       <div className="tx-main">
-        <div className="tx-label">{label}</div>
+        <div className="tx-label">
+          {label}
+          {tx.receipt && (
+            <button
+              type="button"
+              aria-label="Показать чек"
+              onClick={(e) => { e.stopPropagation(); openReceipt(tx.id); }}
+              style={{ border: 0, background: "transparent", color: C.inkMuted, padding: "0 0 0 6px", verticalAlign: "middle" }}
+            >
+              <Paperclip size={13} />
+            </button>
+          )}
+        </div>
         {tx.type === "expense" && <div className="tx-sub">{tx.category}</div>}
       </div>
       <div className="tx-amount" style={{ color }}>

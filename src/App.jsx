@@ -16,6 +16,8 @@ import { aggregateOpenDebts, computeIncomeSplitWithDebts, syncLinkedDebt } from 
 import { bucketName, endOfMonthStr, monthLabel, todayMonthKey, todayStr, uid } from "./format.js";
 import { migrateSettings, migrateTransactions } from "./migrate.js";
 import { buildRecurringExpense, markPosted } from "./recurring.js";
+import { removeReceipt, saveReceipt } from "./receipts.js";
+import { ReceiptContext, ReceiptModal } from "./ReceiptViewer.jsx";
 import { buildNotices, showNotices } from "./notify.js";
 import { AppStyles } from "./AppStyles.jsx";
 import { AnalysisView } from "./AnalysisView.jsx";
@@ -27,6 +29,7 @@ export default function App() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [transactions, setTransactions] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [receiptViewId, setReceiptViewId] = useState(null);
   const [pageIndex, setPageIndex] = useState(1); // 0 Анализ, 1 Нужды, 2 Желания, 3 Подушка, 4 Настройки; по умолчанию — Добавить (Нужды)
   const [lastAddPage, setLastAddPage] = useState(1);
   const [formInitial, setFormInitial] = useState(null);
@@ -163,7 +166,7 @@ export default function App() {
   // meta.asDebt — галочка «Считать долгом» у перевода. Долг за трату «чужой» картой
   // создаётся автоматически (см. debtSpecFor), для остальных типов операций долг не нужен.
   function addTransactions(newTxs, meta) {
-    const withIds = newTxs.map((tx) => ({ ...tx, id: uid() }));
+    const withIds = newTxs.map((tx) => ({ ...tx, id: tx.id || uid() }));
     let next = [...transactions, ...withIds];
     withIds.forEach((tx) => { next = syncLinkedDebt(next, tx, meta?.asDebt); });
     persistTransactions(next);
@@ -177,6 +180,7 @@ export default function App() {
 
   // Вместе с операцией удаляется и привязанный к ней долг (трата чужой картой / перевод-заём).
   function deleteTransaction(id) {
+    if (transactions.find((t) => t.id === id)?.receipt) removeReceipt(id);
     persistTransactions(
       transactions.filter((t) => t.id !== id && !(t.type === "debt" && t.sourceTxId === id))
     );
@@ -313,7 +317,35 @@ export default function App() {
     setFormInitial(null);
   }
 
-  function submitForm(tx, meta) {
+  async function submitForm(txIn, metaIn) {
+    // Фото чека: загружаем до сохранения операции; не вышло — форма остаётся открытой.
+    const rec = metaIn?.receipt;
+    const editId = formInitial?.editId;
+    const hadReceipt = !!(editId && transactions.find((t) => t.id === editId)?.receipt);
+    const first = Array.isArray(txIn) ? txIn[0] : txIn;
+    let receiptId = null;
+    let keepFlag = false;
+    if (first.type === "expense" && rec) {
+      if (rec.data) {
+        receiptId = editId || uid();
+        try {
+          await saveReceipt(receiptId, rec.data);
+        } catch {
+          setToast("Не удалось сохранить фото чека — нужен интернет");
+          setTimeout(() => setToast(null), 2400);
+          return;
+        }
+        keepFlag = true;
+      } else if (hadReceipt && rec.remove) {
+        removeReceipt(editId);
+      } else if (hadReceipt) {
+        keepFlag = true;
+      }
+    }
+    const tagFirst = (t) => (t === first && keepFlag ? { ...t, receipt: true, ...(receiptId && !editId ? { id: receiptId } : {}) } : t);
+    const tx = Array.isArray(txIn) ? txIn.map(tagFirst) : tagFirst(txIn);
+    const meta = metaIn && { ...metaIn, receipt: undefined };
+
     if (Array.isArray(tx)) {
       if (formInitial?.editId) {
         updateTransactionAsSplit(formInitial.editId, tx);
@@ -455,8 +487,10 @@ export default function App() {
   const heroBg = folderBucketKey ? BUCKET_STYLE[folderBucketKey].folderBg : undefined;
 
   return (
-    <>
+    <ReceiptContext.Provider value={setReceiptViewId}>
       <AppStyles />
+
+      {receiptViewId && <ReceiptModal txId={receiptViewId} onClose={() => setReceiptViewId(null)} />}
 
       {stale && (
         <div className="sync-banner">
@@ -529,7 +563,7 @@ export default function App() {
                 onImport={importBackup}
                 onSaveSettings={persistSettings}
                 onSave={persistSettings}
-                onWipeAll={() => persistTransactions([])}
+                onWipeAll={() => { transactions.filter((t) => t.receipt).forEach((t) => removeReceipt(t.id)); persistTransactions([]); }}
                 onResetTracking={resetNeedsWantsTracking}
                 userEmail={authUser?.email}
                 onSignOut={async () => {
@@ -549,6 +583,6 @@ export default function App() {
           <Toast text={toast} />
         </div>
       </div>
-    </>
+    </ReceiptContext.Provider>
   );
 }

@@ -3,6 +3,7 @@ import {
   X,
 } from "lucide-react";
 import { CategoryPanel, OzonPanel } from "./panels.jsx";
+import { ReceiptField } from "./ReceiptViewer.jsx";
 import { C, CARD_BUCKET } from "./constants.js";
 import { computeBalances } from "./finance.js";
 import { bucketName, bucketNameGen, bucketOf, cardLabel, catListOf, evalMoneyExpr, formatMoney, homeCardOf, moneyNum, todayStr, uid } from "./format.js";
@@ -94,11 +95,35 @@ export function AmountField({ label, value, onChange, big, withSave }) {
       ) : (
         input
       )}
-      {showPreview && (
-        <div className="small-note" style={{ marginTop: -1 }}>
-          = {formatMoney(evaluated)}
-        </div>
-      )}
+      <div className="calc-row">
+        {[["+", "+"], ["−", "-"], ["×", "*"], ["÷", "/"]].map(([shown, op]) => (
+          <button
+            key={op}
+            type="button"
+            className="calc-key"
+            aria-label={`Знак ${shown}`}
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={() => {
+              const cur = String(value ?? "");
+              // два знака подряд не нужны: последний заменяет предыдущий
+              onChange(/[+\-*/]$/.test(cur) && cur.length > 1 ? cur.slice(0, -1) + op : cur + op);
+            }}
+          >
+            {shown}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="calc-key calc-eq"
+          aria-label="Посчитать"
+          disabled={!(hasOp && Number.isFinite(evaluated))}
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={() => onChange(String(Math.round(evaluated * 100) / 100))}
+        >
+          =
+        </button>
+        {showPreview && <span className="calc-result mono">= {formatMoney(evaluated)}</span>}
+      </div>
     </div>
   );
 }
@@ -121,6 +146,9 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
   const [asDebt, setAsDebt] = useState(initial?.debt ?? true);
   // Галочка «Отображать в операциях» у корректировки: по умолчанию выключена.
   const [showInHistory, setShowInHistory] = useState(initial?.type === "adjustment" ? !initial?.hidden : false);
+
+  // Фото чека: data — новое фото (dataURL), remove — убрать сохранённое.
+  const [receipt, setReceipt] = useState({ data: null, remove: false });
 
   const [split, setSplit] = useState(false);
   const [splitAmount2, setSplitAmount2] = useState("");
@@ -258,7 +286,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
           note: note.trim(),
           splitGroup: groupId,
         },
-      ]);
+      ], { receipt });
       return;
     }
 
@@ -271,15 +299,18 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         note: note.trim(),
       });
     } else if (type === "expense") {
-      onSubmit({
-        type: "expense",
-        date,
-        amount: amountNum,
-        card,
-        bucket,
-        category,
-        note: note.trim(),
-      });
+      onSubmit(
+        {
+          type: "expense",
+          date,
+          amount: amountNum,
+          card,
+          bucket,
+          category,
+          note: note.trim(),
+        },
+        { receipt }
+      );
     } else if (type === "transfer") {
       onSubmit(
         {
@@ -538,6 +569,10 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         <label>Заметка</label>
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Необязательно" />
       </div>
+
+      {type === "expense" && (
+        <ReceiptField had={!!initial?.receipt} txId={initial?.editId} receipt={receipt} onChange={setReceipt} />
+      )}
     </form>
   );
 }
@@ -633,7 +668,7 @@ export function AddPageContent({
 /* Builds a FullAddForm "initial" seed from an existing transaction, for editing.
    Для перевода галочка «Считать долгом» включена, только если к нему уже привязан долг. */
 export function deriveFormInitialFromTx(tx, transactions) {
-  const base = { type: tx.type, date: tx.date, amount: tx.amount, note: tx.note || "", editId: tx.id };
+  const base = { type: tx.type, date: tx.date, amount: tx.amount, note: tx.note || "", editId: tx.id, receipt: !!tx.receipt };
   if (tx.type === "expense") {
     return { ...base, card: tx.card, bucket: tx.bucket || bucketOf(tx.card), category: tx.category };
   }

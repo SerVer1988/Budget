@@ -356,6 +356,35 @@ export const storage = {
     return { key, deleted: true };
   },
 
+  // Большие значения (фото чеков). Не кэшируются в localStorage и не ставятся в офлайн-очередь:
+  // иначе они быстро переполнили бы локальное хранилище. Нужен интернет.
+  async setBlob(key, value) {
+    if (!session) throw new Error("not signed in");
+    const token = await ensureToken();
+    const r = await http(`/rest/v1/${TABLE}?on_conflict=user_id,key`, {
+      method: "POST",
+      token,
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: { user_id: uid(), key, value, updated_at: new Date().toISOString() },
+    });
+    if (!r.ok) throw new Error(`remote blob write ${r.status}`);
+    return { key };
+  },
+
+  async getBlob(key) {
+    if (!session) throw new Error("not signed in");
+    const row = await remoteGet(key);
+    return row ? row.value : null;
+  },
+
+  async deleteBlob(key) {
+    if (!session) throw new Error("not signed in");
+    const token = await ensureToken();
+    const r = await http(`/rest/v1/${TABLE}?user_id=eq.${uid()}&key=eq.${enc(key)}`, { method: "DELETE", token });
+    if (!r.ok) throw new Error(`remote blob delete ${r.status}`);
+    return { key, deleted: true };
+  },
+
   // true, если на сервере есть более новые данные, чем у нас в кэше (изменили на другом устройстве).
   async checkStale() {
     if (!session) return false;

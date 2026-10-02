@@ -1414,6 +1414,46 @@ export function AppStyles() {
         font-weight: 800;
       }
 
+      /* Калькулятор под полем суммы */
+      .calc-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+      }
+
+      .calc-key {
+        width: 38px;
+        height: 30px;
+        border-radius: 9px;
+        border: 1px solid ${C.border};
+        background: ${C.surface};
+        color: ${C.ink};
+        font-size: 16px;
+        font-weight: 800;
+        line-height: 1;
+      }
+
+      .calc-key:active {
+        background: ${C.border};
+      }
+
+      .calc-eq {
+        width: 44px;
+        color: ${C.sber};
+      }
+
+      .calc-eq:disabled {
+        opacity: 0.35;
+      }
+
+      .calc-result {
+        margin-left: auto;
+        font-size: 13px;
+        font-weight: 800;
+        color: ${C.inkMuted};
+      }
+
       /* Прогноз и сравнение месяцев */
       .fc-list {
         display: flex;
