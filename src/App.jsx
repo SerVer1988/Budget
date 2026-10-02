@@ -15,6 +15,8 @@ import { BUCKET_CARD, BUCKET_STYLE, C, DEFAULT_SETTINGS } from "./constants.js";
 import { aggregateOpenDebts, computeIncomeSplitWithDebts, syncLinkedDebt } from "./debts.js";
 import { bucketName, endOfMonthStr, monthLabel, todayMonthKey, todayStr, uid } from "./format.js";
 import { migrateSettings, migrateTransactions } from "./migrate.js";
+import { buildRecurringExpense, markPosted } from "./recurring.js";
+import { buildNotices, showNotices } from "./notify.js";
 import { AppStyles } from "./AppStyles.jsx";
 import { AnalysisView } from "./AnalysisView.jsx";
 import { AuthScreen } from "./AuthScreen.jsx";
@@ -105,6 +107,19 @@ export default function App() {
     return () => { alive = false; };
   }, [authUser?.id]);
 
+  // Уведомления: при запуске и при возвращении в приложение (один раз за день на каждый сигнал).
+  useEffect(() => {
+    if (!loaded) return undefined;
+    function run() {
+      if (document.visibilityState !== "visible") return;
+      const today = todayStr();
+      showNotices(buildNotices(transactions, settings, today), today);
+    }
+    run();
+    document.addEventListener("visibilitychange", run);
+    return () => document.removeEventListener("visibilitychange", run);
+  }, [loaded, transactions, settings]);
+
   async function persistTransactions(next) {
     setTransactions(next);
     try {
@@ -130,6 +145,13 @@ export default function App() {
     persistTransactions(migrateTransactions(data.transactions, s));
     setToast("Данные восстановлены");
     setTimeout(() => setToast(null), 1400);
+  }
+
+  // «Провести» регулярный платёж: создаёт обычную трату (с учётом долгов между бюджетами)
+  // и отмечает платёж проведённым за этот месяц.
+  function postRecurring(item) {
+    addTransaction(buildRecurringExpense(item, todayStr()));
+    persistSettings({ ...settings, recurring: markPosted(settings.recurring, item.id, todayMonthKey()) });
   }
 
   // Добавляет сразу несколько операций одним обновлением состояния. Важно делать это
@@ -473,6 +495,7 @@ export default function App() {
               </div>
             ) : pageIndex === 0 ? (
               <AnalysisView
+                onPostRecurring={postRecurring}
                 settings={settings}
                 transactions={transactions}
                 selectedMonth={selectedMonth}
@@ -504,6 +527,7 @@ export default function App() {
                 settings={settings}
                 transactions={transactions}
                 onImport={importBackup}
+                onSaveSettings={persistSettings}
                 onSave={persistSettings}
                 onWipeAll={() => persistTransactions([])}
                 onResetTracking={resetNeedsWantsTracking}

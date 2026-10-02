@@ -1,4 +1,5 @@
 import { normalizeGoals } from "./savings.js";
+import { normalizeRecurring } from "./recurring.js";
 import { CATEGORY_COLORS, DEFAULT_NEED_CATS, DEFAULT_SETTINGS, DEFAULT_WANT_CATS } from "./constants.js";
 import { computeIncomeSplit } from "./debts.js";
 import { uid } from "./format.js";
@@ -43,6 +44,7 @@ export function migrateSettings(raw) {
     bucketNames: { ...DEFAULT_SETTINGS.bucketNames, ...(raw.bucketNames || {}) },
     bucketIcons: { ...DEFAULT_SETTINGS.bucketIcons, ...(raw.bucketIcons || {}) },
     goals: normalizeGoals(raw.goals),
+    recurring: normalizeRecurring(raw.recurring),
     closedMonths: Array.isArray(raw.closedMonths) ? raw.closedMonths : [],
     needsWantsResetDate: raw.needsWantsResetDate || null,
   };

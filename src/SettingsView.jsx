@@ -1,3 +1,4 @@
+import { RecurringSettings } from "./RecurringSettings.jsx";
 import React, { useState, useEffect, useRef } from "react";
 import {
   ChevronDown,
@@ -145,7 +146,7 @@ export function CategoryRow({ cat, open, onToggleOpen, onChange, onDelete }) {
   );
 }
 
-export function SettingsView({ settings, transactions, onImport, onSave, onWipeAll, onResetTracking, userEmail, onSignOut }) {
+export function SettingsView({ settings, transactions, onImport, onSaveSettings, onSave, onWipeAll, onResetTracking, userEmail, onSignOut }) {
   const importInputRef = useRef(null);
   const [importMsg, setImportMsg] = useState("");
 
@@ -459,6 +460,8 @@ export function SettingsView({ settings, transactions, onImport, onSave, onWipeA
           Очистить
         </button>
       </div>
+
+      <RecurringSettings settings={settings} onSaveSettings={onSaveSettings} />
 
       <div className="panel">
         <SectionTitle>Данные</SectionTitle>

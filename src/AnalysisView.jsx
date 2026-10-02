@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { BankCard, BankCardDetail, TotalBalanceCard, TxRow } from "./cards.jsx";
 import { ForecastPanel } from "./ForecastPanel.jsx";
+import { RecurringPanel } from "./RecurringPanel.jsx";
 import { ChartsCarousel, DailyExpenseChart, InsightsCarousel } from "./charts.jsx";
 import { BankBadge, EmptyState, MonthNav, SectionTitle, StatBox } from "./ui.jsx";
 import { BUCKET_CARD, C, TX_TYPE_FILTERS } from "./constants.js";
@@ -34,6 +35,7 @@ export function AnalysisView({
   onToggleInclude,
   onCloseMonth,
   onWriteOffDebtGroup,
+  onPostRecurring,
   goToAdd,
 }) {
   const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
@@ -160,6 +162,8 @@ export function AnalysisView({
           <StatBox compact label="Расходы" value={`−${formatMoney(agg.sberSpent + agg.alfaSpent + agg.ozonSpent)}`} color={C.danger} />
         </div>
       </div>
+
+      {isCurrentMonth && <RecurringPanel settings={settings} onPost={onPostRecurring} />}
 
       {isCurrentMonth && <ForecastPanel settings={settings} transactions={transactions} />}
 

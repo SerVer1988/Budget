@@ -1,4 +1,5 @@
 import { C, FINANCE_TIPS, SMART_NOTE_THRESHOLD } from "./constants.js";
+import { computeRecurring } from "./recurring.js";
 import { comparisonPeriodText, computeForecast, computeMonthComparison, nextPaydayInfo, shortDate } from "./forecast.js";
 import { aggregateOpenDebts, computeIncomeSplit } from "./debts.js";
 import { aggregateMonth, computeBalances, computeCategoryLimits, computeCumulativeAllocation, estimateAvgMonthlyNeeds } from "./finance.js";
@@ -187,6 +188,25 @@ export function computeComparisonInsights(transactions) {
   return out;
 }
 
+/* Платежи, которые пора провести или наступят в ближайшие дни. */
+export function computeRecurringInsights(settings, today) {
+  const out = [];
+  computeRecurring(settings, today).forEach((r) => {
+    const amount = formatMoney(r.amount);
+    let text = null;
+    if (r.daysUntil < 0) {
+      const n = -r.daysUntil;
+      text = `Платёж «${r.name}» (${amount}) ждёт проведения уже ${n} ${ruPlural(n, "день", "дня", "дней")}. Проведите его в разделе «Платежи» на вкладке «Анализ».`;
+    } else if (r.daysUntil === 0) {
+      text = `Сегодня платёж «${r.name}» — ${amount}. Проведите его в разделе «Платежи» на вкладке «Анализ».`;
+    } else if (r.daysUntil <= 3) {
+      text = `Через ${r.daysUntil} ${ruPlural(r.daysUntil, "день", "дня", "дней")} платёж «${r.name}» — ${amount}.`;
+    }
+    if (text) out.push({ id: `recurring-${r.id}`, color: C.amber, soft: C.amberSoft, text });
+  });
+  return out;
+}
+
 export function computeAllInsights(transactions, settings) {
   const balances = computeBalances(transactions, settings, null);
   const smartNotes = computeSmartNotes(transactions, settings);
@@ -221,6 +241,7 @@ export function computeAllInsights(transactions, settings) {
     if (countdown) insights.push(countdown);
   }
 
+  insights.push(...computeRecurringInsights(settings, today));
   insights.push(...computeForecastInsights(transactions, settings));
 
   ["sber", "alfa", "ozon"].forEach((card) => {

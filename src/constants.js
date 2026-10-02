@@ -135,6 +135,7 @@ export const DEFAULT_WANT_CATS = [
 
 export const DEFAULT_SETTINGS = {
   goals: [],
+  recurring: [],
   wantPct: 30,
   savePct: 20,
   reminderDays: [5, 15, 30],
