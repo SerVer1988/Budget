@@ -497,6 +497,7 @@ export default function App() {
                 onSelectPage={(i) => selectPage(i + 1)}
                 onDeleteTx={deleteTransaction}
                 onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx, transactions))}
+                onSaveSettings={persistSettings}
               />
             ) : (
               <SettingsView

@@ -555,6 +555,7 @@ export function AddPageContent({
   onSelectPage,
   onDeleteTx,
   onEditTx,
+  onSaveSettings,
 }) {
   const balances = useMemo(() => computeBalances(transactions, settings, null), [transactions, settings]);
 
@@ -614,6 +615,7 @@ export function AddPageContent({
           canNext={canNext}
           onPrev={onPrev}
           onNext={onNext}
+          onSaveSettings={onSaveSettings}
         />
       ),
     },

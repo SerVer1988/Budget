@@ -5,6 +5,8 @@ import {
 } from "lucide-react";
 import { FolderHero } from "./cards.jsx";
 import { CategoryDonut } from "./charts.jsx";
+import { GoalsPanel, SavingsChart } from "./SavingsPanel.jsx";
+import { computeSavingsSeries } from "./savings.js";
 import { CategoryTile, ListTile, StatBox } from "./ui.jsx";
 import { BUCKET_STYLE, C, getIcon } from "./constants.js";
 import { computeIncomeSplitWithDebts } from "./debts.js";
@@ -175,6 +177,7 @@ export function OzonPanel({
   onPrev,
   onNext,
   onOpenFull,
+  onSaveSettings,
 }) {
   const dayStats = useMemo(() => ozonDayStats(transactions), [transactions]);
   const days = settings.reminderDays.length ? settings.reminderDays : [5, 15, 30];
@@ -184,8 +187,7 @@ export function OzonPanel({
 
   const pct = settings.goal > 0 ? balance / settings.goal : 0;
   const left = settings.goal - balance;
-  const rate = useMemo(() => estimateMonthlyRate(transactions, settings, todayMonthKey()), [transactions, settings]);
-  const monthsLeft = left <= 0 ? 0 : (rate > 0 ? Math.ceil(left / rate) : null);
+  const series = useMemo(() => computeSavingsSeries(transactions, settings), [transactions, settings]);
   const thisMonth = useMemo(() => aggregateMonth(todayMonthKey(), transactions, settings), [transactions, settings]);
 
   const ozonEntries = useMemo(() => {
@@ -288,10 +290,14 @@ export function OzonPanel({
           />
           <StatBox
             label="Прогноз до цели"
-            value={monthsLeft === 0 ? "готово" : monthsLeft ? `~${monthsLeft} мес.` : "—"}
+            value={series.monthsLeft === 0 ? "готово" : series.eta ? series.eta.short : "—"}
             color={C.ozon}
           />
         </div>
+
+        <SavingsChart transactions={transactions} settings={settings} />
+
+        <GoalsPanel settings={settings} savingsBalance={balance} onSaveSettings={onSaveSettings} />
 
         <div>
           <div className="section-title">История «{bucketName(settings, "savings")}»</div>
