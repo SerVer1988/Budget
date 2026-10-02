@@ -898,17 +898,50 @@ export function AppStyles() {
         color: #fff;
       }
 
+      /* Компактная сводка: слева общий баланс с галочками, справа доход и расходы столбиком */
+      .summary-row {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+        gap: 8px;
+        align-items: stretch;
+      }
+
+      .summary-side {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .stat-box-compact {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 5px 6px;
+        border-radius: 14px;
+      }
+
+      .stat-box-compact .label {
+        margin-bottom: 1px;
+      }
+
+      .stat-box-compact .value {
+        font-size: 14px;
+      }
+
       .total-balance {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 14px 16px;
+        justify-content: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
         text-align: left;
       }
 
       .total-balance-info {
-        margin-left: 16px;
+        min-width: 0;
+        flex: 1;
       }
 
       .total-balance .label {
@@ -918,7 +951,7 @@ export function AppStyles() {
       }
 
       .total-balance .value {
-        font-size: 24px;
+        font-size: clamp(17px, 5.6vw, 24px);
         line-height: 1.12;
         font-weight: 900;
         font-variant-numeric: tabular-nums;
@@ -932,14 +965,14 @@ export function AppStyles() {
         flex-direction: column;
         align-items: flex-start;
         flex: 0 0 auto;
-        gap: 6px;
+        gap: 4px;
       }
 
       .check-row label {
         display: inline-flex;
         align-items: center;
-        gap: 5px;
-        font-size: 12px;
+        gap: 4px;
+        font-size: 11.5px;
         cursor: pointer;
       }
 

@@ -27,9 +27,9 @@ export function MonthNav({ value, onChange }) {
   );
 }
 
-export function StatBox({ label, value, color }) {
+export function StatBox({ label, value, color, compact }) {
   return (
-    <div className="stat-box">
+    <div className={compact ? "stat-box stat-box-compact" : "stat-box"}>
       <div className="label">{label}</div>
       <div className="value" style={{ color }}>{value}</div>
     </div>

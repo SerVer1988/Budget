@@ -16,10 +16,6 @@ export function TotalBalanceCard({ total, settings, onToggle }) {
 
   return (
     <div className="soft-card total-balance">
-      <div className="total-balance-info">
-        <div className="label">Общий баланс</div>
-        <div className="value">{formatMoney(total)}</div>
-      </div>
       <div className="check-row">
         {items.map((it) => (
           <label key={it.key}>
@@ -31,6 +27,10 @@ export function TotalBalanceCard({ total, settings, onToggle }) {
             <span style={{ color: it.color }}>{it.label}</span>
           </label>
         ))}
+      </div>
+      <div className="total-balance-info">
+        <div className="label">Общий баланс</div>
+        <div className="value">{formatMoney(total)}</div>
       </div>
     </div>
   );

@@ -153,11 +153,12 @@ export function AnalysisView({
         </div>
       )}
 
-      <TotalBalanceCard total={totalBalance} settings={settings} onToggle={onToggleInclude} />
-
-      <div className="stat-grid">
-        <StatBox label="Доход" value={`+${formatMoney(agg.incomeTotal)}`} color={C.sber} />
-        <StatBox label="Расходы" value={`−${formatMoney(agg.sberSpent + agg.alfaSpent + agg.ozonSpent)}`} color={C.danger} />
+      <div className="summary-row">
+        <TotalBalanceCard total={totalBalance} settings={settings} onToggle={onToggleInclude} />
+        <div className="summary-side">
+          <StatBox compact label="Доход" value={`+${formatMoney(agg.incomeTotal)}`} color={C.sber} />
+          <StatBox compact label="Расходы" value={`−${formatMoney(agg.sberSpent + agg.alfaSpent + agg.ozonSpent)}`} color={C.danger} />
+        </div>
       </div>
 
       {isCurrentMonth && <ForecastPanel settings={settings} transactions={transactions} />}
