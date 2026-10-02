@@ -15,6 +15,7 @@ import {
   Legend,
 } from "recharts";
 import { BankCard, BankCardDetail, TotalBalanceCard, TxRow } from "./cards.jsx";
+import { ForecastPanel } from "./ForecastPanel.jsx";
 import { ChartsCarousel, DailyExpenseChart, InsightsCarousel } from "./charts.jsx";
 import { BankBadge, EmptyState, MonthNav, SectionTitle, StatBox } from "./ui.jsx";
 import { BUCKET_CARD, C, TX_TYPE_FILTERS } from "./constants.js";
@@ -158,6 +159,8 @@ export function AnalysisView({
         <StatBox label="Доход" value={`+${formatMoney(agg.incomeTotal)}`} color={C.sber} />
         <StatBox label="Расходы" value={`−${formatMoney(agg.sberSpent + agg.alfaSpent + agg.ozonSpent)}`} color={C.danger} />
       </div>
+
+      {isCurrentMonth && <ForecastPanel settings={settings} transactions={transactions} />}
 
       {debtGroups.length > 0 && (
         <div className="panel">

@@ -1381,6 +1381,45 @@ export function AppStyles() {
         font-weight: 800;
       }
 
+      /* Прогноз и сравнение месяцев */
+      .fc-list {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .fc-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 0;
+      }
+
+      .fc-row + .fc-row {
+        border-top: 1px solid ${C.border};
+      }
+
+      .fc-name {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        font-weight: 800;
+        color: ${C.ink};
+      }
+
+      .fc-sub {
+        font-size: 11.5px;
+        color: ${C.inkMuted};
+      }
+
+      .fc-val {
+        flex: 0 0 auto;
+        text-align: right;
+        font-size: 14px;
+        font-weight: 900;
+      }
+
       /* Операции: поиск + фильтры + итог — одна компактная залипающая зона */
       .ops-sticky {
         margin: 0 -12px 8px;

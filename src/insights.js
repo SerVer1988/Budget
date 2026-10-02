@@ -1,4 +1,5 @@
 import { C, FINANCE_TIPS, SMART_NOTE_THRESHOLD } from "./constants.js";
+import { comparisonPeriodText, computeForecast, computeMonthComparison, nextPaydayInfo, shortDate } from "./forecast.js";
 import { aggregateOpenDebts, computeIncomeSplit } from "./debts.js";
 import { aggregateMonth, computeBalances, computeCategoryLimits, computeCumulativeAllocation, estimateAvgMonthlyNeeds } from "./finance.js";
 import { bucketName, bucketNameGen, cardLabel, dayOfMonth, dayOfYear, formatDateRu, formatMoney, needPctOf, ruPlural, todayMonthKey, todayStr } from "./format.js";
@@ -61,38 +62,6 @@ export function computeSmartNotes(transactions, settings) {
   };
 }
 
-/* Ближайший день выплаты из settings.reminderDays, начиная строго после сегодня,
-   и сколько до него календарных дней (с учётом смены месяца и его длины). */
-export function nextPaydayInfo(settings) {
-  const days = (settings.reminderDays && settings.reminderDays.length ? settings.reminderDays : [5, 15, 30])
-    .slice()
-    .sort((a, b) => a - b);
-  if (!days.length) return null;
-
-  const now = new Date();
-  const todayDay = now.getDate();
-
-  let nextDay = days.find((d) => d > todayDay);
-  let year = now.getFullYear();
-  let month = now.getMonth();
-
-  if (nextDay == null) {
-    nextDay = days[0];
-    month += 1;
-    if (month > 11) { month = 0; year += 1; }
-  }
-
-  const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
-  const clampedDay = Math.min(nextDay, lastDayOfMonth);
-
-  const payDate = new Date(year, month, clampedDay);
-  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const daysLeft = Math.round((payDate - todayMidnight) / 86400000);
-
-  return { day: clampedDay, daysLeft };
-}
-
-/* «До аванса N-го осталось K дней. Безопасный лимит на день по карте Нужд — X ₽.» */
 export function computePaydayCountdownInsight(settings, balances) {
   const info = nextPaydayInfo(settings);
   if (!info || info.daysLeft < 1) return null;
@@ -154,6 +123,70 @@ export function computeCategoryInsights(transactions, settings) {
 
 /* Собирает все подсказки в один список для карусели: аванс, баланс карт
    относительно плана, разбор категорий, непогашенные внутренние долги. */
+/* Прогноз: хватит ли денег до выплаты. «Потребности» — всегда, «Хотения» — только если не хватит. */
+export function computeForecastInsights(transactions, settings) {
+  const out = [];
+  computeForecast(transactions, settings).forEach((f) => {
+    if (f.status === "ok" && f.bucket === "needs") {
+      out.push({
+        id: `forecast-${f.card}`,
+        color: C.sber,
+        soft: C.sberSoft,
+        text: `Денег на карте «${f.name}» хватит до аванса ${f.payDay}-го: при темпе около ${formatMoney(Math.round(f.rate))} в день к нему останется примерно ${formatMoney(Math.round(f.left))}.`,
+      });
+    } else if (f.status === "short") {
+      out.push({
+        id: `forecast-${f.card}`,
+        color: C.danger,
+        soft: C.dangerSoft,
+        text: `При темпе около ${formatMoney(Math.round(f.rate))} в день деньги на карте «${f.name}» закончатся ${shortDate(f.runOutDate)} — за ${f.shortDays} ${ruPlural(f.shortDays, "день", "дня", "дней")} до аванса ${f.payDay}-го. Чтобы дотянуть, тратьте не больше ${formatMoney(f.safeDaily)} в день.`,
+      });
+    }
+  });
+  return out;
+}
+
+/* Сравнение с прошлыми месяцами: общий итог и самые заметные категории. */
+export function computeComparisonInsights(transactions) {
+  const cmp = computeMonthComparison(transactions);
+  if (!cmp) return [];
+  const out = [];
+  const period = comparisonPeriodText(cmp.months);
+  const days = `${cmp.day} ${ruPlural(cmp.day, "день", "дня", "дней")}`;
+
+  const t = cmp.total;
+  if (t.pct != null && Math.abs(t.pct) >= 10 && Math.abs(t.diff) >= 500) {
+    const up = t.diff > 0;
+    out.push({
+      id: "cmp-total",
+      color: up ? C.amber : C.sber,
+      soft: up ? C.amberSoft : C.sberSoft,
+      text: `За ${days} месяца потрачено ${formatMoney(Math.round(t.cur))} — на ${Math.abs(t.pct)}% ${up ? "больше" : "меньше"}, чем ${period} к этому дню.`,
+    });
+  }
+
+  const noteworthy = (r) => r.pct != null && Math.abs(r.pct) >= 15 && Math.abs(r.diff) >= 500;
+  const up = cmp.rows.find((r) => r.diff > 0 && noteworthy(r));
+  const down = cmp.rows.find((r) => r.diff < 0 && noteworthy(r));
+  if (up) {
+    out.push({
+      id: "cmp-up",
+      color: C.danger,
+      soft: C.dangerSoft,
+      text: `На «${up.name}» в этом месяце на ${up.pct}% больше, чем ${period}: ${formatMoney(Math.round(up.cur))} вместо ${formatMoney(Math.round(up.avg))} к этому дню.`,
+    });
+  }
+  if (down) {
+    out.push({
+      id: "cmp-down",
+      color: C.sber,
+      soft: C.sberSoft,
+      text: `На «${down.name}» вы тратите на ${Math.abs(down.pct)}% меньше, чем ${period}: ${formatMoney(Math.round(down.cur))} вместо ${formatMoney(Math.round(down.avg))} к этому дню.`,
+    });
+  }
+  return out;
+}
+
 export function computeAllInsights(transactions, settings) {
   const balances = computeBalances(transactions, settings, null);
   const smartNotes = computeSmartNotes(transactions, settings);
@@ -188,6 +221,8 @@ export function computeAllInsights(transactions, settings) {
     if (countdown) insights.push(countdown);
   }
 
+  insights.push(...computeForecastInsights(transactions, settings));
+
   ["sber", "alfa", "ozon"].forEach((card) => {
     const note = smartNotes[card];
     if (note && note.type !== "ok") {
@@ -206,6 +241,7 @@ export function computeAllInsights(transactions, settings) {
   });
 
   insights.push(...computeCategoryInsights(transactions, settings));
+  insights.push(...computeComparisonInsights(transactions));
 
   // Сколько прожить на «Сбережения» без работы, и правило неприкосновенности.
   const avgMonthlyNeeds = estimateAvgMonthlyNeeds(transactions, settings, todayMonthKey());
