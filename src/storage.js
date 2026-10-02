@@ -7,7 +7,10 @@
 // Плюс auth (вход по почте и паролю) и storage.checkStale().
 //
 // Как это работает:
-//  • данные лежат в таблице app_data (user_id, key, value, updated_at), доступ — только к своим строкам (RLS);
+//  • личные данные лежат в таблице app_data (user_id, key, value, updated_at), доступ — только к своим строкам (RLS);
+//  • в режиме «двоих» те же ключи лежат в household_data (household_id, key, value, updated_at),
+//    доступ — только у участников совместного бюджета (supabase-household.sql);
+//  • если запись одновременно изменили два устройства/два человека, правки сливаются (merge.js), а не отбрасываются;
 //  • копия каждого значения кэшируется в localStorage, поэтому приложение открывается и без интернета;
 //  • запись «условная»: если ту же запись успели изменить на другом устройстве, старая версия
 //    её не затрёт — вместо этого приложение покажет плашку «обновить»;
@@ -20,7 +23,10 @@ const SUPABASE_KEY = "sb_publishable_GkTAGx43CRVGgRZ5BkCSaA_kA87NuXk";
 const PREFIX = "budget-app:";
 const SESSION_KEY = PREFIX + "session";
 const MIGRATED_KEY = PREFIX + "legacy-migrated";
+import { mergeValues } from "./merge.js";
+
 const TABLE = "app_data";
+const HH_TABLE = "household_data";
 
 /* ---------------------------------------------------------------- localStorage */
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -128,15 +134,27 @@ function authErrorText(r) {
 
 /* ---------------------------------------------------------------- кэш и очередь */
 function uid() { return session?.user?.id; }
-function cacheKey(k) { return `${PREFIX}u:${uid()}:${k}`; }
+
+// Где сейчас лежат данные: личные (app_data) или общие (household_data).
+let hh = null; // { id } — если вошли в совместный бюджет
+function scopeTable() { return hh ? HH_TABLE : TABLE; }
+function scopeFilter() { return hh ? `household_id=eq.${hh.id}` : `user_id=eq.${uid()}`; }
+function scopeConflictCols() { return hh ? "household_id,key" : "user_id,key"; }
+function scopeRow(key, value) { return hh ? { household_id: hh.id, key, value } : { user_id: uid(), key, value }; }
+const HH_CACHE = (userId) => `${PREFIX}hh:${userId}`;
+
+function cacheKey(k) { return hh ? `${PREFIX}h:${hh.id}:${k}` : `${PREFIX}u:${uid()}:${k}`; }
 
 function cacheRead(k) {
   const raw = lsGet(cacheKey(k));
   if (!raw) return null;
   try { return JSON.parse(raw); } catch { return null; }
 }
-function cacheWrite(k, value, updatedAt) {
-  lsSet(cacheKey(k), JSON.stringify({ value, updatedAt: updatedAt || null }));
+// base — последняя версия, которую видел сервер: от неё считается слияние, если правки разошлись.
+function cacheWrite(k, value, updatedAt, dirty = false) {
+  const prev = dirty ? cacheRead(k) : null;
+  const base = dirty ? (prev ? (prev.base ?? prev.value) : null) : value;
+  lsSet(cacheKey(k), JSON.stringify({ value, updatedAt: updatedAt || null, base }));
 }
 
 function dirtyRead() {
@@ -151,8 +169,8 @@ function isDirty(k) { return dirtyRead().includes(k); }
 
 function clearUserCache(userId) {
   try {
-    const p = `${PREFIX}u:${userId}:`;
-    Object.keys(localStorage).filter((k) => k.startsWith(p)).forEach((k) => localStorage.removeItem(k));
+    const prefixes = [`${PREFIX}u:${userId}:`, `${PREFIX}h:`, HH_CACHE(userId)];
+    Object.keys(localStorage).filter((k) => prefixes.some((p) => k.startsWith(p))).forEach((k) => localStorage.removeItem(k));
   } catch { /* ignore */ }
 }
 
@@ -165,7 +183,7 @@ const enc = encodeURIComponent;
 
 async function remoteGet(key) {
   const token = await ensureToken();
-  const r = await http(`/rest/v1/${TABLE}?user_id=eq.${uid()}&key=eq.${enc(key)}&select=value,updated_at`, { token });
+  const r = await http(`/rest/v1/${scopeTable()}?${scopeFilter()}&key=eq.${enc(key)}&select=value,updated_at`, { token });
   if (!r.ok) throw new Error(`remote get ${r.status}`);
   return Array.isArray(r.data) && r.data[0] ? r.data[0] : null;
 }
@@ -177,7 +195,7 @@ async function remoteWrite(key, value, knownUpdatedAt) {
 
   if (knownUpdatedAt) {
     const r = await http(
-      `/rest/v1/${TABLE}?user_id=eq.${uid()}&key=eq.${enc(key)}&updated_at=eq.${enc(knownUpdatedAt)}`,
+      `/rest/v1/${scopeTable()}?${scopeFilter()}&key=eq.${enc(key)}&updated_at=eq.${enc(knownUpdatedAt)}`,
       {
         method: "PATCH",
         token,
@@ -190,15 +208,37 @@ async function remoteWrite(key, value, knownUpdatedAt) {
     return { status: "ok", updatedAt: r.data[0].updated_at };
   }
 
-  const r = await http(`/rest/v1/${TABLE}?on_conflict=user_id,key`, {
+  const r = await http(`/rest/v1/${scopeTable()}?on_conflict=${scopeConflictCols()}`, {
     method: "POST",
     token,
     headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
-    body: { user_id: uid(), key, value },
+    body: scopeRow(key, value),
   });
   if (!r.ok) throw new Error(`remote insert ${r.status}`);
   if (!Array.isArray(r.data) || r.data.length === 0) return { status: "conflict" };
   return { status: "ok", updatedAt: r.data[0].updated_at };
+}
+
+// Запись отклонена: на сервере уже более новая версия. Берём свежую, сливаем с нашей
+// (от общей «базы») и пишем результат. null — слить не вышло (тогда сработает старая плашка «обновить»).
+async function resolveConflict(key, localValue, base) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const row = await remoteGet(key);
+    if (!row) {
+      const res = await remoteWrite(key, localValue, null);
+      if (res.status === "ok") return { value: localValue, updatedAt: res.updatedAt };
+      continue;
+    }
+    const merged = mergeValues(key, base, localValue, row.value);
+    if (merged === null) return null;
+    const res = await remoteWrite(key, merged, row.updated_at);
+    if (res.status === "ok") return { value: merged, updatedAt: res.updatedAt };
+  }
+  return null;
+}
+
+function notifyMerged(key) {
+  try { window.dispatchEvent(new CustomEvent("budget-merged", { detail: { key } })); } catch { /* ignore */ }
 }
 
 async function flushDirty() {
@@ -208,7 +248,14 @@ async function flushDirty() {
     if (!c) { removeDirty(key); continue; }
     try {
       const res = await remoteWrite(key, c.value, c.updatedAt);
-      if (res.status === "conflict") { notifyConflict(); continue; }
+      if (res.status === "conflict") {
+        const m = await resolveConflict(key, c.value, c.base ?? null);
+        if (!m) { notifyConflict(); continue; }
+        cacheWrite(key, m.value, m.updatedAt);
+        removeDirty(key);
+        notifyMerged(key);
+        continue;
+      }
       cacheWrite(key, c.value, res.updatedAt);
       removeDirty(key);
     } catch {
@@ -221,11 +268,63 @@ if (typeof window !== "undefined") {
   window.addEventListener("online", () => { flushDirty(); });
 }
 
+/* ---------------------------------------------------------------- совместный бюджет */
+function safeJson(raw) { try { return JSON.parse(raw); } catch { return null; } }
+
+// Узнаём, состоит ли пользователь в совместном бюджете. Если таблиц ещё нет (SQL не выполнен)
+// или нет сети, опираемся на то, что запомнили раньше.
+async function loadHousehold() {
+  const cached = lsGet(HH_CACHE(uid()));
+  try {
+    const token = await ensureToken();
+    const r = await http(`/rest/v1/household_members?user_id=eq.${uid()}&select=household_id`, { token });
+    if (r.ok && Array.isArray(r.data)) {
+      hh = r.data[0] ? { id: r.data[0].household_id } : null;
+      lsSet(HH_CACHE(uid()), hh ? JSON.stringify(hh) : "none");
+      return;
+    }
+    if (r.status === 404 || r.status === 400) { hh = null; return; } // таблицы нет — работаем лично
+  } catch { /* офлайн */ }
+  hh = cached && cached !== "none" ? safeJson(cached) : null;
+}
+
+function householdErrorText(r) {
+  const d = r.data || {};
+  const msg = String(d.message || d.error || "");
+  if (/already_member/.test(msg)) return "Вы уже состоите в совместном бюджете";
+  if (/invalid_code/.test(msg)) return "Неверный код приглашения";
+  if (/household_full/.test(msg)) return "В этом бюджете уже двое участников";
+  if (/not_owner/.test(msg)) return "Это может сделать только владелец";
+  if (/not_authenticated/.test(msg)) return "Нужно войти в аккаунт";
+  if (r.status === 404) return "Совместный бюджет не настроен: выполните supabase-household.sql в Supabase";
+  return msg || `Ошибка (${r.status})`;
+}
+
+async function rpc(name, body) {
+  const token = await ensureToken();
+  const r = await http(`/rest/v1/rpc/${name}`, { method: "POST", token, body: body || {} });
+  if (!r.ok) throw new Error(householdErrorText(r));
+  return r.data;
+}
+
+// Записать значение в личный аккаунт (при выходе из совместного бюджета с копией данных).
+async function writePersonal(key, value) {
+  const keep = hh;
+  hh = null;
+  try {
+    const row = await remoteGet(key);
+    const res = await remoteWrite(key, value, row ? row.updated_at : null);
+    if (res.status === "ok") cacheWrite(key, value, res.updatedAt);
+  } finally {
+    hh = keep;
+  }
+}
+
 /* ---------------------------------------------------------------- перенос старых данных */
 // Данные, накопленные до появления входа (localStorage без аккаунта), один раз
 // загружаются в облако — но только если у аккаунта там ещё пусто.
 async function migrateLegacy() {
-  if (!session || lsGet(MIGRATED_KEY)) return;
+  if (!session || hh || lsGet(MIGRATED_KEY)) return;
   for (const key of ["settings", "transactions"]) {
     const legacy = lsGet(PREFIX + key);
     if (legacy === null) continue;
@@ -247,6 +346,7 @@ export const auth = {
     session = loadSession();
     if (!session) return null;
     try { await ensureToken(); } catch { /* офлайн или сессия истекла — см. session ниже */ }
+    if (session) await loadHousehold();
     return session ? session.user : null;
   },
 
@@ -263,6 +363,7 @@ export const auth = {
     }
     if (!r.ok) throw new Error(authErrorText(r));
     saveSession(sessionFromResponse(r.data));
+    await loadHousehold();
     await migrateLegacy();
     emitAuth(session.user);
     return session.user;
@@ -278,6 +379,7 @@ export const auth = {
     if (!r.ok) throw new Error(authErrorText(r));
     if (r.data && r.data.access_token) {
       saveSession(sessionFromResponse(r.data));
+      await loadHousehold();
       await migrateLegacy();
       emitAuth(session.user);
       return { user: session.user };
@@ -291,6 +393,7 @@ export const auth = {
     try { await flushDirty(); } catch { /* ignore */ }
     try { await http("/auth/v1/logout", { method: "POST", token: session.access_token }); } catch { /* ignore */ }
     clearUserCache(id);
+    hh = null;
     saveSession(null);
     emitAuth(null);
   },
@@ -317,6 +420,17 @@ export const storage = {
         flushDirty();
         return { key, value: cached.value };
       }
+      // Правки сделаны офлайн, а на сервере за это время тоже менялось — сливаем, а не затираем.
+      if (isDirty(key) && cached) {
+        try {
+          const m = await resolveConflict(key, cached.value, cached.base ?? null);
+          if (m) {
+            cacheWrite(key, m.value, m.updatedAt);
+            removeDirty(key);
+            return { key, value: m.value };
+          }
+        } catch { /* нет сети — ниже обычный путь */ }
+      }
       removeDirty(key);
       cacheWrite(key, row.value, row.updated_at);
       flushDirty();
@@ -333,14 +447,21 @@ export const storage = {
     try {
       const res = await remoteWrite(key, value, cached ? cached.updatedAt : null);
       if (res.status === "conflict") {
-        notifyConflict(); // на другом устройстве данные уже изменились — не затираем
+        // на другом устройстве (или у партнёра) данные уже изменились — сливаем правки, ничего не затирая
+        const m = await resolveConflict(key, value, cached ? (cached.base ?? cached.value) : null);
+        if (m) {
+          cacheWrite(key, m.value, m.updatedAt);
+          removeDirty(key);
+          return { key, value: m.value, merged: true };
+        }
+        notifyConflict();
         return { key, value, conflict: true };
       }
       cacheWrite(key, value, res.updatedAt);
       removeDirty(key);
     } catch {
       if (!session) throw new Error("not signed in");
-      cacheWrite(key, value, cached ? cached.updatedAt : null);
+      cacheWrite(key, value, cached ? cached.updatedAt : null, true);
       addDirty(key);
     }
     return { key, value };
@@ -349,7 +470,7 @@ export const storage = {
   async delete(key) {
     if (!session) throw new Error("not signed in");
     const token = await ensureToken();
-    const r = await http(`/rest/v1/${TABLE}?user_id=eq.${uid()}&key=eq.${enc(key)}`, { method: "DELETE", token });
+    const r = await http(`/rest/v1/${scopeTable()}?${scopeFilter()}&key=eq.${enc(key)}`, { method: "DELETE", token });
     if (!r.ok) throw new Error(`remote delete ${r.status}`);
     lsDel(cacheKey(key));
     removeDirty(key);
@@ -361,11 +482,11 @@ export const storage = {
   async setBlob(key, value) {
     if (!session) throw new Error("not signed in");
     const token = await ensureToken();
-    const r = await http(`/rest/v1/${TABLE}?on_conflict=user_id,key`, {
+    const r = await http(`/rest/v1/${scopeTable()}?on_conflict=${scopeConflictCols()}`, {
       method: "POST",
       token,
       headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-      body: { user_id: uid(), key, value, updated_at: new Date().toISOString() },
+      body: { ...scopeRow(key, value), updated_at: new Date().toISOString() },
     });
     if (!r.ok) throw new Error(`remote blob write ${r.status}`);
     return { key };
@@ -380,7 +501,7 @@ export const storage = {
   async deleteBlob(key) {
     if (!session) throw new Error("not signed in");
     const token = await ensureToken();
-    const r = await http(`/rest/v1/${TABLE}?user_id=eq.${uid()}&key=eq.${enc(key)}`, { method: "DELETE", token });
+    const r = await http(`/rest/v1/${scopeTable()}?${scopeFilter()}&key=eq.${enc(key)}`, { method: "DELETE", token });
     if (!r.ok) throw new Error(`remote blob delete ${r.status}`);
     return { key, deleted: true };
   },
@@ -390,7 +511,7 @@ export const storage = {
     if (!session) return false;
     try {
       const token = await ensureToken();
-      const r = await http(`/rest/v1/${TABLE}?select=key,updated_at`, { token });
+      const r = await http(`/rest/v1/${scopeTable()}?select=key,updated_at`, { token });
       if (!r.ok || !Array.isArray(r.data)) return false;
       const dirty = dirtyRead();
       return r.data.some((row) => {
@@ -400,5 +521,97 @@ export const storage = {
     } catch {
       return false;
     }
+  },
+};
+
+/* ---------------------------------------------------------------- совместный бюджет: действия */
+export const household = {
+  // "household" или "personal" — где сейчас лежат данные.
+  scope() { return hh ? "household" : "personal"; },
+
+  // Сведения о совместном бюджете или null, если вы в нём не состоите.
+  async info() {
+    if (!session) throw new Error("not signed in");
+    return (await rpc("household_info")) || null;
+  },
+
+  // Создать совместный бюджет: ваши нынешние данные копируются в общий (личные остаются как были).
+  async create(name) {
+    if (!session) throw new Error("not signed in");
+    if (hh) throw new Error("Вы уже состоите в совместном бюджете");
+    const personal = {};
+    for (const key of ["settings", "transactions"]) {
+      const row = await remoteGet(key);
+      if (row) personal[key] = row.value;
+    }
+    const created = await rpc("create_household", { p_name: name || "" });
+    const next = { id: created.id };
+    try {
+      hh = next;
+      for (const [key, value] of Object.entries(personal)) {
+        const res = await remoteWrite(key, value, null);
+        if (res.status !== "ok") throw new Error("Не удалось перенести данные");
+      }
+    } catch (e) {
+      hh = null;
+      try { await rpc("leave_household"); } catch { /* ignore */ }
+      throw e;
+    }
+    // Фото чеков переносим по возможности, ошибки не критичны.
+    try {
+      hh = null;
+      const token = await ensureToken();
+      const list = await http(`/rest/v1/${TABLE}?user_id=eq.${uid()}&key=like.receipt:*&select=key`, { token });
+      hh = next;
+      for (const { key } of Array.isArray(list.data) ? list.data : []) {
+        try {
+          hh = null;
+          const row = await remoteGet(key);
+          hh = next;
+          if (row) await storage.setBlob(key, row.value);
+        } catch { hh = next; }
+      }
+    } catch { /* ignore */ }
+    hh = next;
+    lsSet(HH_CACHE(uid()), JSON.stringify(hh));
+    return { id: created.id, inviteCode: created.invite_code };
+  },
+
+  // Вступить по коду приглашения. Ваши личные данные не меняются: вы начинаете работать с общими.
+  async join(code) {
+    if (!session) throw new Error("not signed in");
+    const joined = await rpc("join_household", { p_code: code });
+    hh = { id: joined.id };
+    lsSet(HH_CACHE(uid()), JSON.stringify(hh));
+    return { id: joined.id };
+  },
+
+  // Выйти. keepCopy — перед выходом скопировать общие данные в свой личный аккаунт (они заменят прежние личные).
+  async leave({ keepCopy } = {}) {
+    if (!session) throw new Error("not signed in");
+    if (!hh) return;
+    const copy = {};
+    if (keepCopy) {
+      for (const key of ["settings", "transactions"]) {
+        const row = await remoteGet(key);
+        if (row) copy[key] = row.value;
+      }
+    }
+    const leftId = hh.id;
+    await rpc("leave_household");
+    try {
+      Object.keys(localStorage).filter((k) => k.startsWith(`${PREFIX}h:${leftId}:`)).forEach((k) => localStorage.removeItem(k));
+    } catch { /* ignore */ }
+    hh = null;
+    lsSet(HH_CACHE(uid()), "none");
+    for (const [key, value] of Object.entries(copy)) await writePersonal(key, value);
+  },
+
+  async regenerateCode() {
+    return rpc("regenerate_invite");
+  },
+
+  async removeMember(userId) {
+    await rpc("remove_member", { p_user: userId });
   },
 };

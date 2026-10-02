@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { storage, auth } from "./storage.js";
+import { storage, auth, household } from "./storage.js";
 import cardNeedsImg from "./assets/card-needs.webp";
 import cardWantsImg from "./assets/card-wants.webp";
 import cardSavingsImg from "./assets/card-savings.webp";
@@ -13,7 +13,7 @@ import { IncomeDistributionModal } from "./panels.jsx";
 import { Toast } from "./ui.jsx";
 import { BUCKET_CARD, BUCKET_STYLE, C, DEFAULT_SETTINGS } from "./constants.js";
 import { aggregateOpenDebts, computeIncomeSplitWithDebts, syncLinkedDebt } from "./debts.js";
-import { bucketName, endOfMonthStr, monthLabel, todayMonthKey, todayStr, uid } from "./format.js";
+import { bucketName, cardLabel, endOfMonthStr, formatMoney, monthLabel, todayMonthKey, todayStr, uid } from "./format.js";
 import { migrateSettings, migrateTransactions } from "./migrate.js";
 import { buildRecurringExpense, markPosted } from "./recurring.js";
 import { removeReceipt, saveReceipt } from "./receipts.js";
@@ -58,17 +58,26 @@ export default function App() {
   // Возвращаемся в приложение или запись отклонена как устаревшая — предлагаем обновиться.
   useEffect(() => {
     if (!authUser) return undefined;
+    // В совместном бюджете чужие правки подтягиваем сами; в личном — предлагаем обновиться плашкой.
+    function onStale() {
+      if (household.scope() === "household") refreshData();
+      else setStale(true);
+    }
     function check() {
       if (document.visibilityState === "visible") {
-        storage.checkStale().then((isStale) => { if (isStale) setStale(true); });
+        storage.checkStale().then((isStale) => { if (isStale) onStale(); });
       }
     }
-    function onConflict() { setStale(true); }
+    function onMerged() { refreshData(); }
+    const timer = setInterval(() => { if (household.scope() === "household") check(); }, 30000);
     document.addEventListener("visibilitychange", check);
-    window.addEventListener("budget-conflict", onConflict);
+    window.addEventListener("budget-conflict", onStale);
+    window.addEventListener("budget-merged", onMerged);
     return () => {
+      clearInterval(timer);
       document.removeEventListener("visibilitychange", check);
-      window.removeEventListener("budget-conflict", onConflict);
+      window.removeEventListener("budget-conflict", onStale);
+      window.removeEventListener("budget-merged", onMerged);
     };
   }, [authUser?.id]);
 
@@ -83,22 +92,7 @@ export default function App() {
     setStale(false);
 
     (async () => {
-      let s = DEFAULT_SETTINGS;
-      let t = [];
-
-      try {
-        const r = await storage.get("settings");
-        if (r && r.value) s = migrateSettings(JSON.parse(r.value));
-      } catch (e) {
-        if (e?.message !== "not found") console.warn("Не удалось загрузить настройки", e);
-      }
-
-      try {
-        const r = await storage.get("transactions");
-        if (r && r.value) t = migrateTransactions(JSON.parse(r.value), s);
-      } catch (e) {
-        if (e?.message !== "not found") console.warn("Не удалось загрузить операции", e);
-      }
+      const { s, t } = await loadAll();
 
       if (alive) {
         setSettings(s);
@@ -123,10 +117,45 @@ export default function App() {
     return () => document.removeEventListener("visibilitychange", run);
   }, [loaded, transactions, settings]);
 
+  // Читает настройки и операции из хранилища. failed — если что-то не удалось прочитать
+  // (например, нет сети): тогда обновлять экран по этим данным нельзя.
+  async function loadAll() {
+    let s = DEFAULT_SETTINGS;
+    let t = [];
+    let failed = false;
+
+    try {
+      const r = await storage.get("settings");
+      if (r && r.value) s = migrateSettings(JSON.parse(r.value));
+    } catch (e) {
+      if (e?.message !== "not found") { failed = true; console.warn("Не удалось загрузить настройки", e); }
+    }
+
+    try {
+      const r = await storage.get("transactions");
+      if (r && r.value) t = migrateTransactions(JSON.parse(r.value), s);
+    } catch (e) {
+      if (e?.message !== "not found") { failed = true; console.warn("Не удалось загрузить операции", e); }
+    }
+
+    return { s, t, failed };
+  }
+
+  // Подтянуть свежие данные (правки партнёра или другого устройства).
+  async function refreshData() {
+    const { s, t, failed } = await loadAll();
+    if (failed) return;
+    setSettings(s);
+    setTransactions(t);
+    setStale(false);
+  }
+
   async function persistTransactions(next) {
     setTransactions(next);
     try {
-      await storage.set("transactions", JSON.stringify(next));
+      const res = await storage.set("transactions", JSON.stringify(next));
+      // Параллельно что-то изменил партнёр: правки уже слиты, показываем общий результат.
+      if (res && res.merged) setTransactions(migrateTransactions(JSON.parse(res.value), settings));
     } catch (e) {
       console.warn("Не удалось сохранить операции", e);
     }
@@ -135,7 +164,8 @@ export default function App() {
   async function persistSettings(next) {
     setSettings(next);
     try {
-      await storage.set("settings", JSON.stringify(next));
+      const res = await storage.set("settings", JSON.stringify(next));
+      if (res && res.merged) setSettings(migrateSettings(JSON.parse(res.value)));
     } catch (e) {
       console.warn("Не удалось сохранить настройки", e);
     }
@@ -260,8 +290,10 @@ export default function App() {
       closeIds.has(t.id) ? { ...t, repaid: true, remainingAmount: 0 } : t
     );
     persistTransactions([...updated, ...created, settleTx]);
-    setToast("Долг погашен переводом");
-    setTimeout(() => setToast(null), 1200);
+    setToast(
+      `Переведено ${formatMoney(settleTx.amount)}: «${cardLabel(settings, debtorCard)}» → «${cardLabel(settings, creditorCard)}». Запись есть в операциях.`
+    );
+    setTimeout(() => setToast(null), 3200);
   }
 
   function closeMonth(mk, mode, leftoverNeeds, leftoverWants) {
