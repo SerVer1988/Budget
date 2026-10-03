@@ -17,13 +17,14 @@ import {
 import { BankCard, BankCardDetail, TotalBalanceCard, TxRow } from "./cards.jsx";
 import { ForecastPanel } from "./ForecastPanel.jsx";
 import { RecurringPanel } from "./RecurringPanel.jsx";
-import { ChartsCarousel, DailyExpenseChart, InsightsCarousel } from "./charts.jsx";
+import { ChartsCarousel, DailyExpenseChart } from "./charts.jsx";
+import { NotifyNudge } from "./NotifyNudge.jsx";
+import { computeForecast } from "./forecast.js";
 import { BankBadge, EmptyState, MonthNav, SectionTitle, StatBox } from "./ui.jsx";
 import { BUCKET_CARD, C, TX_TYPE_FILTERS } from "./constants.js";
 import { aggregateOpenDebts } from "./debts.js";
 import { aggregateMonth, computeBalances, txCardsOf, txImpactFor, txNetImpact, txSearchText } from "./finance.js";
 import { bucketIconSrc, bucketName, dayOfMonth, daysInMonth, endOfMonthStr, formatMoney, monthLabel, shiftMonth, todayMonthKey, todayStr } from "./format.js";
-import { computeAllInsights } from "./insights.js";
 
 export function AnalysisView({
   settings,
@@ -55,7 +56,12 @@ export function AnalysisView({
     () => computeBalances(transactions, settings, endOfMonthStr(selectedMonth)),
     [transactions, settings, selectedMonth]
   );
-  const insights = useMemo(() => computeAllInsights(transactions, settings), [transactions, settings]);
+  // Прогноз до аванса показываем прямо в карточках «Потребности» и «Хотения».
+  const forecastByCard = useMemo(() => {
+    const m = {};
+    if (isCurrentMonth) computeForecast(transactions, settings).forEach((f) => { m[f.card] = f; });
+    return m;
+  }, [isCurrentMonth, transactions, settings]);
   const openDebts = useMemo(
     () => transactions.filter((t) => t.type === "debt" && !t.repaid).sort((a, b) => (a.date < b.date ? 1 : -1)),
     [transactions]
@@ -127,7 +133,7 @@ export function AnalysisView({
   return (
     <div className="screen-stack">
       <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
-      <InsightsCarousel insights={insights} />
+      <NotifyNudge />
 
       {showCloseBanner && (
         <div className="notice" style={{ borderColor: C.ozon, background: C.ozonSoft, color: "#0F3E70" }}>
@@ -165,7 +171,7 @@ export function AnalysisView({
 
       {isCurrentMonth && <RecurringPanel settings={settings} onPost={onPostRecurring} />}
 
-      {isCurrentMonth && <ForecastPanel settings={settings} transactions={transactions} />}
+      {isCurrentMonth && <ForecastPanel transactions={transactions} />}
 
       {debtGroups.length > 0 && (
         <div className="panel">
@@ -203,6 +209,7 @@ export function AnalysisView({
         icon={bucketIconSrc(settings, "needs")}
         name={bucketName(settings, "needs")}
         bigValue={balances.sber}
+        forecast={forecastByCard.sber}
         expanded={!!expandedCards.sber}
         onToggle={() => toggleCard("sber")}
       >
@@ -223,6 +230,7 @@ export function AnalysisView({
         icon={bucketIconSrc(settings, "wants")}
         name={bucketName(settings, "wants")}
         bigValue={balances.alfa}
+        forecast={forecastByCard.alfa}
         expanded={!!expandedCards.alfa}
         onToggle={() => toggleCard("alfa")}
       >
@@ -271,6 +279,10 @@ export function AnalysisView({
       <ChartsCarousel
         slides={[
           {
+            title: "Динамика расходов",
+            render: () => <DailyExpenseChart monthItems={monthItems} monthKey={selectedMonth} settings={settings} />,
+          },
+          {
             title: "Структура месяца",
             render: () => (
               <div className="chart-box">
@@ -286,10 +298,6 @@ export function AnalysisView({
                 </ResponsiveContainer>
               </div>
             ),
-          },
-          {
-            title: "Динамика расходов",
-            render: () => <DailyExpenseChart monthItems={monthItems} monthKey={selectedMonth} settings={settings} />,
           },
         ]}
       />

@@ -18,7 +18,8 @@ import { migrateSettings, migrateTransactions } from "./migrate.js";
 import { buildRecurringExpense, markPosted } from "./recurring.js";
 import { removeReceipt, saveReceipt } from "./receipts.js";
 import { ReceiptContext, ReceiptModal } from "./ReceiptViewer.jsx";
-import { buildNotices, showNotices } from "./notify.js";
+import { buildNotices, deliverNotes, showNotices } from "./notify.js";
+import { computeAllInsights } from "./insights.js";
 import { AppStyles } from "./AppStyles.jsx";
 import { AnalysisView } from "./AnalysisView.jsx";
 import { AuthScreen } from "./AuthScreen.jsx";
@@ -111,10 +112,12 @@ export default function App() {
       if (document.visibilityState !== "visible") return;
       const today = todayStr();
       showNotices(buildNotices(transactions, settings, today), today);
+      deliverNotes(computeAllInsights(transactions, settings));
     }
     run();
+    const timer = setInterval(run, 10 * 60 * 1000); // пока приложение открыто, слоты дня наступают вовремя
     document.addEventListener("visibilitychange", run);
-    return () => document.removeEventListener("visibilitychange", run);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", run); };
   }, [loaded, transactions, settings]);
 
   // Читает настройки и операции из хранилища. failed — если что-то не удалось прочитать

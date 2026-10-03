@@ -255,7 +255,7 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
         ))}
       </div>
 
-      <div className="panel">
+      <div className="panel panel-compact">
         <SectionTitle>Правило распределения</SectionTitle>
 
         <div className="form-grid-2">
@@ -278,18 +278,21 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
         </div>
 
 
-        <div className="field">
-          <label>Дни напоминаний</label>
-          <input value={daysText} onChange={(e) => setDaysText(e.target.value)} placeholder="5, 15, 30" />
-        </div>
+        <div className="form-grid-2">
+          <div className="field">
+            <label>Дни напоминаний</label>
+            <input value={daysText} onChange={(e) => setDaysText(e.target.value)} placeholder="5, 15, 30" />
+          </div>
 
-        <div className="field">
-          <label>Цель {bucketNameGen(draft, "savings").toLowerCase()}</label>
-          <input
-            type="number"
-            value={draft.goal}
-            onChange={(e) => setDraft({ ...draft, goal: e.target.value })}
-          />
+          <div className="field">
+            <label>Цель {bucketNameGen(draft, "savings").toLowerCase()}</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={draft.goal}
+              onChange={(e) => setDraft({ ...draft, goal: e.target.value })}
+            />
+          </div>
         </div>
       </div>
 
@@ -309,44 +312,24 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
         </button>
       </div>
 
-      <div className="panel">
+      <div className="panel panel-compact">
         <SectionTitle>Начальные балансы</SectionTitle>
 
-        <div className="form-grid-2">
-          <div className="field">
-            <label>{bucketName(draft, "needs")}</label>
-            <input
-              type="number"
-              value={draft.openingBalance?.sber ?? 0}
-              onChange={(e) => setDraft({
-                ...draft,
-                openingBalance: { ...draft.openingBalance, sber: e.target.value },
-              })}
-            />
-          </div>
-          <div className="field">
-            <label>{bucketName(draft, "wants")}</label>
-            <input
-              type="number"
-              value={draft.openingBalance?.alfa ?? 0}
-              onChange={(e) => setDraft({
-                ...draft,
-                openingBalance: { ...draft.openingBalance, alfa: e.target.value },
-              })}
-            />
-          </div>
-        </div>
-
-        <div className="field">
-          <label>{bucketName(draft, "savings")}</label>
-          <input
-            type="number"
-            value={draft.openingBalance?.ozon ?? 0}
-            onChange={(e) => setDraft({
-              ...draft,
-              openingBalance: { ...draft.openingBalance, ozon: e.target.value },
-            })}
-          />
+        <div className="form-grid-3">
+          {[["sber", "needs"], ["alfa", "wants"], ["ozon", "savings"]].map(([card, bucket]) => (
+            <div className="field" key={card}>
+              <label>{bucketName(draft, bucket)}</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={draft.openingBalance?.[card] ?? 0}
+                onChange={(e) => setDraft({
+                  ...draft,
+                  openingBalance: { ...draft.openingBalance, [card]: e.target.value },
+                })}
+              />
+            </div>
+          ))}
         </div>
       </div>
 

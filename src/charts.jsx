@@ -20,85 +20,18 @@ import {
 import { TxRow } from "./cards.jsx";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
-import { bucketName, bucketOf, dayOfMonth, daysInMonth, formatMoney, monthKeyOf, todayMonthKey } from "./format.js";
+import { bucketName, bucketOf, dayOfMonth, daysInMonth, formatMoney, monthKeyOf, todayMonthKey, todayStr } from "./format.js";
 
-/* Единая карусель подсказок: аванс, аналитика по категориям, баланс карт
-   относительно плана. Листается только тапом: левая половина карточки —
-   на одну подсказку назад, правая — вперёд. Точки внизу позволяют
-   перейти к конкретной подсказке напрямую. */
-export function InsightsCarousel({ insights }) {
-  const [index, setIndex] = useState(0);
-  const idsKey = insights.map((i) => i.id).join("|");
+/* Первый день недельного окна графика: для текущего месяца — окно, где сегодня; для остальных — 1-е число. */
+export function weekStartFor(monthKey, windowSize = 7, today = todayStr()) {
+  return monthKey === monthKeyOf(today) ? Math.floor((dayOfMonth(today) - 1) / windowSize) * windowSize + 1 : 1;
+}
 
-  useEffect(() => {
-    setIndex(0);
-  }, [idsKey]);
-
-  if (!insights.length) return null;
-
-  const safeIndex = index % insights.length;
-  const current = insights[safeIndex];
-
-  function handleTap(e) {
-    if (insights.length <= 1) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const isLeftHalf = e.clientX - rect.left < rect.width / 2;
-    setIndex((i) =>
-      isLeftHalf ? (i - 1 + insights.length) % insights.length : (i + 1) % insights.length
-    );
-  }
-
-  return (
-    <div
-      className="soft-card"
-      style={{
-        padding: 12,
-        borderLeft: `3px solid ${current.color}`,
-        background: current.soft,
-        cursor: insights.length > 1 ? "pointer" : "default",
-        position: "relative",
-      }}
-      onClick={handleTap}
-      role={insights.length > 1 ? "button" : undefined}
-      tabIndex={insights.length > 1 ? 0 : undefined}
-    >
-      {insights.length > 1 && (
-        <ChevronLeft
-          size={14}
-          style={{ position: "absolute", left: 4, top: 12, color: C.inkMuted, opacity: 0.45 }}
-        />
-      )}
-      <div
-        style={{
-          fontSize: 12,
-          lineHeight: 1.45,
-          color: C.ink,
-          padding: insights.length > 1 ? "0 15px" : 0,
-        }}
-      >
-        {current.text}
-      </div>
-      {insights.length > 1 && (
-        <ChevronRight
-          size={14}
-          style={{ position: "absolute", right: 4, top: 12, color: C.inkMuted, opacity: 0.45 }}
-        />
-      )}
-      {insights.length > 1 && (
-        <div className="dots" style={{ "--accent": current.color }}>
-          {insights.map((ins, i) => (
-            <button
-              key={ins.id}
-              type="button"
-              className={`dot ${i === safeIndex ? "active" : ""}`}
-              onClick={(e) => { e.stopPropagation(); setIndex(i); }}
-              aria-label={`Подсказка ${i + 1}`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
+/* Подписи оси Y покороче: 1500 -> «1,5т», чтобы цифры не обрезались. */
+function compactAxis(v) {
+  const a = Math.abs(v);
+  if (a >= 1000) return `${String(Math.round((v / 1000) * 10) / 10).replace(".", ",")}т`;
+  return String(Math.round(v));
 }
 
 export function CategoryDonut({ categories, totals, bucketLabel, transactions, bucket, settings, onDeleteTx, onEditTx }) {
@@ -259,12 +192,13 @@ export function DailyExpenseChart({ monthItems, monthKey, settings }) {
   const needsName = bucketName(settings, "needs");
   const wantsName = bucketName(settings, "wants");
   const total = daysInMonth(monthKey);
-  const WINDOW = 15;
-  const defaultStart = Math.max(1, total - WINDOW + 1);
+  // График показывает неделю: 1–7, 8–14, 15–21, 22–28, 29–конец. По умолчанию — та, где сегодня.
+  const WINDOW = 7;
+  const defaultStart = weekStartFor(monthKey, WINDOW);
   const [start, setStart] = useState(defaultStart);
 
   useEffect(() => {
-    setStart(Math.max(1, daysInMonth(monthKey) - WINDOW + 1));
+    setStart(weekStartFor(monthKey, WINDOW));
   }, [monthKey]);
 
   const byDay = {};
@@ -298,21 +232,21 @@ export function DailyExpenseChart({ monthItems, monthKey, settings }) {
         </button>
       )}
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 10, right: 4, bottom: 4, left: -18 }}>
+        <BarChart data={data} margin={{ top: 6, right: 2, bottom: 0, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-          <XAxis dataKey="day" tick={{ fontSize: 11, fill: C.inkMuted }} />
-          <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} width={42} />
+          <XAxis dataKey="day" tick={{ fontSize: 11, fill: C.inkMuted }} tickLine={false} />
+          <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} width={34} tickLine={false} tickFormatter={compactAxis} />
           <Tooltip formatter={(v) => formatMoney(v)} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey={needsName} stackId="d" fill={C.sber} />
-          <Bar dataKey={wantsName} stackId="d" fill={C.alfa} radius={[6, 6, 0, 0]} />
+          <Legend wrapperStyle={{ fontSize: 11 }} iconSize={9} height={18} />
+          <Bar dataKey={needsName} stackId="d" fill={C.sber} maxBarSize={34} />
+          <Bar dataKey={wantsName} stackId="d" fill={C.alfa} radius={[6, 6, 0, 0]} maxBarSize={34} />
         </BarChart>
       </ResponsiveContainer>
       {canNext && (
         <button
           type="button"
           className="chart-day-arrow chart-day-arrow-next"
-          onClick={() => setStart((s) => Math.min(Math.max(1, total - WINDOW + 1), s + WINDOW))}
+          onClick={() => setStart((s) => Math.min(Math.floor((total - 1) / WINDOW) * WINDOW + 1, s + WINDOW))}
           aria-label="Более поздние дни"
         >
           <ChevronRight size={16} />
@@ -333,7 +267,7 @@ export function ChartsCarousel({ slides }) {
   const current = slides[safeIndex];
 
   return (
-    <div className="panel">
+    <div className="panel panel-compact">
       <div className="chart-carousel-header">
         {n > 1 && (
           <button

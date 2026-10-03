@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import { BankBadge } from "./ui.jsx";
 import { C, CARD_BUCKET } from "./constants.js";
-import { bucketIconSrc, bucketName, cardLabel, formatMoney } from "./format.js";
+import { bucketIconSrc, bucketName, cardLabel, formatMoney, ruPlural } from "./format.js";
+import { shortDate } from "./forecast.js";
 
 export function TotalBalanceCard({ total, settings, onToggle }) {
   const items = [
@@ -37,7 +38,7 @@ export function TotalBalanceCard({ total, settings, onToggle }) {
   );
 }
 
-export function BankCard({ stripe, icon, name, bigValue, expanded, onToggle, children }) {
+export function BankCard({ stripe, icon, name, bigValue, forecast, expanded, onToggle, children }) {
   return (
     <div
       className="bank-card"
@@ -56,7 +57,25 @@ export function BankCard({ stripe, icon, name, bigValue, expanded, onToggle, chi
           <ChevronDown size={16} className={`bank-chevron${expanded ? " open" : ""}`} />
         </div>
       </div>
+      {forecast && <BankForecast forecast={forecast} />}
       {expanded && <div className="bank-detail">{children}</div>}
+    </div>
+  );
+}
+
+/* Строка прогноза до аванса под названием карты: темп трат и хватит ли денег. */
+function BankForecast({ forecast: f }) {
+  let value;
+  let color;
+  if (f.status === "ok") { value = `хватит · +${formatMoney(Math.round(f.left))}`; color = C.sber; }
+  else if (f.status === "short") { value = `закончится ${shortDate(f.runOutDate)}`; color = C.danger; }
+  else { value = "баланс исчерпан"; color = C.danger; }
+  return (
+    <div className="bank-forecast">
+      <span className="small-note">
+        ≈ {formatMoney(Math.round(f.rate))}/день · до аванса {f.daysLeft} {ruPlural(f.daysLeft, "день", "дня", "дней")}
+      </span>
+      <span className="bank-forecast-value" style={{ color }}>{value}</span>
     </div>
   );
 }
@@ -90,8 +109,8 @@ export function BankCardDetail({ stripe, soft, spent, avail, prevSpent, daysLeft
         </div>
         {statusText && <span className="small-note mono" style={{ whiteSpace: "nowrap" }}>{statusText}</span>}
       </div>
-      <div className="small-note" style={{ marginTop: 4 }}>
-        {formatMoney(spent)} из {formatMoney(Math.max(0, avail))}
+      <div className="small-note" style={{ marginTop: 3 }}>
+        {avail > 0 ? <>{formatMoney(spent)} из {formatMoney(avail)}</> : <>потрачено {formatMoney(spent)}</>}
         {trendText && <> · {trendText}</>}
       </div>
     </>

@@ -982,8 +982,8 @@ export function AppStyles() {
         border: 1px solid ${C.border};
         border-left: 4px solid transparent;
         background: ${C.surface};
-        border-radius: 18px;
-        padding: 12px 13px;
+        border-radius: 16px;
+        padding: 8px 11px;
         cursor: pointer;
       }
 
@@ -1005,8 +1005,8 @@ export function AppStyles() {
       }
 
       .bank-card-icon {
-        width: 22px;
-        height: 22px;
+        width: 20px;
+        height: 20px;
         flex: 0 0 auto;
         border-radius: 999px;
         object-fit: cover;
@@ -1015,7 +1015,7 @@ export function AppStyles() {
       .bank-value {
         flex: 0 0 auto;
         text-align: right;
-        font-size: 15px;
+        font-size: 14.5px;
         font-weight: 900;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
@@ -1032,15 +1032,15 @@ export function AppStyles() {
       }
 
       .bank-detail {
-        margin-top: 10px;
-        padding-top: 10px;
+        margin-top: 7px;
+        padding-top: 7px;
         border-top: 1px solid ${C.border};
       }
 
       .bank-progress {
         flex: 1;
         min-width: 0;
-        height: 7px;
+        height: 5px;
         border-radius: 999px;
         overflow: hidden;
       }
@@ -1058,7 +1058,7 @@ export function AppStyles() {
 
       .chart-box {
         width: 100%;
-        height: 220px;
+        height: 170px;
         min-width: 0;
         overflow: hidden;
         position: relative;
@@ -1101,7 +1101,7 @@ export function AppStyles() {
       }
 
       .chart-carousel-header .section-title {
-        margin: 12px 0 8px;
+        margin: 2px 0 4px;
         flex: 1;
         text-align: center;
       }
@@ -1125,7 +1125,7 @@ export function AppStyles() {
         align-items: center;
         justify-content: center;
         gap: 6px;
-        margin-top: 6px;
+        margin-top: 3px;
       }
 
       .chart-carousel-dot {
@@ -1412,6 +1412,52 @@ export function AppStyles() {
         color: #fff;
         font-size: 12px;
         font-weight: 800;
+      }
+
+      /* Компактные панели и карточки */
+      .panel-compact {
+        padding: 10px 12px;
+      }
+
+      .panel-compact .section-title {
+        margin: 0 2px 6px;
+      }
+
+      .panel-compact .field {
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+
+      .panel-compact .field:last-child {
+        margin-bottom: 0;
+      }
+
+      .panel-compact .field input,
+      .panel-compact .field select {
+        height: 36px;
+        border-radius: 11px;
+        font-size: 14px;
+        padding: 0 10px;
+      }
+
+      .form-grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .bank-forecast {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 5px;
+      }
+
+      .bank-forecast-value {
+        flex: 0 0 auto;
+        font-size: 12.5px;
+        font-weight: 900;
       }
 
       /* Калькулятор под полем суммы */

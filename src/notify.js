@@ -5,6 +5,7 @@ import { dayOfMonth, formatMoney, ruPlural } from "./format.js";
    при запуске и при возвращении в приложение. Один и тот же сигнал за день приходит один раз. */
 const KEY_ON = "budget.notify.on";
 const KEY_SEEN = "budget.notify.seen";
+const KEY_NOTES = "budget.notify.notes";
 
 export function notificationsSupported() {
   return typeof window !== "undefined" && "Notification" in window;
@@ -103,4 +104,100 @@ export async function showNotices(notices, today) {
     try { localStorage.setItem(KEY_SEEN, JSON.stringify({ date: today, keys: [...seen, ...fresh.map((n) => n.key)] })); } catch { /* ignore */ }
   }
   return fresh;
+}
+
+/* ---------- Заметки уведомлениями в течение дня ----------
+   Раньше заметки висели каруселью на экране «Анализ»: теперь они приходят уведомлениями.
+   Каждый день — не больше NOTES_PER_DAY штук, по одной на «слот» времени: сначала самое срочное
+   (лимит до аванса, нехватка денег, перерасход), в конце дня — совет. Редкие по смыслу заметки
+   (про запас сбережений и правило неприкосновенности) приходят раз в неделю. Если слот наступил,
+   а приложение было закрыто, заметка придёт при следующем открытии (не больше двух за раз). */
+export const NOTE_SLOTS = [9, 12, 15, 18, 20]; // часы по местному времени
+export const NOTES_PER_DAY = NOTE_SLOTS.length;
+
+const WEEKLY_IDS = ["runway", "savings-rule"];
+const SKIP_IDS = /^(recurring-|payday-today)/; // эти приходят отдельными срочными уведомлениями
+
+const NOTE_TITLES = [
+  [/^payday-countdown/, "До аванса"],
+  [/^payday-distribute/, "Распределение дохода"],
+  [/^forecast-/, "Прогноз до аванса"],
+  [/^smart-/, "Баланс карты"],
+  [/^debt-/, "Долги между бюджетами"],
+  [/^cmp-/, "Расходы за месяц"],
+  [/^cat-/, "Траты по категориям"],
+  [/^(runway|savings-rule)/, "Сбережения"],
+  [/^tip/, "Совет"],
+];
+
+function notePriority(n) {
+  if (/^payday-/.test(n.id)) return 0;
+  if (/^forecast-/.test(n.id) || /^smart-/.test(n.id)) return 1;
+  if (/^debt-/.test(n.id)) return 2;
+  if (/^(cmp-|cat-)/.test(n.id)) return 3;
+  if (/^(runway|savings-rule)/.test(n.id)) return 4;
+  return 5; // совет — в самом конце дня
+}
+
+export function noteTitle(id) {
+  const hit = NOTE_TITLES.find(([re]) => re.test(id));
+  return hit ? hit[1] : "Заметка";
+}
+
+function hashText(text) {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/* Номер недели года (для заметок «раз в неделю»). */
+function weekKey(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const t = Date.UTC(y, m - 1, d);
+  const jan1 = Date.UTC(y, 0, 1);
+  return `${y}-W${Math.floor((t - jan1) / 86400000 / 7)}`;
+}
+
+/* Чистая функция: что отправить сейчас. state = { date, slotsDone, keys[], weekly{} }.
+   Возвращает { send: [{key, title, body}], state }. */
+export function planNotes(insights, state, now) {
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const st = state && state.date === today ? { ...state, keys: [...state.keys], weekly: { ...state.weekly } } : { date: today, slotsDone: 0, keys: [], weekly: state?.weekly ? { ...state.weekly } : {} };
+
+  const due = NOTE_SLOTS.filter((h) => h <= now.getHours()).length;
+  const toSend = Math.min(due - st.slotsDone, 2, NOTES_PER_DAY - st.keys.length);
+  if (toSend <= 0) return { send: [], state: st };
+
+  const week = weekKey(today);
+  const queue = insights
+    .filter((n) => !SKIP_IDS.test(n.id))
+    .map((n, i) => ({ n, i }))
+    .sort((a, b) => notePriority(a.n) - notePriority(b.n) || a.i - b.i)
+    .map(({ n }) => n)
+    .filter((n) => {
+      if (WEEKLY_IDS.includes(n.id)) return st.weekly[n.id] !== week;
+      return !st.keys.includes(`${n.id}:${hashText(n.text)}`);
+    });
+
+  const send = [];
+  for (const n of queue.slice(0, toSend)) {
+    const key = WEEKLY_IDS.includes(n.id) ? `${today}:${n.id}` : `${n.id}:${hashText(n.text)}`;
+    st.keys.push(key);
+    if (WEEKLY_IDS.includes(n.id)) st.weekly[n.id] = week;
+    send.push({ key, title: noteTitle(n.id), body: n.text.replace(/^Совет:\s*/, "") });
+  }
+  st.slotsDone = due;
+  return { send, state: st };
+}
+
+/* Показывает заметки, которым пришло время. Вызывать при запуске, при возвращении в приложение
+   и по таймеру, пока оно открыто. */
+export async function deliverNotes(insights, now = new Date()) {
+  if (!notifyEnabled()) return [];
+  let state = null;
+  try { state = JSON.parse(localStorage.getItem(KEY_NOTES) || "null"); } catch { /* ignore */ }
+  const { send, state: next } = planNotes(insights, state, now);
+  for (const n of send) await showOne({ key: `note:${n.key}`, title: n.title, body: n.body });
+  try { localStorage.setItem(KEY_NOTES, JSON.stringify(next)); } catch { /* ignore */ }
+  return send;
 }

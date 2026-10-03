@@ -142,7 +142,7 @@ export function RecurringSettings({ settings, onSaveSettings }) {
           {notify ? "Отключить уведомления" : "Включить уведомления"}
         </button>
         <div className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>
-          {notifyMsg || "Приходят, когда приложение открыто или свёрнуто: в день платежа и в день выплаты."}
+          {notifyMsg || "В течение дня: заметки (прогноз, сравнение, советы), платежи и день выплаты. Приходят, пока приложение открыто или свёрнуто."}
         </div>
       </div>
     </div>
