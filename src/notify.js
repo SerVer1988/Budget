@@ -115,7 +115,13 @@ export async function showNotices(notices, today) {
 export const NOTE_SLOTS = [9, 12, 15, 18, 20]; // часы по местному времени
 export const NOTES_PER_DAY = NOTE_SLOTS.length;
 
-const WEEKLY_IDS = ["runway", "savings-rule"];
+/* Как часто можно повторять заметку (в днях). Предупреждения о балансе карт держатся, пока причина
+   не исчезнет, поэтому напоминаем не чаще раза в 3 дня; заметки про запас сбережений — раз в неделю. */
+function cadenceDays(id) {
+  if (id === "runway" || id === "savings-rule") return 7;
+  if (/^smart-/.test(id)) return 3;
+  return 0; // 0 — один и тот же текст не чаще раза в день
+}
 const SKIP_IDS = /^(recurring-|payday-today)/; // эти приходят отдельными срочными уведомлениями
 
 const NOTE_TITLES = [
@@ -150,40 +156,41 @@ function hashText(text) {
   return (h >>> 0).toString(36);
 }
 
-/* Номер недели года (для заметок «раз в неделю»). */
-function weekKey(dateStr) {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const t = Date.UTC(y, m - 1, d);
-  const jan1 = Date.UTC(y, 0, 1);
-  return `${y}-W${Math.floor((t - jan1) / 86400000 / 7)}`;
+function daysSince(fromDate, toDate) {
+  if (!fromDate) return Infinity;
+  const p = (s) => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((p(toDate) - p(fromDate)) / 86400000);
 }
 
-/* Чистая функция: что отправить сейчас. state = { date, slotsDone, keys[], weekly{} }.
+/* Чистая функция: что отправить сейчас. state = { date, slotsDone, keys[], last{} }.
    Возвращает { send: [{key, title, body}], state }. */
 export function planNotes(insights, state, now) {
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const st = state && state.date === today ? { ...state, keys: [...state.keys], weekly: { ...state.weekly } } : { date: today, slotsDone: 0, keys: [], weekly: state?.weekly ? { ...state.weekly } : {} };
+  const st = state && state.date === today
+    ? { ...state, keys: [...state.keys], last: { ...(state.last || {}) } }
+    : { date: today, slotsDone: 0, keys: [], last: { ...(state?.last || {}) } };
 
   const due = NOTE_SLOTS.filter((h) => h <= now.getHours()).length;
   const toSend = Math.min(due - st.slotsDone, 2, NOTES_PER_DAY - st.keys.length);
   if (toSend <= 0) return { send: [], state: st };
 
-  const week = weekKey(today);
   const queue = insights
     .filter((n) => !SKIP_IDS.test(n.id))
     .map((n, i) => ({ n, i }))
     .sort((a, b) => notePriority(a.n) - notePriority(b.n) || a.i - b.i)
     .map(({ n }) => n)
     .filter((n) => {
-      if (WEEKLY_IDS.includes(n.id)) return st.weekly[n.id] !== week;
+      const cad = cadenceDays(n.id);
+      if (cad > 0) return daysSince(st.last[n.id], today) >= cad;
       return !st.keys.includes(`${n.id}:${hashText(n.text)}`);
     });
 
   const send = [];
   for (const n of queue.slice(0, toSend)) {
-    const key = WEEKLY_IDS.includes(n.id) ? `${today}:${n.id}` : `${n.id}:${hashText(n.text)}`;
+    const cad = cadenceDays(n.id);
+    const key = cad > 0 ? `${today}:${n.id}` : `${n.id}:${hashText(n.text)}`;
     st.keys.push(key);
-    if (WEEKLY_IDS.includes(n.id)) st.weekly[n.id] = week;
+    if (cad > 0) st.last[n.id] = today;
     send.push({ key, title: noteTitle(n.id), body: n.text.replace(/^Совет:\s*/, "") });
   }
   st.slotsDone = due;

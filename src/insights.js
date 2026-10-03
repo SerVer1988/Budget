@@ -17,7 +17,9 @@ export function smartNoteFor(settings, bucketLabel, card, balance, target, overs
     };
   }
 
-  const diff = balance - Math.max(0, target);
+  // Ожидаемое движение денег по карте с момента сброса равно target (оно может быть отрицательным,
+  // если тратим из остатка на момент сброса).
+  const diff = balance - target;
 
   if (diff < -SMART_NOTE_THRESHOLD) {
     return {
@@ -52,8 +54,12 @@ export function computeSmartNotes(transactions, settings) {
   const balances = computeBalances(transactions, settings, null);
   const sinceLabel = alloc.sinceDate ? formatDateRu(alloc.sinceDate) : null;
 
-  const needsOver = alloc.needsTarget < 0 ? -alloc.needsTarget : 0;
-  const wantsOver = alloc.wantsTarget < 0 ? -alloc.wantsTarget : 0;
+  // После сброса отсчёта / закрытия месяца деньги, которые уже лежали на карте (остаток на момент сброса),
+  // — это тоже бюджет на новый период. Превышение плана — только если потрачено больше, чем
+  // «остаток на момент сброса + доля нового дохода». Иначе обычные траты из остатка (например, зарплата
+  // пришла 30-го, а отсчёт начался 30-го) выглядели бы как превышение.
+  const needsOver = Math.max(0, -(alloc.needsTarget + Math.max(0, alloc.baselineSber)));
+  const wantsOver = Math.max(0, -(alloc.wantsTarget + Math.max(0, alloc.baselineAlfa)));
   const saveOver = alloc.saveTarget < 0 ? -alloc.saveTarget : 0;
 
   return {
