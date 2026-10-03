@@ -100,12 +100,14 @@ export function ListTile({ icon: Icon, color, name, amount, onClick, empty }) {
   );
 }
 
-export function CategoryTile({ icon: Icon, color, name, spent, limit, onClick }) {
-  const hasLimit = limit > 0;
-  const overLimit = hasLimit && spent > limit;
-  const pct = hasLimit ? Math.max(0, Math.min(100, (spent / limit) * 100)) : 0;
-  const withinPct = overLimit ? (limit / spent) * 100 : pct;
-  const overPct = 100 - withinPct;
+/* Плитка категории: крупно — потрачено в этом месяце, мелко и серым — среднее за прошлые месяцы.
+   Шкала: до среднего цвет категории; если потрачено больше среднего, превышение показано
+   другим (тёмным) цветом с чётким краем на отметке среднего. */
+export function CategoryTile({ icon: Icon, color, name, spent, avg, onClick }) {
+  const hasAvg = avg > 0;
+  const over = hasAvg && spent > avg;
+  const withinPct = !hasAvg ? 0 : over ? (avg / spent) * 100 : Math.max(0, Math.min(100, (spent / avg) * 100));
+  const overPct = over ? 100 - withinPct : 0;
 
   return (
     <button onClick={onClick} className="cat-tile" type="button" style={{ borderLeftColor: color }}>
@@ -121,16 +123,17 @@ export function CategoryTile({ icon: Icon, color, name, spent, limit, onClick })
 
       <div className="cat-tile-amounts">
         <span className="cat-tile-spent" style={{ color }}>{formatMoney(spent)}</span>
-        {hasLimit && <span className="cat-tile-limit"> из {formatMoney(limit)}</span>}
+        {hasAvg && <span className="cat-tile-limit"> ср. {formatMoney(Math.round(avg))}</span>}
       </div>
 
-      {hasLimit && (
+      {hasAvg && (
         <div className="cat-tile-bar" style={{ background: color + "22" }}>
-          <div className="cat-tile-bar-fill" style={{ width: withinPct + "%", background: color }} />
-          {overLimit && (
+          <div className="cat-tile-bar-fill" data-part="within" style={{ width: withinPct + "%", background: color }} />
+          {over && (
             <div
               className="cat-tile-bar-fill"
-              style={{ width: overPct + "%", background: darkenColor(color, 0.4) }}
+              data-part="over"
+              style={{ width: overPct + "%", background: darkenColor(color, 0.45) }}
             />
           )}
         </div>

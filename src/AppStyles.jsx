@@ -574,6 +574,8 @@ export function AppStyles() {
 
       .cat-tile-bar-fill {
         height: 100%;
+        flex: 0 0 auto;
+        background-image: none;
       }
 
       .quick-tile {

@@ -10,7 +10,7 @@ import { computeSavingsSeries } from "./savings.js";
 import { CategoryTile, ListTile, StatBox } from "./ui.jsx";
 import { BUCKET_STYLE, C, getIcon } from "./constants.js";
 import { computeIncomeSplitWithDebts } from "./debts.js";
-import { aggregateMonth, categoryStats, computeCategoryLimits, estimateMonthlyRate, ozonDayStats } from "./finance.js";
+import { aggregateMonth, categoryStats, computeCategoryAverages, estimateMonthlyRate, ozonDayStats } from "./finance.js";
 import { bucketName, bucketOf, cardLabel, clampPct, formatMoney, todayMonthKey } from "./format.js";
 
 /* ============================================================ NEW: Income Modal & Limit Status */
@@ -98,10 +98,9 @@ export function CategoryPanel({
   const inflow = card === "sber" ? agg.sberInflow : agg.alfaInflow;
   const outflow = card === "sber" ? agg.sberOutflow : agg.alfaOutflow;
   const monthlyTotals = card === "sber" ? agg.needCatTotals : agg.wantCatTotals;
-  const bucketLimitThisMonth = card === "sber" ? agg.needsLimit : agg.wantsLimit;
-  const catLimits = useMemo(
-    () => computeCategoryLimits(transactions, settings, categories, bucket, todayMonthKey(), bucketLimitThisMonth),
-    [transactions, settings, categories, bucket, bucketLimitThisMonth]
+  const catAverages = useMemo(
+    () => computeCategoryAverages(transactions, settings, categories, bucket, todayMonthKey()).avg,
+    [transactions, settings, categories, bucket]
   );
 
   return (
@@ -137,7 +136,7 @@ export function CategoryPanel({
               color={cat.color}
               name={cat.name}
               spent={monthlyTotals[cat.name] || 0}
-              limit={catLimits[cat.name] || 0}
+              avg={catAverages[cat.name] || 0}
               onClick={() => {
                 onOpenFull({
                   type: "expense",

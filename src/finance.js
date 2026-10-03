@@ -193,6 +193,30 @@ export function computeCategoryLimits(transactions, settings, categories, bucket
 
 /* ============================================================ Insights engine (rotating tips) */
 
+/* Средняя трата по каждой категории за прошлые месяцы: до трёх последних месяцев, в которых были
+   расходы (месяцы без единой траты, например до начала учёта, не считаются).
+   Возвращает { avg: { [название категории]: число }, months: сколько месяцев учтено }. */
+export function computeCategoryAverages(transactions, settings, categories, bucket, currentMonthKey) {
+  const keys = [];
+  let mk = currentMonthKey;
+  for (let i = 0; i < 6 && keys.length < 3; i++) {
+    mk = shiftMonth(mk, -1);
+    if (transactions.some((t) => t.type === "expense" && monthKeyOf(t.date) === mk)) keys.push(mk);
+  }
+
+  const avg = {};
+  categories.forEach((c) => { avg[c.name] = 0; });
+  if (!keys.length) return { avg, months: 0 };
+
+  keys.forEach((k) => {
+    const agg = aggregateMonth(k, transactions, settings);
+    const totals = bucket === "wants" ? agg.wantCatTotals : agg.needCatTotals;
+    categories.forEach((c) => { avg[c.name] += totals[c.name] || 0; });
+  });
+  categories.forEach((c) => { avg[c.name] /= keys.length; });
+  return { avg, months: keys.length };
+}
+
 export function categoryStats(transactions, bucket) {
   const byName = {};
   transactions.filter((t) => t.type === "expense" && (t.bucket || bucketOf(t.card)) === bucket).forEach((t) => {
