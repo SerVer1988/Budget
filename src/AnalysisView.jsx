@@ -217,6 +217,9 @@ export function AnalysisView({
           spent={agg.sberSpent}
           avail={agg.sberAvail}
           prevSpent={prevAgg.sberSpent}
+          bucketSpent={agg.needsSpent}
+          prevBucketSpent={prevAgg.needsSpent}
+          bucketLabel={bucketName(settings, "needs")}
           daysLeft={daysLeftInMonth}
           isCurrentMonth={isCurrentMonth}
           dangerColor={C.danger}
@@ -238,6 +241,9 @@ export function AnalysisView({
           spent={agg.alfaSpent}
           avail={agg.alfaAvail}
           prevSpent={prevAgg.alfaSpent}
+          bucketSpent={agg.wantsSpent}
+          prevBucketSpent={prevAgg.wantsSpent}
+          bucketLabel={bucketName(settings, "wants")}
           daysLeft={daysLeftInMonth}
           isCurrentMonth={isCurrentMonth}
           dangerColor={C.danger}

@@ -83,7 +83,10 @@ function BankForecast({ forecast: f }) {
 /* Строка деталей внутри развёрнутой карточки банка: мини-бар + остаток в день
    (или «превышен») + сравнение с прошлым месяцем — вместо старой вкладки
    с фиксированным % распределения бюджета, который и так известен заранее. */
-export function BankCardDetail({ stripe, soft, spent, avail, prevSpent, daysLeft, isCurrentMonth, dangerColor }) {
+/* spent — сколько списано с карты (все покупки, оплаченные этой картой). bucketSpent — сколько потрачено
+   на этот бюджет (все покупки категорий бюджета, какой бы картой ни платили): именно эта сумма на круговой
+   диаграмме и плитках категорий. Они расходятся, если картой платили за другой бюджет (так появляется долг). */
+export function BankCardDetail({ stripe, soft, spent, avail, prevSpent, bucketSpent, prevBucketSpent, bucketLabel, daysLeft, isCurrentMonth, dangerColor }) {
   const over = avail > 0 && spent > avail;
   const pct = avail > 0 ? Math.min(100, (spent / avail) * 100) : spent > 0 ? 100 : 0;
   const barColor = over ? dangerColor : stripe;
@@ -95,9 +98,13 @@ export function BankCardDetail({ stripe, soft, spent, avail, prevSpent, daysLeft
     statusText = <span style={{ color: stripe }}>≈ {formatMoney((avail - spent) / daysLeft)}/день</span>;
   }
 
+  const showBucket = Number.isFinite(bucketSpent) && Math.abs(bucketSpent - spent) >= 1;
+  const trendNow = showBucket ? bucketSpent : spent;
+  const trendPrev = showBucket ? prevBucketSpent : prevSpent;
+
   let trendText = null;
-  if (prevSpent > 0) {
-    const diffPct = Math.round(((spent - prevSpent) / prevSpent) * 100);
+  if (trendPrev > 0) {
+    const diffPct = Math.round(((trendNow - trendPrev) / trendPrev) * 100);
     trendText = diffPct === 0 ? "как в прошлом мес." : `${diffPct > 0 ? "+" : ""}${diffPct}% к прошлому мес.`;
   }
 
@@ -110,7 +117,16 @@ export function BankCardDetail({ stripe, soft, spent, avail, prevSpent, daysLeft
         {statusText && <span className="small-note mono" style={{ whiteSpace: "nowrap" }}>{statusText}</span>}
       </div>
       <div className="small-note" style={{ marginTop: 3 }}>
-        {avail > 0 ? <>{formatMoney(spent)} из {formatMoney(avail)}</> : <>потрачено {formatMoney(spent)}</>}
+        {showBucket ? (
+          <>
+            на «{bucketLabel}» {formatMoney(bucketSpent)} · с карты{" "}
+            {avail > 0 ? <>{formatMoney(spent)} из {formatMoney(avail)}</> : formatMoney(spent)}
+          </>
+        ) : avail > 0 ? (
+          <>{formatMoney(spent)} из {formatMoney(avail)}</>
+        ) : (
+          <>потрачено {formatMoney(spent)}</>
+        )}
         {trendText && <> · {trendText}</>}
       </div>
     </>
