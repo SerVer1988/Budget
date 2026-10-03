@@ -123,7 +123,7 @@ export function CategoryTile({ icon: Icon, color, name, spent, avg, onClick }) {
 
       <div className="cat-tile-amounts">
         <span className="cat-tile-spent" style={{ color }}>{formatMoney(spent)}</span>
-        {hasAvg && <span className="cat-tile-limit"> ср. {formatMoney(Math.round(avg))}</span>}
+        {hasAvg && <span className="cat-tile-limit"> из {formatMoney(Math.round(avg))}</span>}
       </div>
 
       {hasAvg && (
