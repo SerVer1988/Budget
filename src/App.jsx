@@ -338,12 +338,6 @@ export default function App() {
     persistSettings(next);
   }
 
-  function resetNeedsWantsTracking() {
-    persistSettings({ ...settings, needsWantsResetDate: todayStr() });
-    setToast("Отсчёт сброшен");
-    setTimeout(() => setToast(null), 1200);
-  }
-
   function openForm(initial) {
     setFormInitial(initial || { type: "expense", card: "sber", bucket: "needs" });
   }
@@ -599,7 +593,6 @@ export default function App() {
                 onSaveSettings={persistSettings}
                 onSave={persistSettings}
                 onWipeAll={() => { transactions.filter((t) => t.receipt).forEach((t) => removeReceipt(t.id)); persistTransactions([]); }}
-                onResetTracking={resetNeedsWantsTracking}
                 userEmail={authUser?.email}
                 onSignOut={async () => {
                   await auth.signOut();

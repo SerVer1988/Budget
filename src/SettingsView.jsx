@@ -147,7 +147,7 @@ export function CategoryRow({ cat, open, onToggleOpen, onChange, onDelete }) {
   );
 }
 
-export function SettingsView({ settings, transactions, onImport, onSaveSettings, onSave, onWipeAll, onResetTracking, userEmail, onSignOut }) {
+export function SettingsView({ settings, transactions, onImport, onSaveSettings, onSave, onWipeAll, userEmail, onSignOut }) {
   const importInputRef = useRef(null);
   const [importMsg, setImportMsg] = useState("");
 
@@ -293,43 +293,6 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
               onChange={(e) => setDraft({ ...draft, goal: e.target.value })}
             />
           </div>
-        </div>
-      </div>
-
-      <div className="panel">
-        <SectionTitle>Сверка «{bucketName(draft, "needs")}» и «{bucketName(draft, "wants")}»</SectionTitle>
-        <button
-          className="btn"
-          type="button"
-          style={{ width: "100%" }}
-          onClick={() => {
-            if (window.confirm(`Сбросить точку отсчёта ${bucketNameGen(draft, "needs")}/${bucketNameGen(draft, "wants")} на сегодня?`)) {
-              onResetTracking();
-            }
-          }}
-        >
-          Сбросить отсчёт на сегодня
-        </button>
-      </div>
-
-      <div className="panel panel-compact">
-        <SectionTitle>Начальные балансы</SectionTitle>
-
-        <div className="form-grid-3">
-          {[["sber", "needs"], ["alfa", "wants"], ["ozon", "savings"]].map(([card, bucket]) => (
-            <div className="field" key={card}>
-              <label>{bucketName(draft, bucket)}</label>
-              <input
-                type="number"
-                inputMode="decimal"
-                value={draft.openingBalance?.[card] ?? 0}
-                onChange={(e) => setDraft({
-                  ...draft,
-                  openingBalance: { ...draft.openingBalance, [card]: e.target.value },
-                })}
-              />
-            </div>
-          ))}
         </div>
       </div>
 
