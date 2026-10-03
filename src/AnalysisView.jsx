@@ -169,8 +169,6 @@ export function AnalysisView({
         </div>
       </div>
 
-      {isCurrentMonth && <RecurringPanel settings={settings} onPost={onPostRecurring} />}
-
       {isCurrentMonth && <ForecastPanel transactions={transactions} />}
 
       {debtGroups.length > 0 && (
@@ -301,6 +299,8 @@ export function AnalysisView({
           },
         ]}
       />
+
+      {isCurrentMonth && <RecurringPanel settings={settings} onPost={onPostRecurring} />}
 
       <div>
         <SectionTitle>Операции</SectionTitle>
