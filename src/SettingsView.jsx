@@ -1,5 +1,6 @@
 import { RecurringSettings } from "./RecurringSettings.jsx";
 import { HouseholdSettings } from "./HouseholdSettings.jsx";
+import { InboxSettings } from "./InboxSettings.jsx";
 import React, { useState, useEffect, useRef } from "react";
 import {
   ChevronDown,
@@ -409,6 +410,8 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
       </div>
 
       <RecurringSettings settings={settings} onSaveSettings={onSaveSettings} />
+
+      <InboxSettings />
 
       <HouseholdSettings />
 

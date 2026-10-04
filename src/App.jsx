@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { storage, auth, household } from "./storage.js";
+import { storage, auth, household, inbox } from "./storage.js";
+import { learnMerchant } from "./bankParse.js";
+import { receivedParts } from "./InboxPanel.jsx";
 import cardNeedsImg from "./assets/card-needs.webp";
 import cardWantsImg from "./assets/card-wants.webp";
 import cardSavingsImg from "./assets/card-savings.webp";
@@ -31,6 +33,7 @@ export default function App() {
   const [transactions, setTransactions] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [receiptViewId, setReceiptViewId] = useState(null);
+  const [pending, setPending] = useState([]); // «лист ожидания»: уведомления банков, ещё не ставшие операциями
   const [pageIndex, setPageIndex] = useState(1); // 0 Анализ, 1 Нужды, 2 Желания, 3 Подушка, 4 Настройки; по умолчанию — Добавить (Нужды)
   const [lastAddPage, setLastAddPage] = useState(1);
   const [formInitial, setFormInitial] = useState(null);
@@ -181,6 +184,69 @@ export default function App() {
     persistTransactions(migrateTransactions(data.transactions, s));
     setToast("Данные восстановлены");
     setTimeout(() => setToast(null), 1400);
+  }
+
+  // Лист ожидания: подтягиваем при запуске, при возвращении в приложение и раз в минуту.
+  async function refreshPending() {
+    try { setPending(await inbox.list()); } catch { /* таблицы нет или нет сети: лист просто пуст */ }
+  }
+  useEffect(() => {
+    if (!authUser || !loaded) return undefined;
+    refreshPending();
+    const timer = setInterval(() => { if (document.visibilityState === "visible") refreshPending(); }, 60000);
+    const onVisible = () => { if (document.visibilityState === "visible") refreshPending(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
+  }, [authUser?.id, loaded]);
+
+  async function dropPending(id) {
+    setPending((list) => list.filter((p) => p.id !== id));
+    try { await inbox.remove(id); } catch { /* не удалилось — появится снова при следующем обновлении */ }
+  }
+
+  // ✓ «внести как есть»: категория угадана (или запомнена раньше).
+  function acceptPending(row, parsed) {
+    if (!parsed.understood || parsed.type !== "expense" || !parsed.suggestion || !parsed.card) return;
+    const { bucket, category } = parsed.suggestion;
+    addTransaction({
+      type: "expense",
+      date: receivedParts(row.received_at).date,
+      amount: parsed.amount,
+      card: parsed.card,
+      bucket,
+      category,
+      note: parsed.merchant,
+    });
+    const learned = learnMerchant(settings, parsed.merchant, bucket, category);
+    if (learned !== settings) persistSettings(learned);
+    dropPending(row.id);
+  }
+
+  // После сохранения операции из листа ожидания: запомнить «место → категория» и убрать запись из листа.
+  function finishPending(tx) {
+    const pid = formInitial?.pendingId;
+    if (!pid || formInitial?.editId) return;
+    if (tx.type === "expense" && formInitial.merchant) {
+      const learned = learnMerchant(settings, formInitial.merchant, tx.bucket, tx.category);
+      if (learned !== settings) persistSettings(learned);
+    }
+    dropPending(pid);
+  }
+
+  // ✎ «править»: открываем обычную форму с подставленными данными; после сохранения запись уйдёт из листа.
+  function editPending(row, parsed) {
+    const card = parsed.card || "sber";
+    openForm({
+      type: parsed.type,
+      date: receivedParts(row.received_at).date,
+      amount: parsed.amount ?? "",
+      card,
+      bucket: parsed.suggestion?.bucket,
+      category: parsed.suggestion?.category,
+      note: parsed.merchant || "",
+      merchant: parsed.merchant || "",
+      pendingId: row.id,
+    });
   }
 
   // «Провести» регулярный платёж: создаёт обычную трату (с учётом долгов между бюджетами)
@@ -380,6 +446,7 @@ export default function App() {
         updateTransactionAsSplit(formInitial.editId, tx);
       } else {
         addTransactions(tx);
+        finishPending(tx[0]);
       }
       closeForm();
       return;
@@ -392,6 +459,7 @@ export default function App() {
     }
 
     addTransaction(tx, meta);
+    finishPending(tx);
     // Если это доход — показываем модалку автоматического распределения
     if (tx.type === "income") {
       setNewIncomeTx(tx);
@@ -559,6 +627,10 @@ export default function App() {
             ) : pageIndex === 0 ? (
               <AnalysisView
                 onPostRecurring={postRecurring}
+                pending={pending}
+                onAcceptPending={acceptPending}
+                onEditPending={editPending}
+                onDismissPending={(row) => dropPending(row.id)}
                 settings={settings}
                 transactions={transactions}
                 selectedMonth={selectedMonth}

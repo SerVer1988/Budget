@@ -288,22 +288,25 @@ async function loadHousehold() {
   hh = cached && cached !== "none" ? safeJson(cached) : null;
 }
 
-function householdErrorText(r) {
+function householdErrorText(r, notFound) {
   const d = r.data || {};
   const msg = String(d.message || d.error || "");
+  if (/invalid_token/.test(msg)) return "Неверный ключ приёма";
+  if (/empty_text/.test(msg)) return "Пустой текст";
+  if (/inbox_full/.test(msg)) return "Лист ожидания переполнен (300 записей): разберите его";
   if (/already_member/.test(msg)) return "Вы уже состоите в совместном бюджете";
   if (/invalid_code/.test(msg)) return "Неверный код приглашения";
   if (/household_full/.test(msg)) return "В этом бюджете уже двое участников";
   if (/not_owner/.test(msg)) return "Это может сделать только владелец";
   if (/not_authenticated/.test(msg)) return "Нужно войти в аккаунт";
-  if (r.status === 404) return "Совместный бюджет не настроен: выполните supabase-household.sql в Supabase";
+  if (r.status === 404) return notFound || "Совместный бюджет не настроен: выполните supabase-household.sql в Supabase";
   return msg || `Ошибка (${r.status})`;
 }
 
-async function rpc(name, body) {
+async function rpc(name, body, notFound) {
   const token = await ensureToken();
   const r = await http(`/rest/v1/rpc/${name}`, { method: "POST", token, body: body || {} });
-  if (!r.ok) throw new Error(householdErrorText(r));
+  if (!r.ok) throw new Error(householdErrorText(r, notFound));
   return r.data;
 }
 
@@ -613,5 +616,43 @@ export const household = {
 
   async removeMember(userId) {
     await rpc("remove_member", { p_user: userId });
+  },
+};
+
+/* ---------------------------------------------------------------- лист ожидания (банковские уведомления) */
+const INBOX_NOT_SET_UP = "Приём уведомлений не настроен: выполните supabase-inbox.sql в Supabase";
+
+export const inbox = {
+  // Что нужно указать в приложении-автоматизации на телефоне (адрес и публичный ключ API).
+  endpoint() {
+    return { url: `${SUPABASE_URL}/rest/v1/rpc/ingest_notification`, apikey: SUPABASE_KEY };
+  },
+
+  async list() {
+    if (!session) throw new Error("not signed in");
+    const token = await ensureToken();
+    const r = await http("/rest/v1/pending_transactions?select=id,source,raw_text,received_at&order=received_at.asc&limit=300", { token });
+    if (!r.ok) throw new Error(`inbox ${r.status}`);
+    return Array.isArray(r.data) ? r.data : [];
+  },
+
+  async remove(id) {
+    if (!session) throw new Error("not signed in");
+    const token = await ensureToken();
+    const r = await http(`/rest/v1/pending_transactions?id=eq.${enc(id)}`, { method: "DELETE", token });
+    if (!r.ok) throw new Error(`inbox delete ${r.status}`);
+  },
+
+  async tokenInfo() { return rpc("has_ingest_token", {}, INBOX_NOT_SET_UP); },
+  async createToken() { return rpc("create_ingest_token", {}, INBOX_NOT_SET_UP); },
+  async revokeToken() { await rpc("revoke_ingest_token", {}, INBOX_NOT_SET_UP); },
+
+  // Тестовое уведомление ровно тем путём, каким будет слать телефон: без входа в аккаунт, по ключу приёма.
+  async sendTest(tokenValue) {
+    const r = await http("/rest/v1/rpc/ingest_notification", {
+      method: "POST",
+      body: { p_token: tokenValue, p_source: "sber", p_text: "Тест: Покупка 100р MAGNIT Баланс: 1000р" },
+    });
+    if (!r.ok) throw new Error(householdErrorText(r, INBOX_NOT_SET_UP));
   },
 };

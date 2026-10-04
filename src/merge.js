@@ -40,7 +40,19 @@ export function mergeById(base, local, remote) {
 }
 
 const ID_ARRAY_FIELDS = ["goals", "recurring"];
+const KEY_MERGE_FIELDS = ["merchantMap"]; // объект «ключ → значение»: сливаем по ключам
 const SET_ARRAY_FIELDS = ["closedMonths"];
+
+function mergeKeys(base, local, remote) {
+  const b = base || {}, l = local || {}, r = remote || {};
+  const out = {};
+  new Set([...Object.keys(l), ...Object.keys(r)]).forEach((k) => {
+    if (k in l && k in r) out[k] = same(l[k], r[k]) ? l[k] : same(b[k], l[k]) ? r[k] : l[k];
+    else if (k in l) { if (!(k in b)) out[k] = l[k]; else if (!same(b[k], l[k])) out[k] = l[k]; }  // новое/изменённое у нас
+    else if (!(k in b) || !same(b[k], r[k])) out[k] = r[k];                                         // новое/изменённое у них
+  });
+  return out;
+}
 
 export function mergeSettings(base, local, remote) {
   const b = base || {};
@@ -48,6 +60,7 @@ export function mergeSettings(base, local, remote) {
   Object.keys({ ...local, ...remote }).forEach((k) => {
     const l = local[k], r = remote[k], bb = b[k];
     if (ID_ARRAY_FIELDS.includes(k)) out[k] = mergeById(bb, l, r);
+    else if (KEY_MERGE_FIELDS.includes(k)) out[k] = mergeKeys(bb, l, r);
     else if (SET_ARRAY_FIELDS.includes(k)) out[k] = [...new Set([...(Array.isArray(r) ? r : []), ...(Array.isArray(l) ? l : [])])];
     else if (same(l, bb)) out[k] = r;                   // мы не меняли — берём чужое
     else if (same(r, bb)) out[k] = l;                   // они не меняли — берём наше

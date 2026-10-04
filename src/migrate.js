@@ -43,6 +43,7 @@ export function migrateSettings(raw) {
     includeInTotal: { ...DEFAULT_SETTINGS.includeInTotal, ...(raw.includeInTotal || {}) },
     bucketNames: { ...DEFAULT_SETTINGS.bucketNames, ...(raw.bucketNames || {}) },
     bucketIcons: { ...DEFAULT_SETTINGS.bucketIcons, ...(raw.bucketIcons || {}) },
+    merchantMap: raw.merchantMap && typeof raw.merchantMap === "object" && !Array.isArray(raw.merchantMap) ? raw.merchantMap : {},
     goals: normalizeGoals(raw.goals),
     recurring: normalizeRecurring(raw.recurring),
     closedMonths: Array.isArray(raw.closedMonths) ? raw.closedMonths : [],

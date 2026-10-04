@@ -134,6 +134,7 @@ export const DEFAULT_WANT_CATS = [
 ];
 
 export const DEFAULT_SETTINGS = {
+  merchantMap: {},
   goals: [],
   recurring: [],
   wantPct: 30,

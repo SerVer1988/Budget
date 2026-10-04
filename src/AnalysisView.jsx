@@ -19,6 +19,7 @@ import { ForecastPanel } from "./ForecastPanel.jsx";
 import { RecurringPanel } from "./RecurringPanel.jsx";
 import { ChartsCarousel, DailyExpenseChart } from "./charts.jsx";
 import { NotifyNudge } from "./NotifyNudge.jsx";
+import { InboxPanel } from "./InboxPanel.jsx";
 import { computeForecast } from "./forecast.js";
 import { BankBadge, EmptyState, MonthNav, SectionTitle, StatBox } from "./ui.jsx";
 import { BUCKET_CARD, C, TX_TYPE_FILTERS } from "./constants.js";
@@ -37,6 +38,10 @@ export function AnalysisView({
   onCloseMonth,
   onWriteOffDebtGroup,
   onPostRecurring,
+  pending,
+  onAcceptPending,
+  onEditPending,
+  onDismissPending,
   goToAdd,
 }) {
   const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
@@ -134,6 +139,15 @@ export function AnalysisView({
     <div className="screen-stack">
       <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
       <NotifyNudge />
+
+      <InboxPanel
+        pending={pending || []}
+        settings={settings}
+        transactions={transactions}
+        onAccept={onAcceptPending}
+        onEdit={onEditPending}
+        onDismiss={onDismissPending}
+      />
 
       {showCloseBanner && (
         <div className="notice" style={{ borderColor: C.ozon, background: C.ozonSoft, color: "#0F3E70" }}>
