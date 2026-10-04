@@ -625,7 +625,11 @@ const INBOX_NOT_SET_UP = "Приём уведомлений не настрое�
 export const inbox = {
   // Что нужно указать в приложении-автоматизации на телефоне (адрес и публичный ключ API).
   endpoint() {
-    return { url: `${SUPABASE_URL}/rest/v1/rpc/ingest_notification`, apikey: SUPABASE_KEY };
+    return {
+      rawUrl: `${SUPABASE_URL}/rest/v1/rpc/ingest_raw`,               // тело запроса = текст уведомления как есть
+      url: `${SUPABASE_URL}/rest/v1/rpc/ingest_notification`,         // вариант с JSON
+      apikey: SUPABASE_KEY,
+    };
   },
 
   async list() {
@@ -647,11 +651,12 @@ export const inbox = {
   async createToken() { return rpc("create_ingest_token", {}, INBOX_NOT_SET_UP); },
   async revokeToken() { await rpc("revoke_ingest_token", {}, INBOX_NOT_SET_UP); },
 
-  // Тестовое уведомление ровно тем путём, каким будет слать телефон: без входа в аккаунт, по ключу приёма.
+  // Проверка ключа: тестовая запись в лист ожидания. Идёт обычным JSON-запросом, потому что браузер
+  // разрешает свои заголовки (x-ingest-*) не на всех серверах; телефон же шлёт «сырой» запрос без этих ограничений.
   async sendTest(tokenValue) {
     const r = await http("/rest/v1/rpc/ingest_notification", {
       method: "POST",
-      body: { p_token: tokenValue, p_source: "sber", p_text: "Тест: Покупка 100р MAGNIT Баланс: 1000р" },
+      body: { p_token: tokenValue, p_source: "sber", p_text: 'Тест: Покупка 100р "MAGNIT" Баланс: 1000р' },
     });
     if (!r.ok) throw new Error(householdErrorText(r, INBOX_NOT_SET_UP));
   },

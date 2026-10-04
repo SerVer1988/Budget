@@ -64,8 +64,6 @@ export function InboxSettings() {
     catch (e) { setTestMsg(e.message); }
   }
 
-  const body = token ? JSON.stringify({ p_token: token, p_source: "sber", p_text: "ТЕКСТ_УВЕДОМЛЕНИЯ" }) : "";
-
   return (
     <div className="panel panel-compact">
       <SectionTitle>Банковские уведомления</SectionTitle>
@@ -92,17 +90,22 @@ export function InboxSettings() {
           <div style={{ fontSize: 12, color: C.danger, marginBottom: 8 }}>
             Ключ показан один раз: скопируйте его сейчас. Он умеет только добавлять записи в ваш лист ожидания.
           </div>
-          <CopyLine label="Ключ приёма" value={token} />
-          <CopyLine label="Адрес (URL)" value={ep.url} />
-          <CopyLine label="Заголовок apikey" value={ep.apikey} />
-          <CopyLine label="Тело запроса (для Сбера; для других банков поменяйте p_source на alfa или ozon)" value={body} />
+          <CopyLine label="Адрес (URL), метод POST" value={ep.rawUrl} />
+          <CopyLine label="Заголовок 1: apikey" value={ep.apikey} />
+          <CopyLine label="Заголовок 2: x-ingest-token" value={token} />
+          <CopyLine label="Заголовок 3: x-ingest-source (sber, alfa или ozon, латиницей)" value="sber" />
+          <CopyLine label="Заголовок 4: Content-Type" value="text/plain; charset=utf-8" />
+          <div className="fc-sub" style={{ marginBottom: 8 }}>
+            Тело запроса: только текст уведомления (в MacroDroid: заголовок уведомления, пробел, текст уведомления).
+          </div>
 
           <ol style={{ fontSize: 12, lineHeight: 1.5, paddingLeft: 18, margin: "10px 0" }}>
-            <li>На Android установите MacroDroid (или Tasker/Automate) и разрешите ему «Доступ к уведомлениям».</li>
-            <li>Новый макрос → триггер «Уведомление получено» → выберите приложение банка.</li>
-            <li>Действие «HTTP-запрос», метод POST, адрес и заголовки из полей выше, Content-Type: application/json.</li>
-            <li>В теле замените ТЕКСТ_УВЕДОМЛЕНИЯ на текст уведомления (кнопка «+» → «Текст уведомления»).</li>
-            <li>Отключите для MacroDroid экономию батареи, иначе Android будет «усыплять» макрос.</li>
+            <li>MacroDroid → Макросы → «+» → «Добавить триггер» → лупа сверху, ввести «Уведомление» → «Уведомление получено».</li>
+            <li>«Выбрать приложение» → приложение банка. Если MacroDroid попросит доступ к уведомлениям, включите его в системных настройках.</li>
+            <li>«Добавить действие» → лупа → «HTTP» → «HTTP-запрос»: метод POST, адрес, тип содержимого text/plain, четыре заголовка из полей выше.</li>
+            <li>Тело: через кнопку «{`{…}`}» вставьте «Заголовок уведомления», пробел, «Текст уведомления».</li>
+            <li>Сохраните и включите макрос. Для каждого банка нужен свой макрос (приложение и x-ingest-source меняются).</li>
+            <li>Отключите для MacroDroid экономию батареи, иначе телефон будет «усыплять» макрос.</li>
           </ol>
 
           <button type="button" className="btn" onClick={test}>Отправить тестовое уведомление</button>
