@@ -7,7 +7,7 @@ const CUR = "(?:₽|руб(?:\\.|лей|ля|ль)?|р\\.?|RUB|RUR)(?![A-Za-zА-
 // число вида «1 250,50», «850», «12345.67» (пробелы и неразрывные пробелы — разделители тысяч)
 const NUM = "(\\d{1,3}(?:[\\s\\u00a0\\u202f]\\d{3})+(?:[.,]\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)";
 const AMOUNT_RE = new RegExp(NUM + "\\s*" + CUR, "gi");
-const BALANCE_BEFORE = /(баланс|остаток|доступно|available|balance)[^\d]{0,14}$/i;
+const BALANCE_BEFORE = /(баланс|остаток|доступно|у вас ещ[её]|на счёте|на счете|available|balance)[^\d]{0,14}$/i;
 
 const EXPENSE_WORDS = /(покупк|оплат|списани|снятие|платёж|платеж|расход|перевод\s+(?:на|клиенту)|purchase|payment)/i;
 const INCOME_WORDS = /(зачислен|поступлен|пополнен|зарплат|аванс|возврат|кэшбэк|кешбэк|перевод\s+от|входящий\s+перевод|получен|deposit|refund)/i;
@@ -40,7 +40,7 @@ function cleanMerchant(s) {
 /* Место покупки: слова после суммы до «Баланс/Доступно/Карта/…», либо «в <место>» перед суммой. */
 function findMerchant(text, afterIdx) {
   const tail = text.slice(afterIdx).replace(/^[\s,.:;·|\-–—]+/, "");
-  const stop = /(баланс|остаток|доступно|карта|карт[аы]\s*\*|\*\d{2,4}|available|balance|\bmir\b|visa|mastercard|\d{1,2}:\d{2}|[·|]|\.\s|$)/i;
+  const stop = /(баланс|остаток|доступно|у вас ещ[её]|сч[её]т\s+карты|сч[её]т\b|карта|карт[аы]\s*\*|\*\d{2,4}|[•·]{2}|available|balance|\bmir\b|мир\s|visa|mastercard|\d{1,2}:\d{2}|[·|]|\.\s|$)/i;
   const m = stop.exec(tail);
   let candidate = cleanMerchant(m ? tail.slice(0, m.index) : tail);
   candidate = candidate.replace(/^(в|на|в\s+магазине|в\s+компании|для|от)\s+/i, "");
@@ -154,4 +154,36 @@ export function looksDuplicate(parsed, receivedDate, transactions) {
       (!parsed.card || t.card === parsed.card) &&
       Math.abs((Date.parse(t.date) - Date.parse(receivedDate)) / 86400000) <= 1
   );
+}
+
+/* Перевод между своими картами приходит двумя уведомлениями: «списано» с одной карты и «поступило» на другую.
+   Склеиваем такие пары: одна и та же сумма, разные карты, не дальше 10 минут друг от друга, и хотя бы в одном
+   тексте есть слова про перевод или пополнение (чтобы не склеить случайное совпадение сумм у покупок).
+   items — [{ row, parsed }]. Возвращает [{ out, in, amount }] (out и in — элементы items). */
+const TRANSFER_WORDS = /(перевод|пополнен|поступлен|зачислен)/i;
+export function findTransferPairs(items, windowMinutes = 10) {
+  const used = new Set();
+  const pairs = [];
+  const sorted = items
+    .filter((it) => it.parsed.understood && it.parsed.card)
+    .sort((a, b) => Date.parse(a.row.received_at) - Date.parse(b.row.received_at));
+  for (const out of sorted) {
+    if (used.has(out.row.id) || out.parsed.type !== "expense") continue;
+    const match = sorted.find(
+      (inn) =>
+        !used.has(inn.row.id) &&
+        inn.row.id !== out.row.id &&
+        inn.parsed.type === "income" &&
+        inn.parsed.card !== out.parsed.card &&
+        Math.abs(inn.parsed.amount - out.parsed.amount) < 0.5 &&
+        Math.abs(Date.parse(inn.row.received_at) - Date.parse(out.row.received_at)) <= windowMinutes * 60000 &&
+        (TRANSFER_WORDS.test(inn.row.raw_text) || TRANSFER_WORDS.test(out.row.raw_text))
+    );
+    if (match) {
+      used.add(out.row.id);
+      used.add(match.row.id);
+      pairs.push({ out, in: match, amount: out.parsed.amount });
+    }
+  }
+  return pairs;
 }

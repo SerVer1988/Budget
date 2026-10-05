@@ -1,9 +1,9 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Check, Pencil, X } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
 import { bucketName, cardLabel, formatMoney } from "./format.js";
-import { looksDuplicate, parseBankText } from "./bankParse.js";
+import { findTransferPairs, looksDuplicate, parseBankText } from "./bankParse.js";
 import { MONTHS_SHORT } from "./constants.js";
 
 const SOURCE_NAME = { sber: "Сбер", alfa: "Альфа", ozon: "Озон", other: "Банк" };
@@ -20,7 +20,8 @@ export function receivedParts(iso) {
 
 /* «Лист ожидания»: уведомления банков, которые ещё не стали операциями.
    ✓ — внести как есть (если угадана категория), ✎ — открыть форму и поправить, ✕ — убрать. */
-export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, onDismiss }) {
+export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, onDismiss, onAcceptTransfer, onEditTransfer, onDismissTransfer }) {
+  const [open, setOpen] = useState({}); // id записи → показан исходный текст
   const rows = useMemo(
     () =>
       pending.map((row) => {
@@ -31,13 +32,43 @@ export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, 
     [pending, settings, transactions]
   );
 
-  if (!rows.length) return null;
+  // Перевод между своими картами = два уведомления (списано + поступило): показываем одной строкой.
+  const pairs = useMemo(() => findTransferPairs(rows), [rows]);
+  const pairedIds = new Set(pairs.flatMap((p) => [p.out.row.id, p.in.row.id]));
+  const singles = rows.filter((r) => !pairedIds.has(r.row.id));
+  const total = singles.length + pairs.length;
+
+  if (!total) return null;
 
   return (
     <div className="panel panel-compact">
-      <SectionTitle>Лист ожидания · {rows.length}</SectionTitle>
+      <SectionTitle>Лист ожидания · {total}</SectionTitle>
       <div className="fc-list">
-        {rows.map(({ row, parsed, when, dup }) => {
+        {pairs.map((p) => {
+          const from = cardLabel(settings, p.out.parsed.card);
+          const to = cardLabel(settings, p.in.parsed.card);
+          return (
+            <div className="fc-row" key={`${p.out.row.id}+${p.in.row.id}`} style={{ alignItems: "flex-start" }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="fc-name">Перевод между своими картами</div>
+                <div className="fc-sub">{from} → {to} · {p.out.when.label}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "0 0 auto" }}>
+                <span className="fc-val mono">{formatMoney(p.amount)}</span>
+                <button type="button" className="btn primary" aria-label="Внести перевод" title="Внести перевод" style={{ width: 34, height: 32, padding: 0 }} onClick={() => onAcceptTransfer(p)}>
+                  <Check size={15} />
+                </button>
+                <button type="button" className="btn" aria-label="Править перевод" style={{ width: 34, height: 32, padding: 0 }} onClick={() => onEditTransfer(p)}>
+                  <Pencil size={14} />
+                </button>
+                <button type="button" className="btn" aria-label="Убрать перевод" style={{ width: 34, height: 32, padding: 0 }} onClick={() => onDismissTransfer(p)}>
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        {singles.map(({ row, parsed, when, dup }) => {
           const canAccept = parsed.type === "expense" && parsed.understood && !!parsed.suggestion && !!parsed.card;
           const sign = parsed.type === "income" ? "+" : "−";
           const color = parsed.type === "income" ? C.sber : C.danger;
@@ -53,10 +84,16 @@ export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, 
           return (
             <div className="fc-row" key={row.id} style={{ alignItems: "flex-start" }}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="fc-name" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+                <div
+                  className="fc-name"
+                  style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}
+                  onClick={() => setOpen((o) => ({ ...o, [row.id]: !o[row.id] }))}
+                >
+                  {title}
+                </div>
                 <div className="fc-sub">{sub}</div>
-                {!parsed.understood && (
-                  <div className="fc-sub" style={{ marginTop: 2, wordBreak: "break-word" }}>{row.raw_text.slice(0, 110)}</div>
+                {(!parsed.understood || open[row.id]) && (
+                  <div className="fc-sub" style={{ marginTop: 2, wordBreak: "break-word" }}>{open[row.id] ? row.raw_text : row.raw_text.slice(0, 110)}</div>
                 )}
                 {dup && <div className="fc-sub" style={{ color: C.danger }}>возможно, уже внесено</div>}
               </div>

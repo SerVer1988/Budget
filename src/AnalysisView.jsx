@@ -42,6 +42,9 @@ export function AnalysisView({
   onAcceptPending,
   onEditPending,
   onDismissPending,
+  onAcceptTransfer,
+  onEditTransfer,
+  onDismissTransfer,
   goToAdd,
 }) {
   const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
@@ -147,6 +150,9 @@ export function AnalysisView({
         onAccept={onAcceptPending}
         onEdit={onEditPending}
         onDismiss={onDismissPending}
+        onAcceptTransfer={onAcceptTransfer}
+        onEditTransfer={onEditTransfer}
+        onDismissTransfer={onDismissTransfer}
       />
 
       {showCloseBanner && (

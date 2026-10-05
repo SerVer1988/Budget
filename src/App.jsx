@@ -222,6 +222,33 @@ export default function App() {
     dropPending(row.id);
   }
 
+  // Пара уведомлений «списано + поступило» = перевод между своими картами.
+  function acceptTransfer(p) {
+    addTransaction({
+      type: "transfer",
+      date: receivedParts(p.out.row.received_at).date,
+      amount: p.amount,
+      fromCard: p.out.parsed.card,
+      toCard: p.in.parsed.card,
+      note: "",
+    });
+    dropPending(p.out.row.id);
+    dropPending(p.in.row.id);
+  }
+
+  function editTransfer(p) {
+    openForm({
+      type: "transfer",
+      date: receivedParts(p.out.row.received_at).date,
+      amount: p.amount,
+      fromCard: p.out.parsed.card,
+      toCard: p.in.parsed.card,
+      note: "",
+      pendingId: p.out.row.id,
+      pendingIds: [p.out.row.id, p.in.row.id],
+    });
+  }
+
   // После сохранения операции из листа ожидания: запомнить «место → категория» и убрать запись из листа.
   function finishPending(tx) {
     const pid = formInitial?.pendingId;
@@ -230,7 +257,7 @@ export default function App() {
       const learned = learnMerchant(settings, formInitial.merchant, tx.bucket, tx.category);
       if (learned !== settings) persistSettings(learned);
     }
-    dropPending(pid);
+    (formInitial.pendingIds || [pid]).forEach((id) => dropPending(id));
   }
 
   // ✎ «править»: открываем обычную форму с подставленными данными; после сохранения запись уйдёт из листа.
@@ -631,6 +658,9 @@ export default function App() {
                 onAcceptPending={acceptPending}
                 onEditPending={editPending}
                 onDismissPending={(row) => dropPending(row.id)}
+                onAcceptTransfer={acceptTransfer}
+                onEditTransfer={editTransfer}
+                onDismissTransfer={(p) => { dropPending(p.out.row.id); dropPending(p.in.row.id); }}
                 settings={settings}
                 transactions={transactions}
                 selectedMonth={selectedMonth}
