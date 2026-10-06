@@ -1,3 +1,4 @@
+import { loanCash } from "./loans.js";
 import { BACKUP_VERSION, TX_TYPE_RU } from "./constants.js";
 import { txCardsOf } from "./finance.js";
 import { bucketName, cardLabel, todayStr } from "./format.js";
@@ -41,12 +42,12 @@ export function exportCsv(settings, transactions) {
       return [
         t.date,
         TX_TYPE_RU[t.type] || t.type,
-        isDebt ? t.amount : t.type === "expense" ? -Math.abs(t.amount) : t.amount,
+        t.type === "loan" ? loanCash(t) : isDebt ? t.amount : t.type === "expense" ? -Math.abs(t.amount) : t.amount,
         t.type === "transfer" ? cardLabel(settings, t.fromCard) : cards[0] ? cardLabel(settings, cards[0]) : "",
         t.type === "transfer" ? cardLabel(settings, t.toCard) : isDebt && cards[1] ? cardLabel(settings, cards[1]) : "",
         t.bucket ? bucketName(settings, t.bucket) : "",
         t.category || "",
-        t.note || "",
+        t.type === "loan" ? [t.person, t.kind === "repay" ? (t.forgiven ? "простили" : "возврат") : "", t.note].filter(Boolean).join(" · ") : t.note || "",
         isDebt ? (t.repaid ? 0 : t.remainingAmount ?? "") : "",
       ];
     });

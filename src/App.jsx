@@ -19,6 +19,7 @@ import { bucketName, cardLabel, endOfMonthStr, formatMoney, monthLabel, todayMon
 import { migrateSettings, migrateTransactions } from "./migrate.js";
 import { buildRecurringExpense, markPosted } from "./recurring.js";
 import { removeReceipt, saveReceipt } from "./receipts.js";
+import { buildRepay } from "./loans.js";
 import { ReceiptContext, ReceiptModal } from "./ReceiptViewer.jsx";
 import { buildNotices, deliverNotes, showNotices } from "./notify.js";
 import { computeAllInsights } from "./insights.js";
@@ -222,6 +223,13 @@ export default function App() {
     dropPending(row.id);
   }
 
+  // «Списать» личный долг (Фонд): возврат денег на/с карты или «простили» (деньги не двигаются).
+  function repayLoan(loan, card, forgiven) {
+    addTransactions([buildRepay(loan, card, todayStr(), forgiven)]);
+    setToast(forgiven ? "Долг закрыт без движения денег" : "Долг закрыт");
+    setTimeout(() => setToast(null), 1600);
+  }
+
   // Пара уведомлений «списано + поступило» = перевод между своими картами.
   function acceptTransfer(p) {
     addTransaction({
@@ -308,7 +316,12 @@ export default function App() {
   function deleteTransaction(id) {
     if (transactions.find((t) => t.id === id)?.receipt) removeReceipt(id);
     persistTransactions(
-      transactions.filter((t) => t.id !== id && !(t.type === "debt" && t.sourceTxId === id))
+      transactions.filter(
+        (t) =>
+          t.id !== id &&
+          !(t.type === "debt" && t.sourceTxId === id) &&
+          !(t.type === "loan" && t.kind === "repay" && t.loanId === id) // удалили долг — уходят и его возвраты
+      )
     );
     setToast("Удалено");
     setTimeout(() => setToast(null), 1200);
@@ -658,6 +671,7 @@ export default function App() {
                 onAcceptPending={acceptPending}
                 onEditPending={editPending}
                 onDismissPending={(row) => dropPending(row.id)}
+                onRepayLoan={repayLoan}
                 onAcceptTransfer={acceptTransfer}
                 onEditTransfer={editTransfer}
                 onDismissTransfer={(p) => { dropPending(p.out.row.id); dropPending(p.in.row.id); }}

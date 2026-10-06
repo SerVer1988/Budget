@@ -748,8 +748,9 @@ export function AppStyles() {
 
       .operation-tabs {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 5px;
+        grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+        grid-auto-flow: column;
+        gap: 4px;
         padding: 4px;
         border: 1px solid ${C.border};
         background: ${C.surface2};
@@ -1205,6 +1206,17 @@ export function AppStyles() {
 
       .debt-row {
         gap: 10px;
+      }
+
+      .loan-settle {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 0 0 8px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        background: ${C.surface2};
+        border: 1px solid ${C.border};
       }
 
       .debt-main {

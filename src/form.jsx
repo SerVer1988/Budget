@@ -1,3 +1,4 @@
+import { knownPeople } from "./loans.js";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   X,
@@ -42,6 +43,7 @@ export function OperationTabs({ value, onChange }) {
     { id: "income", label: "Доход" },
     { id: "transfer", label: "Перевод" },
     { id: "adjustment", label: "Коррекция" },
+    { id: "loan", label: "Долги" },
   ];
 
   return (
@@ -142,6 +144,9 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
   const [toCard, setToCard] = useState(initial?.toCard || "alfa");
   const [category, setCategory] = useState(initial?.category || defaultCategoryFor(initialBucket));
   const [note, setNote] = useState(initial?.note || "");
+  // Личные долги: кто и в какую сторону ("lent" — вы дали в долг, "borrowed" — вам дали).
+  const [loanDir, setLoanDir] = useState(initial?.direction || "lent");
+  const [person, setPerson] = useState(initial?.person || "");
   // Галочка «Считать долгом» у перевода: по умолчанию включена (initial.debt === false её выключает).
   const [asDebt, setAsDebt] = useState(initial?.debt ?? true);
   // Галочка «Отображать в операциях» у корректировки: по умолчанию выключена.
@@ -167,6 +172,8 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
     setToCard(initial?.toCard || "alfa");
     setCategory(initial?.category || defaultCategoryFor(b));
     setNote(initial?.note || "");
+    setLoanDir(initial?.direction || "lent");
+    setPerson(initial?.person || "");
     setAsDebt(initial?.debt ?? true);
     setShowInHistory(initial?.type === "adjustment" ? !initial?.hidden : false);
     setSplit(false);
@@ -200,8 +207,8 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
 
   const isEdit = !!initial?.editId;
 
-  // Свайп влево/вправо по форме листает вкладки Трата → Доход → Перевод → Коррекция и обратно.
-  const OPERATION_TAB_ORDER = ["expense", "income", "transfer", "adjustment"];
+  // Свайп влево/вправо по форме листает вкладки Трата → Доход → Перевод → Коррекция → Долги и обратно.
+  const OPERATION_TAB_ORDER = ["expense", "income", "transfer", "adjustment", "loan"];
   const formTouchRef = useRef(null);
 
   function handleFormTouchStart(e) {
@@ -252,6 +259,23 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
 
     if (type === "transfer" && fromCard === toCard) {
       window.alert("Выберите разные карты для перевода");
+      return;
+    }
+
+    if (type === "loan") {
+      if (!person.trim()) {
+        window.alert("Укажите, кто должен или кому должны");
+        return;
+      }
+      onSubmit({
+        type: "loan",
+        direction: loanDir,
+        person: person.trim(),
+        amount: amountNum,
+        card,
+        date,
+        note: note.trim(),
+      });
       return;
     }
 
@@ -462,6 +486,38 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
               </div>
             </>
           )}
+        </>
+      )}
+
+      {type === "loan" && (
+        <>
+          <div className="operation-tabs" style={{ marginBottom: 10 }}>
+            <button type="button" className={loanDir === "lent" ? "active" : ""} onClick={() => setLoanDir("lent")}>
+              Вы дали в долг
+            </button>
+            <button type="button" className={loanDir === "borrowed" ? "active" : ""} onClick={() => setLoanDir("borrowed")}>
+              Вам дали в долг
+            </button>
+          </div>
+          <div className="field">
+            <label>{loanDir === "lent" ? "Кто вам должен" : "Кому вы должны"}</label>
+            <input
+              type="text"
+              list="loan-people"
+              value={person}
+              placeholder="Имя"
+              onChange={(e) => setPerson(e.target.value)}
+            />
+            <datalist id="loan-people">
+              {knownPeople(transactions || []).map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
+          </div>
+          <div className="field">
+            <label>{loanDir === "lent" ? "С какой карты дали" : "На какую карту пришли деньги"}</label>
+            <CardPicker options={cardOptions} value={card} onChange={setCard} />
+          </div>
         </>
       )}
 
@@ -681,6 +737,9 @@ export function deriveFormInitialFromTx(tx, transactions) {
   }
   if (tx.type === "adjustment") {
     return { ...base, card: tx.card };
+  }
+  if (tx.type === "loan") {
+    return { ...base, card: tx.card, direction: tx.direction, person: tx.person };
   }
   return base;
 }

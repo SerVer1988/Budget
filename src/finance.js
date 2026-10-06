@@ -1,3 +1,4 @@
+import { loanCash, validRepayIds } from "./loans.js";
 import { BUCKET_CARD } from "./constants.js";
 import { bucketOf, cardLabel, dayOfMonth, formatMoney, monthKeyOf, needPctOf, shiftMonth, todayMonthKey } from "./format.js";
 
@@ -13,8 +14,12 @@ export function computeBalances(transactions, settings, uptoDateInclusive) {
     else if (card === "ozon") ozon += amt;
   };
 
+  const validRepays = validRepayIds(transactions);
+
   list.forEach((t) => {
-    if (t.type === "income") add(t.card, t.amount);
+    if (t.type === "loan") {
+      if (t.kind !== "repay" || validRepays.has(t.id)) add(t.card, loanCash(t));
+    } else if (t.type === "income") add(t.card, t.amount);
     else if (t.type === "expense") add(t.card, -t.amount);
     else if (t.type === "adjustment") add(t.card, t.amount);
     else if (t.type === "transfer") {
@@ -323,7 +328,7 @@ export function txCardsOf(t) {
 /* Строка, по которой ищем: заметка, категория, названия карт, сумма. */
 export function txSearchText(t, settings) {
   const cards = txCardsOf(t).map((c) => cardLabel(settings, c));
-  return [t.note, t.category, ...cards, String(Math.abs(t.amount ?? 0)), formatMoney(Math.abs(t.amount ?? 0))]
+  return [t.note, t.category, t.person, ...cards, String(Math.abs(t.amount ?? 0)), formatMoney(Math.abs(t.amount ?? 0))]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();

@@ -49,7 +49,9 @@ export function smartNoteFor(settings, bucketLabel, card, balance, target, overs
   };
 }
 
-export function computeSmartNotes(transactions, settings) {
+export function computeSmartNotes(allTransactions, settings) {
+  // Личные долги (дал/взял у человека) двигают деньги по карте, но не относятся к плану бюджета.
+  const transactions = allTransactions.filter((t) => t.type !== "loan");
   const alloc = computeCumulativeAllocation(transactions, settings);
   const balances = computeBalances(transactions, settings, null);
   const sinceLabel = alloc.sinceDate ? formatDateRu(alloc.sinceDate) : null;

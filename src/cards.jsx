@@ -8,6 +8,7 @@ import { BankBadge } from "./ui.jsx";
 import { C, CARD_BUCKET } from "./constants.js";
 import { bucketIconSrc, bucketName, cardLabel, formatMoney, ruPlural } from "./format.js";
 import { shortDate } from "./forecast.js";
+import { loanCash } from "./loans.js";
 
 export function TotalBalanceCard({ total, settings, onToggle }) {
   const items = [
@@ -133,27 +134,40 @@ export function BankCardDetail({ stripe, soft, spent, avail, prevSpent, bucketSp
   );
 }
 
+/* Подпись личного долга в списке операций. */
+function loanLabel(tx) {
+  const p = tx.person || "";
+  if (tx.kind === "repay") {
+    if (tx.forgiven) return tx.direction === "lent" ? `Вы простили долг: ${p}` : `${p} простил долг`;
+    return tx.direction === "lent" ? `${p} вернул долг` : `Вы вернули долг: ${p}`;
+  }
+  return tx.direction === "lent" ? `Вы дали в долг: ${p}` : `Вам дали в долг: ${p}`;
+}
+
 export function TxRow({ tx, settings, onDelete, onEdit }) {
   const openReceipt = useContext(ReceiptContext);
   const color = tx.type === "income" ? C.sber
     : tx.type === "expense" ? (tx.card === "sber" ? C.sber : C.alfa)
     : tx.type === "transfer" ? C.amber
     : tx.type === "debt" ? C.amber
+    : tx.type === "loan" ? C.amber
     : (tx.card === "sber" ? C.sber : tx.card === "alfa" ? C.alfa : (tx.amount < 0 ? C.danger : C.ozon));
 
   const sign = tx.type === "expense" ? "−"
     : tx.type === "transfer" ? ""
     : tx.type === "debt" ? ""
+    : tx.type === "loan" ? (loanCash(tx) < 0 ? "−" : loanCash(tx) > 0 ? "+" : "")
     : (tx.type === "adjustment" && tx.amount < 0) ? "−" : "+";
 
   const label = tx.type === "income" ? (tx.note || `Доход (${cardLabel(settings, tx.card)})`)
     : tx.type === "expense" ? (tx.note || tx.category)
     : tx.type === "transfer" ? (tx.note || `${cardLabel(settings, tx.fromCard)} → ${cardLabel(settings, tx.toCard)}`)
     : tx.type === "debt" ? (tx.note || `Долг: «${bucketName(settings, tx.toBucket)}» → «${bucketName(settings, tx.fromBucket)}»${tx.repaid ? " · погашено" : ` · осталось ${formatMoney(tx.remainingAmount)}`}`)
+    : tx.type === "loan" ? loanLabel(tx)
     : (tx.note || `Корректировка (${cardLabel(settings, tx.card)})`);
 
   const day = tx.date.slice(8, 10);
-  const editable = tx.type !== "debt";
+  const editable = tx.type !== "debt" && !(tx.type === "loan" && tx.kind === "repay");
 
   return (
     <div
@@ -180,6 +194,7 @@ export function TxRow({ tx, settings, onDelete, onEdit }) {
           )}
         </div>
         {tx.type === "expense" && <div className="tx-sub">{tx.category}</div>}
+        {tx.type === "loan" && <div className="tx-sub">{cardLabel(settings, tx.card)}{tx.note ? ` · ${tx.note}` : ""}</div>}
       </div>
       <div className="tx-amount" style={{ color }}>
         {sign}{formatMoney(Math.abs(tx.amount))}

@@ -221,4 +221,4 @@ export const TX_TYPE_FILTERS = [
 /* ---------- Резервная копия: экспорт / импорт ---------- */
 export const BACKUP_VERSION = 1;
 
-export const TX_TYPE_RU = { expense: "Трата", income: "Доход", transfer: "Перевод", adjustment: "Коррекция", debt: "Долг" };
+export const TX_TYPE_RU = { expense: "Трата", income: "Доход", transfer: "Перевод", adjustment: "Коррекция", debt: "Долг", loan: "Долг (личный)" };

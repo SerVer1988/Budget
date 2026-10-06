@@ -19,6 +19,8 @@ import { ForecastPanel } from "./ForecastPanel.jsx";
 import { RecurringPanel } from "./RecurringPanel.jsx";
 import { ChartsCarousel, DailyExpenseChart } from "./charts.jsx";
 import { NotifyNudge } from "./NotifyNudge.jsx";
+import { FundLoans } from "./FundLoans.jsx";
+import { filterTypeOf, openLoans } from "./loans.js";
 import { InboxPanel } from "./InboxPanel.jsx";
 import { computeForecast } from "./forecast.js";
 import { BankBadge, EmptyState, MonthNav, SectionTitle, StatBox } from "./ui.jsx";
@@ -45,6 +47,7 @@ export function AnalysisView({
   onAcceptTransfer,
   onEditTransfer,
   onDismissTransfer,
+  onRepayLoan,
   goToAdd,
 }) {
   const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
@@ -64,6 +67,8 @@ export function AnalysisView({
     () => computeBalances(transactions, settings, endOfMonthStr(selectedMonth)),
     [transactions, settings, selectedMonth]
   );
+  const loans = useMemo(() => openLoans(transactions), [transactions]);
+
   // Прогноз до аванса показываем прямо в карточках «Потребности» и «Хотения».
   const forecastByCard = useMemo(() => {
     const m = {};
@@ -105,7 +110,7 @@ export function AnalysisView({
 
   const searchWords = searchText.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const filteredItems = monthItems.filter((t) => {
-    if (typeFilters.length > 0 && !typeFilters.includes(t.type)) return false;
+    if (typeFilters.length > 0 && !typeFilters.includes(filterTypeOf(t))) return false;
     if (cardFilters.length > 0 && !txCardsOf(t).some((c) => cardFilters.includes(c))) return false;
     if (searchWords.length > 0) {
       const hay = txSearchText(t, settings);
@@ -191,7 +196,7 @@ export function AnalysisView({
 
       {isCurrentMonth && <ForecastPanel transactions={transactions} />}
 
-      {debtGroups.length > 0 && (
+      {(debtGroups.length > 0 || loans.length > 0) && (
         <div className="panel">
           <SectionTitle>Фонд</SectionTitle>
           <div className="history-list">
@@ -218,6 +223,7 @@ export function AnalysisView({
                 </button>
               </div>
             ))}
+            <FundLoans loans={loans} settings={settings} onRepay={onRepayLoan} />
           </div>
         </div>
       )}
