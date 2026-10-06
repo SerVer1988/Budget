@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { C } from "./constants.js";
 import { cardLabel, formatMoney } from "./format.js";
 import { shortDate } from "./forecast.js";
+import { daysUntilDue } from "./loans.js";
+import { todayStr } from "./format.js";
 
 const CARDS = ["sber", "alfa", "ozon"];
 
@@ -9,6 +11,7 @@ const CARDS = ["sber", "alfa", "ozon"];
    деньги вернулись (на какую карту) или долг прощён (деньги не двигаются). */
 export function FundLoans({ loans, settings, onRepay }) {
   const [settling, setSettling] = useState(null); // { id, card }
+  const today = todayStr();
 
   return (
     <>
@@ -26,6 +29,11 @@ export function FundLoans({ loans, settings, onRepay }) {
                 <span className="fc-sub">
                   {shortDate(l.date)} · {cardLabel(settings, l.card)}{l.note ? ` · ${l.note}` : ""}
                 </span>
+                {l.dueDate && (
+                  <span className="fc-sub" style={{ color: daysUntilDue(l, today) < 0 ? C.danger : undefined, fontWeight: daysUntilDue(l, today) <= 1 ? 800 : undefined }}>
+                    {daysUntilDue(l, today) < 0 ? `срок вышел ${shortDate(l.dueDate)}` : `до ${shortDate(l.dueDate)}`}
+                  </span>
+                )}
               </div>
               <div className="tx-amount" style={{ color: C.amber }}>{formatMoney(l.amount)}</div>
               <button

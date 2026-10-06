@@ -100,7 +100,7 @@ export function AnalysisView({
   ];
 
   const monthItems = agg.items;
-  const [typeFilters, setTypeFilters] = useState([]);
+  const [typeFilters, setTypeFilters] = useState(["expense", "income"]); // по умолчанию — траты и доходы
   const [cardFilters, setCardFilters] = useState([]);
   const [searchText, setSearchText] = useState("");
 

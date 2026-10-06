@@ -194,7 +194,13 @@ export function TxRow({ tx, settings, onDelete, onEdit }) {
           )}
         </div>
         {tx.type === "expense" && <div className="tx-sub">{tx.category}</div>}
-        {tx.type === "loan" && <div className="tx-sub">{cardLabel(settings, tx.card)}{tx.note ? ` · ${tx.note}` : ""}</div>}
+        {tx.type === "loan" && (
+          <div className="tx-sub">
+            {cardLabel(settings, tx.card)}
+            {tx.dueDate && tx.kind !== "repay" ? ` · до ${shortDate(tx.dueDate)}` : ""}
+            {tx.note ? ` · ${tx.note}` : ""}
+          </div>
+        )}
       </div>
       <div className="tx-amount" style={{ color }}>
         {sign}{formatMoney(Math.abs(tx.amount))}

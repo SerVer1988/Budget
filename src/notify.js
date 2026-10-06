@@ -1,4 +1,5 @@
 import { computeRecurring } from "./recurring.js";
+import { daysUntilDue, openLoans } from "./loans.js";
 import { dayOfMonth, formatMoney, ruPlural } from "./format.js";
 
 /* Уведомления на устройстве. Они показываются, когда приложение открыто или свёрнуто в фоне:
@@ -57,6 +58,19 @@ export function buildNotices(transactions, settings, today) {
     } else if (r.daysUntil === 1) {
       notices.push({ key: `${today}:rec:${r.id}`, title: "Платёж завтра", body: `${r.name} — ${amount}` });
     }
+  });
+
+  // Личные долги со сроком: напоминаем за день до срока и в сам день.
+  openLoans(transactions).forEach((l) => {
+    const d = daysUntilDue(l, today);
+    if (d !== 0 && d !== 1) return;
+    const when = d === 1 ? "завтра" : "сегодня";
+    const amount = formatMoney(l.amount);
+    notices.push({
+      key: `${today}:loan:${l.id}`,
+      title: d === 1 ? "Срок долга завтра" : "Срок долга сегодня",
+      body: l.direction === "lent" ? `Вам должны ${amount}: ${l.person}, срок ${when}` : `Вы должны ${amount}: ${l.person}, срок ${when}`,
+    });
   });
 
   const days = settings.reminderDays || [];

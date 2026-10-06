@@ -49,6 +49,13 @@ export function filterTypeOf(t) {
   return t.type === "loan" ? "debt" : t.type;
 }
 
+/* Сколько дней до срока возврата (отрицательное — просрочен); null — срок не указан. */
+export function daysUntilDue(loan, todayDateStr) {
+  if (!loan.dueDate) return null;
+  const p = (s) => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((p(loan.dueDate) - p(todayDateStr)) / 86400000);
+}
+
 export function buildRepay(loan, card, todayDateStr, forgiven) {
   return {
     type: "loan",

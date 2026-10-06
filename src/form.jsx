@@ -147,6 +147,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
   // Личные долги: кто и в какую сторону ("lent" — вы дали в долг, "borrowed" — вам дали).
   const [loanDir, setLoanDir] = useState(initial?.direction || "lent");
   const [person, setPerson] = useState(initial?.person || "");
+  const [dueDate, setDueDate] = useState(initial?.dueDate || "");
   // Галочка «Считать долгом» у перевода: по умолчанию включена (initial.debt === false её выключает).
   const [asDebt, setAsDebt] = useState(initial?.debt ?? true);
   // Галочка «Отображать в операциях» у корректировки: по умолчанию выключена.
@@ -174,6 +175,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
     setNote(initial?.note || "");
     setLoanDir(initial?.direction || "lent");
     setPerson(initial?.person || "");
+    setDueDate(initial?.dueDate || "");
     setAsDebt(initial?.debt ?? true);
     setShowInHistory(initial?.type === "adjustment" ? !initial?.hidden : false);
     setSplit(false);
@@ -267,6 +269,10 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         window.alert("Укажите, кто должен или кому должны");
         return;
       }
+      if (dueDate && dueDate < date) {
+        window.alert("Срок возврата не может быть раньше даты долга");
+        return;
+      }
       onSubmit({
         type: "loan",
         direction: loanDir,
@@ -274,6 +280,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         amount: amountNum,
         card,
         date,
+        dueDate: dueDate || "",
         note: note.trim(),
       });
       return;
@@ -518,6 +525,10 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
             <label>{loanDir === "lent" ? "С какой карты дали" : "На какую карту пришли деньги"}</label>
             <CardPicker options={cardOptions} value={card} onChange={setCard} />
           </div>
+          <div className="field">
+            <label>{loanDir === "lent" ? "Когда вам вернут (необязательно)" : "Когда вы вернёте (необязательно)"}</label>
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </div>
         </>
       )}
 
@@ -739,7 +750,7 @@ export function deriveFormInitialFromTx(tx, transactions) {
     return { ...base, card: tx.card };
   }
   if (tx.type === "loan") {
-    return { ...base, card: tx.card, direction: tx.direction, person: tx.person };
+    return { ...base, card: tx.card, direction: tx.direction, person: tx.person, dueDate: tx.dueDate || "" };
   }
   return base;
 }
