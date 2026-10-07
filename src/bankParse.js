@@ -42,7 +42,7 @@ function cleanMerchant(s) {
 /* Место покупки: слова после суммы до «Баланс/Доступно/Карта/…», либо «в <место>» перед суммой. */
 function findMerchant(text, afterIdx) {
   const tail = text.slice(afterIdx).replace(/^[\s,.:;·|\-–—]+/, "");
-  const stop = /(баланс|остаток|доступно|у вас ещ[её]|сч[её]т\s+карты|сч[её]т\b|карта|карт[аы]\s*\*|\*\d{2,4}|[•·]{2}|available|balance|\bmir\b|мир\s|visa|mastercard|\d{1,2}:\d{2}|[·|]|\.\s|$)/i;
+  const stop = /(баланс|остаток|доступно|у вас ещ[её]|сч[её]т\s+карты|сч[её]т\b|карта|карт[аы]\s*\*|\s\*\d{2,4}|[•·]{2}|available|balance|\bmir\b|мир\s|visa|mastercard|\d{1,2}:\d{2}|[·|]|\.\s|$)/i;
   const m = stop.exec(tail);
   let candidate = cleanMerchant(m ? tail.slice(0, m.index) : tail);
   candidate = candidate.replace(/^(в|на|в\s+магазине|в\s+компании|для|от)\s+/i, "");
@@ -58,18 +58,21 @@ function findMerchant(text, afterIdx) {
    категории у пользователя (берётся первое, что реально есть в его списках). */
 const CATEGORY_RULES = [
   { re: /(магнит|пятерочка|пятёрочка|pyaterochka|5ka|перекресток|perekrestok|лента\b|ашан|auchan|вкусвилл|vkusvill|дикси|dixy|\bspar\b|азбука вкуса|окей|globus|гипермаркет|супермаркет|продукт|продукты)/i, names: ["Продукты", "Еда", "Питание"] },
-  { re: /(метро|такси|taxi|яндекс\s*go|yandex\s*go|uber|\bgett\b|транспорт|автобус|трамвай|тройка|mosgortrans|азс|lukoil|лукойл|газпромнефть|rosneft|роснефть|shell|парковк|каршеринг|delimobil|делимобиль|ржд|rzd|аэроэкспресс|transport khab|yandex\\*\\d+\\*go)/i, names: ["Транспорт", "Авто", "Дорога"] },
+  { re: /(метро|такси|taxi|яндекс\s*go|yandex\s*go|uber|\bgett\b|транспорт|автобус|трамвай|тройка|mosgortrans|азс|lukoil|лукойл|газпромнефть|rosneft|роснефть|shell|парковк|каршеринг|delimobil|делимобиль|ржд|rzd|аэроэкспресс|transport khab|т-карта|транспортная карта|транспорт хабаровск|yandex\*\d+\*go)/i, names: ["Транспорт", "Такси", "Авто", "Дорога"] },
   { re: /(мтс|mts|билайн|beeline|мегафон|megafon|tele2|теле2|yota|ростелеком|rostelecom|интернет|связь)/i, names: ["Связь", "Интернет", "Телефон"] },
-  { re: /(аптека|apteka|ригла|rigla|здравсити|36\.6|клиника|медицин|стоматолог|лаборатори|invitro|инвитро|гемотест|farma|фарма)/i, names: ["Лекарства/здоровье", "Здоровье", "Лекарства"] },
-  { re: /(жкх|коммунал|мосэнерго|энергосбыт|водоканал|мосводоканал|теплосеть|мособлеирц|ук\s|управляющая|капремонт|электроэнерги|газпром межрегионгаз|gis_zkh|gis-zkh)/i, names: ["ЖКХ", "Коммуналка", "Коммунальные"] },
+  { re: /(аптека|apteka|ригла|rigla|здравсити|36\.6|клиника|медицин|стоматолог|лаборатори|invitro|инвитро|гемотест|farma|фарма|farm-torg|asteri|aptechnoe|semejnaya|аптекарь)/i, names: ["Лекарства/здоровье", "Здоровье", "Лекарства"] },
+  { re: /(жкх|коммунал|мосэнерго|энергосбыт|водоканал|мосводоканал|теплосеть|мособлеирц|ук\s|управляющая|капремонт|электроэнерги|газпром межрегионгаз|gis_zkh|gis-zkh|гис жкх|капитальн\S* ремонт|регстройком|ркц|хабаровскэнергосбыт)/i, names: ["ЖКХ", "Коммуналка", "Коммунальные"] },
   { re: /(аренда|ипотек|найм квартиры)/i, names: ["Аренда/ипотека", "Аренда", "Ипотека"] },
   { re: /(табак|сигарет|tabak|iqos|вейп|кальян)/i, names: ["Сигареты", "Табак"] },
-  { re: /(макдоналдс|mcdonald|kfc|burger|бургер|ресторан|кафе|cafe|coffee|кофе|starbucks|шоколадница|додо|dodo|пицца|pizza|суши|sushi|delivery club|деливери|яндекс\s*еда|самокат|вкусно|\\bkafe\\b|vypechka|выпечка|morozhennoe|мороженое)/i, names: ["Кафе/рестораны", "Кафе", "Рестораны", "Еда вне дома"] },
-  { re: /(кино|cinema|kinopoisk|кинопоиск|театр|концерт|билет|ticket|ivi\b|okko|steam|playstation|игр|kinoteatr)/i, names: ["Кино/развлечения", "Развлечения", "Кино"] },
+  { re: /(макдоналдс|mcdonald|kfc|burger|бургер|ресторан|кафе|cafe|coffee|кофе|starbucks|шоколадница|додо|dodo|пицца|pizza|суши|sushi|delivery club|деливери|яндекс\s*еда|самокат|вкусно|\bkafe\b|vypechka|выпечка|morozhennoe|мороженое|shaurma|шаурма|bufet|bulochnaya|булочная|sinor pomidor|sp_sev vorota|kitaika|ersh\b|dostavka sushi|chin-chin)/i, names: ["Кафе/рестораны", "Кафе и рестораны", "Кафе", "Рестораны", "Еда вне дома"] },
+  { re: /(кино|cinema|kinopoisk|кинопоиск|театр|концерт|билет|ticket|ivi\b|okko|steam|playstation|игр|kinoteatr|кинокасса|kinokassa|kassa 2|bouling|боулинг|primnet bilety)/i, names: ["Кино/развлечения", "Развлечения", "Кино"] },
   { re: /(wildberries|вайлдберриз|ozon|озон маркет|lamoda|ламода|dns|днс|м\.видео|mvideo|eldorado|эльдорадо|zara|h&m|uniqlo|одежда|обувь|шоппинг)/i, names: ["Шоппинг", "Одежда", "Покупки"] },
-  { re: /(подписк|subscription|spotify|netflix|youtube|яндекс\s*плюс|yandex\s*plus|apple\.com|google\s*play|ivi|premier)/i, names: ["Подписки"] },
+  { re: /(подписк|subscription|spotify|netflix|youtube|яндекс\s*плюс|yandex\s*plus|apple\.com|google\s*play|ivi|premier|starproai|redcom|рэдком|vk\*huawei|ozon premium)/i, names: ["Подписки"] },
   { re: /(tutorplace|репетитор|курсы|школа|университет|обучен)/i, names: ["Образование", "Учёба"] },
-  { re: /(produkty|ovoschi|frukty|овощи|фрукты)/i, names: ["Продукты", "Еда", "Питание"] },
+  { re: /(produkty|ovoschi|frukty|ovoshchi|овощи|фрукты|samberi|самбери|белорское|belorskoe|dostavka pyaterochka)/i, names: ["Продукты", "Еда", "Питание"] },
+  { re: /(arlekin|игрушк)/i, names: ["Дети"] },
+  { re: /(sp_bigudi|парикмахер|барбер|салон красоты|маникюр)/i, names: ["Уход"] },
+  { re: /(белый кролик|ветеринар|зоомагазин)/i, names: ["Животные"] },
   { re: /(цветы|подарок|gift|flowers|flowwow)/i, names: ["Подарки"] },
 ];
 
@@ -141,7 +144,9 @@ export function parseBankText(raw, source, settings) {
   if (sign === "+") type = "income"; // знак надёжнее слов
   else if (sign === "-") type = "expense";
 
-  const merchant = amount != null ? findMerchant(text, amountEnd) : "";
+  let merchant = amount != null ? findMerchant(text, amountEnd) : "";
+  // «Списание со счета…», «Получатель: …» — это не название места, а служебные слова банка
+  if (/^(списание|перевод|поступлени|пополнени|получатель|зачислени)/i.test(merchant)) merchant = "";
   const suggestion = type === "expense" && merchant ? suggestCategory(merchant, settings || {}) : null;
 
   const understood = amount != null && amount > 0;
