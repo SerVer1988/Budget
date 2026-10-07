@@ -17,7 +17,7 @@ import {
 import { BankCard, BankCardDetail, TotalBalanceCard, TxRow } from "./cards.jsx";
 import { ForecastPanel } from "./ForecastPanel.jsx";
 import { RecurringPanel } from "./RecurringPanel.jsx";
-import { ChartsCarousel, DailyExpenseChart } from "./charts.jsx";
+import { ChartsCarousel, DailyExpenseChart, MonthCompareChart } from "./charts.jsx";
 import { NotifyNudge } from "./NotifyNudge.jsx";
 import { FundLoans } from "./FundLoans.jsx";
 import { filterTypeOf, openLoans } from "./loans.js";
@@ -311,6 +311,10 @@ export function AnalysisView({
           {
             title: "Динамика расходов",
             render: () => <DailyExpenseChart monthItems={monthItems} monthKey={selectedMonth} settings={settings} />,
+          },
+          {
+            title: "Сравнение с прошлым месяцем",
+            render: () => <MonthCompareChart agg={agg} prevAgg={prevAgg} monthKey={selectedMonth} settings={settings} />,
           },
           {
             title: "Структура месяца",

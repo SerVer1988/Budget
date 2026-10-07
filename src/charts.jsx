@@ -20,7 +20,7 @@ import {
 import { TxRow } from "./cards.jsx";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
-import { bucketName, bucketOf, dayOfMonth, daysInMonth, formatMoney, monthKeyOf, todayMonthKey, todayStr } from "./format.js";
+import { bucketName, bucketOf, dayOfMonth, daysInMonth, formatMoney, monthKeyOf, monthLabelShort, shiftMonth, todayMonthKey, todayStr } from "./format.js";
 
 /* Первый день недельного окна графика: для текущего месяца — окно, где сегодня; для остальных — 1-е число. */
 export function weekStartFor(monthKey, windowSize = 7, today = todayStr()) {
@@ -253,6 +253,76 @@ export function DailyExpenseChart({ monthItems, monthKey, settings }) {
         </button>
       )}
     </div>
+  );
+}
+
+/* Сравнение с прошлым месяцем: для каждой группы (доход, три бюджета) две соседние колонки —
+   прошлый месяц (серая) и выбранный (цветная). Под графиком — разница в процентах. */
+export function MonthCompareChart({ agg, prevAgg, monthKey, settings }) {
+  const prevKey = shiftMonth(monthKey, -1);
+  const curLabel = monthLabelShort(monthKey);
+  const prevLabel = monthLabelShort(prevKey);
+
+  const groups = [
+    { name: "Доход", cur: agg.incomeTotal, prev: prevAgg.incomeTotal, color: C.inkMuted, good: "up" },
+    { name: bucketName(settings, "needs"), cur: agg.needsSpent, prev: prevAgg.needsSpent, color: C.sber, good: "down" },
+    { name: bucketName(settings, "wants"), cur: agg.wantsSpent, prev: prevAgg.wantsSpent, color: C.alfa, good: "down" },
+    { name: bucketName(settings, "savings"), cur: Math.max(0, agg.ozonNet), prev: Math.max(0, prevAgg.ozonNet), color: C.ozon, good: "up" },
+  ];
+
+  const hasPrev = groups.some((g) => g.prev > 0);
+  if (!hasPrev) {
+    return <div className="small-note" style={{ padding: "18px 4px", textAlign: "center" }}>За прошлый месяц пока нет данных для сравнения.</div>;
+  }
+
+  const data = groups.map((g) => ({ name: g.name, prev: g.prev, cur: g.cur, color: g.color }));
+
+  return (
+    <>
+      <div className="chart-box">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 6, right: 2, bottom: 0, left: 0 }} barGap={3}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+            <XAxis dataKey="name" tick={{ fontSize: 11, fill: C.inkMuted }} tickLine={false} interval={0} />
+            <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} width={34} tickLine={false} tickFormatter={compactAxis} />
+            <Tooltip formatter={(v, key) => [formatMoney(v), key === "prev" ? prevLabel : curLabel]} />
+            <Legend
+              wrapperStyle={{ fontSize: 11 }}
+              iconSize={9}
+              height={18}
+              formatter={(value) => (value === "prev" ? prevLabel : curLabel)}
+            />
+            <Bar dataKey="prev" fill="#C9D1CB" radius={[6, 6, 0, 0]} maxBarSize={26} />
+            <Bar dataKey="cur" radius={[6, 6, 0, 0]} maxBarSize={26}>
+              {data.map((d) => (
+                <Cell key={d.name} fill={d.color} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="fc-list" style={{ marginTop: 4 }}>
+        {groups.map((g) => {
+          if (!(g.prev > 0)) return null;
+          const diff = g.cur - g.prev;
+          const pct = Math.round((diff / g.prev) * 100);
+          const better = g.good === "up" ? diff >= 0 : diff <= 0;
+          return (
+            <div className="fc-row" key={g.name}>
+              <div style={{ minWidth: 0 }}>
+                <div className="fc-name">{g.name}</div>
+                <div className="fc-sub">
+                  {formatMoney(g.cur)} вместо {formatMoney(g.prev)}
+                </div>
+              </div>
+              <div className="fc-val" style={{ color: pct === 0 ? C.inkMuted : better ? C.sber : C.danger }}>
+                {pct > 0 ? "+" : ""}{pct}%
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
