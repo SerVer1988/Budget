@@ -61,7 +61,7 @@ async function http(path, { method = "GET", body, token, headers } = {}) {
 }
 
 /* ---------------------------------------------------------------- сессия */
-let session = null; // { access_token, refresh_token, expires_at (мс), user: { id, email } }
+let session = null; // { access_token, refresh_token, expires_at (мс), user: { id, email, name } }
 let refreshing = null;
 const listeners = new Set();
 
@@ -84,7 +84,7 @@ function sessionFromResponse(d) {
     access_token: d.access_token,
     refresh_token: d.refresh_token,
     expires_at: d.expires_at ? d.expires_at * 1000 : Date.now() + (d.expires_in || 3600) * 1000,
-    user: { id: d.user.id, email: d.user.email },
+    user: { id: d.user.id, email: d.user.email, name: String(d.user.user_metadata?.name || "") },
   };
 }
 
@@ -350,7 +350,40 @@ export const auth = {
     if (!session) return null;
     try { await ensureToken(); } catch { /* офлайн или сессия истекла — см. session ниже */ }
     if (session) await loadHousehold();
+    if (session) auth.refreshUser(); // имя могло измениться на другом устройстве; без ожидания
     return session ? session.user : null;
+  },
+
+  // Подтягивает имя профиля с сервера (user_metadata.name). Тихо ничего не делает без сети.
+  async refreshUser() {
+    if (!session) return;
+    try {
+      const token = await ensureToken();
+      const r = await http("/auth/v1/user", { token });
+      if (!r.ok || !r.data || !session) return;
+      const name = String(r.data.user_metadata?.name || "");
+      if (name !== (session.user.name || "")) {
+        saveSession({ ...session, user: { ...session.user, name } });
+        emitAuth(session.user);
+      }
+    } catch { /* офлайн */ }
+  },
+
+  // Меняет имя профиля. Кидает ошибку с понятным текстом, если не вышло.
+  async updateName(name) {
+    if (!session) throw new Error("not signed in");
+    const clean = String(name || "").trim().slice(0, 40);
+    let r;
+    try {
+      const token = await ensureToken();
+      r = await http("/auth/v1/user", { method: "PUT", token, body: { data: { name: clean } } });
+    } catch {
+      throw new Error("Нет соединения с сервером");
+    }
+    if (!r.ok) throw new Error(authErrorText(r));
+    saveSession({ ...session, user: { ...session.user, name: clean } });
+    emitAuth(session.user);
+    return clean;
   },
 
   getUser() { return session ? session.user : null; },
@@ -372,10 +405,10 @@ export const auth = {
     return session.user;
   },
 
-  async signUp(email, password) {
+  async signUp(email, password, name) {
     let r;
     try {
-      r = await http("/auth/v1/signup", { method: "POST", body: { email, password } });
+      r = await http("/auth/v1/signup", { method: "POST", body: { email, password, data: { name: String(name || "").trim().slice(0, 40) } } });
     } catch {
       throw new Error("Нет соединения с сервером");
     }
@@ -659,5 +692,55 @@ export const inbox = {
       body: { p_token: tokenValue, p_source: "sber", p_text: 'Тест: Покупка 100р "MAGNIT" Баланс: 1000р' },
     });
     if (!r.ok) throw new Error(householdErrorText(r, INBOX_NOT_SET_UP));
+  },
+};
+
+/* ---------------------------------------------------------------- фото профиля */
+// Лежит в личной таблице app_data под ключом profile-avatar (не в общем бюджете: у каждого своё фото).
+// Это небольшая картинка (около 8–15 КБ), копия хранится в localStorage.
+const AVATAR_KEY = "profile-avatar";
+function avatarCacheKey() { return `${PREFIX}u:${uid()}:${AVATAR_KEY}`; }
+
+export const profile = {
+  cachedAvatar() {
+    if (!session) return "";
+    return lsGet(avatarCacheKey()) || "";
+  },
+
+  // Возвращает data-URL или "" (фото нет). Без сети отдаёт копию.
+  async loadAvatar() {
+    if (!session) return "";
+    try {
+      const token = await ensureToken();
+      const r = await http(`/rest/v1/${TABLE}?user_id=eq.${uid()}&key=eq.${enc(AVATAR_KEY)}&select=value`, { token });
+      if (!r.ok) throw new Error("avatar get");
+      const v = Array.isArray(r.data) && r.data[0] ? r.data[0].value : null;
+      const img = v && typeof v.img === "string" ? v.img : "";
+      if (img) lsSet(avatarCacheKey(), img); else lsDel(avatarCacheKey());
+      return img;
+    } catch {
+      return lsGet(avatarCacheKey()) || "";
+    }
+  },
+
+  async saveAvatar(dataUrl) {
+    if (!session) throw new Error("not signed in");
+    const token = await ensureToken();
+    const r = await http(`/rest/v1/${TABLE}?on_conflict=user_id,key`, {
+      method: "POST",
+      token,
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: { user_id: uid(), key: AVATAR_KEY, value: { img: dataUrl }, updated_at: new Date().toISOString() },
+    });
+    if (!r.ok) throw new Error("Не удалось сохранить фото. Проверьте соединение.");
+    lsSet(avatarCacheKey(), dataUrl);
+  },
+
+  async removeAvatar() {
+    if (!session) throw new Error("not signed in");
+    const token = await ensureToken();
+    const r = await http(`/rest/v1/${TABLE}?user_id=eq.${uid()}&key=eq.${enc(AVATAR_KEY)}`, { method: "DELETE", token });
+    if (!r.ok) throw new Error("Не удалось удалить фото. Проверьте соединение.");
+    lsDel(avatarCacheKey());
   },
 };

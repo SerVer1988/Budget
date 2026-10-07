@@ -5,6 +5,7 @@ import { C } from "./constants.js";
 /* ============================================================ Вход */
 export function AuthScreen() {
   const [mode, setMode] = useState("login"); // login | signup
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -15,6 +16,10 @@ export function AuthScreen() {
     e.preventDefault();
     setError("");
     setInfo("");
+    if (mode === "signup" && !name.trim()) {
+      setError("Введите имя");
+      return;
+    }
     if (!email.trim() || !password) {
       setError("Введите почту и пароль");
       return;
@@ -24,7 +29,7 @@ export function AuthScreen() {
       if (mode === "login") {
         await auth.signIn(email.trim(), password);
       } else {
-        const r = await auth.signUp(email.trim(), password);
+        const r = await auth.signUp(email.trim(), password, name.trim());
         if (r.needsConfirm) setInfo("Мы отправили письмо для подтверждения. Подтвердите почту и войдите.");
       }
     } catch (err) {
@@ -39,6 +44,20 @@ export function AuthScreen() {
       <div className="form-title-row">
         <h2>{mode === "login" ? "Вход" : "Регистрация"}</h2>
       </div>
+
+      {mode === "signup" && (
+        <div className="field">
+          <label>Имя</label>
+          <input
+            type="text"
+            autoComplete="given-name"
+            maxLength={40}
+            placeholder="Как к вам обращаться"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+      )}
 
       <div className="field">
         <label>Почта</label>

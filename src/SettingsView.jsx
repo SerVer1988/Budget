@@ -1,5 +1,6 @@
 import { RecurringSettings } from "./RecurringSettings.jsx";
-import { HouseholdSettings } from "./HouseholdSettings.jsx";
+import { Avatar, ProfileView } from "./ProfileView.jsx";
+import { profile } from "./storage.js";
 import { InboxSettings } from "./InboxSettings.jsx";
 import React, { useState, useEffect, useRef } from "react";
 import {
@@ -12,7 +13,6 @@ import badgeAlfaImg from "./assets/badge-alfa.webp";
 import badgeOzonImg from "./assets/badge-ozon.webp";
 import { SectionTitle } from "./ui.jsx";
 import { BUCKET_LABEL, C, CATEGORY_COLORS, ICON_KEYS, ICON_MAP, getIcon } from "./constants.js";
-import { exportCsv, exportJsonBackup } from "./backup.js";
 import { bucketName, bucketNameGen } from "./format.js";
 
 /* ============================================================ Settings */
@@ -148,36 +148,21 @@ export function CategoryRow({ cat, open, onToggleOpen, onChange, onDelete }) {
   );
 }
 
-export function SettingsView({ settings, transactions, onImport, onSaveSettings, onSave, onWipeAll, userEmail, onSignOut }) {
-  const importInputRef = useRef(null);
-  const [importMsg, setImportMsg] = useState("");
+export function SettingsView({ settings, transactions, onImport, onSaveSettings, onSave, onWipeAll, user, userEmail, onSignOut }) {
+  const [showProfile, setShowProfile] = useState(false);
+  const [avatar, setAvatar] = useState(() => profile.cachedAvatar());
 
-  async function handleImportFile(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    try {
-      const data = JSON.parse(await file.text());
-      if (!data || data.app !== "budget" || !Array.isArray(data.transactions) || typeof data.settings !== "object") {
-        setImportMsg("Это не резервная копия приложения.");
-        return;
-      }
-      const ok = window.confirm(
-        `Заменить текущие данные (операций: ${(transactions || []).length}) данными из файла (операций: ${data.transactions.length})? Сначала сохраните копию текущих данных, если они нужны.`
-      );
-      if (!ok) return;
-      onImport(data);
-      setImportMsg(`Восстановлено: операций ${data.transactions.length}.`);
-    } catch {
-      setImportMsg("Не удалось прочитать файл.");
-    }
-  }
+  useEffect(() => {
+    let alive = true;
+    profile.loadAvatar().then((img) => { if (alive) setAvatar(img || ""); });
+    return () => { alive = false; };
+  }, [user?.id]);
+
   const [draft, setDraft] = useState(settings);
   const [daysText, setDaysText] = useState((settings.reminderDays || []).join(", "));
   const [saved, setSaved] = useState(false);
   const [banksOpen, setBanksOpen] = useState(false); // «Банки бюджета» по умолчанию свёрнуты
   const [ruleOpen, setRuleOpen] = useState(false); // «Правило распределения» свёрнуто
-  const [dataOpen, setDataOpen] = useState(false); // «Данные» свёрнуты
   const [needsOpen, setNeedsOpen] = useState(false);
   const [wantsOpen, setWantsOpen] = useState(false);
   const [openCatKey, setOpenCatKey] = useState(null);
@@ -253,8 +238,33 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
     </div>
   );
 
+  if (showProfile) {
+    return (
+      <ProfileView
+        user={user}
+        avatar={avatar}
+        onAvatarChange={setAvatar}
+        settings={settings}
+        transactions={transactions}
+        onImport={onImport}
+        userEmail={userEmail}
+        onSignOut={onSignOut}
+        onBack={() => { setShowProfile(false); window.scrollTo?.(0, 0); }}
+      />
+    );
+  }
+
+  const hour = new Date().getHours();
+  const hello = hour >= 5 && hour < 12 ? "Доброе утро" : hour >= 12 && hour < 17 ? "Добрый день" : hour >= 17 && hour < 23 ? "Добрый вечер" : "Доброй ночи";
+  const firstName = (user?.name || "").trim();
+
   return (
     <div className="screen-stack">
+      <button type="button" className="profile-banner" onClick={() => { setShowProfile(true); window.scrollTo?.(0, 0); }} aria-label="Открыть профиль">
+        <span className="profile-banner-text">{firstName ? `${hello}, ${firstName}!` : `${hello}!`}</span>
+        <Avatar src={avatar} size={44} />
+      </button>
+
       <div className="panel">
         <button type="button" className="section-title-toggle" onClick={() => setBanksOpen((v) => !v)}>
           <SectionTitle>Банки бюджета (50/30/20)</SectionTitle>
@@ -429,51 +439,6 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
       <RecurringSettings settings={settings} onSaveSettings={onSaveSettings} />
 
       <InboxSettings />
-
-      <HouseholdSettings />
-
-      <div className="panel">
-        <button type="button" className="section-title-toggle" onClick={() => setDataOpen((v) => !v)}>
-          <SectionTitle>Данные</SectionTitle>
-          <ChevronDown size={16} className={`section-chevron${dataOpen ? " open" : ""}`} />
-        </button>
-
-        {dataOpen && (
-          <>
-        <div className="button-row" style={{ marginBottom: 8 }}>
-          <button className="btn" type="button" onClick={() => exportJsonBackup(settings, transactions || [])}>
-            Резервная копия (JSON)
-          </button>
-          <button className="btn" type="button" onClick={() => exportCsv(settings, transactions || [])}>
-            Таблица (CSV)
-          </button>
-        </div>
-        <button className="btn" type="button" style={{ width: "100%" }} onClick={() => importInputRef.current?.click()}>
-          Восстановить из копии
-        </button>
-        <input
-          ref={importInputRef}
-          type="file"
-          accept="application/json,.json"
-          style={{ display: "none" }}
-          onChange={handleImportFile}
-        />
-        {importMsg && (
-          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{importMsg}</div>
-        )}
-          </>
-        )}
-      </div>
-
-      <div className="panel">
-        <SectionTitle>Аккаунт</SectionTitle>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 10, wordBreak: "break-all" }}>
-          {userEmail ? `Вы вошли как ${userEmail}.` : "Вы вошли."}
-        </div>
-        <button className="btn" type="button" style={{ width: "100%" }} onClick={onSignOut}>
-          Выйти
-        </button>
-      </div>
 
       {actionButtons}
     </div>

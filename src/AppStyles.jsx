@@ -132,6 +132,67 @@ export function AppStyles() {
         margin: 12px 0 8px;
       }
 
+      /* Баннер профиля в начале «Настроек» */
+      .profile-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid ${C.sber};
+        border-radius: 18px;
+        background: linear-gradient(135deg, ${C.sber}, #2f9d62);
+        color: #fff;
+        cursor: pointer;
+        text-align: left;
+      }
+      .profile-banner-text {
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 1.2;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .profile-avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        border-radius: 50%;
+        overflow: hidden;
+        background: ${C.sberSoft};
+        color: ${C.sber};
+        border: 2px solid rgba(255, 255, 255, 0.85);
+      }
+      .profile-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .profile-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .profile-head-title {
+        font-size: 18px;
+        font-weight: 800;
+      }
+      .profile-back {
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid ${C.border};
+        border-radius: 14px;
+        background: ${C.surface};
+        color: ${C.ink};
+        cursor: pointer;
+      }
+
       /* Сворачиваемые блоки: одинаковая тонкая плашка, независимо от panel / panel-compact */
       .panel:has(> .section-title-toggle) {
         padding: 0 14px;

@@ -709,6 +709,7 @@ export default function App() {
                 onSaveSettings={persistSettings}
                 onSave={persistSettings}
                 onWipeAll={() => { transactions.filter((t) => t.receipt).forEach((t) => removeReceipt(t.id)); persistTransactions([]); }}
+                user={authUser}
                 userEmail={authUser?.email}
                 onSignOut={async () => {
                   await auth.signOut();
