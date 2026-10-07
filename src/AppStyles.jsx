@@ -132,6 +132,23 @@ export function AppStyles() {
         margin: 12px 0 8px;
       }
 
+      /* Сворачиваемые блоки: одинаковая тонкая плашка, независимо от panel / panel-compact */
+      .panel:has(> .section-title-toggle) {
+        padding: 0 14px;
+      }
+      .panel:has(> .section-title-toggle) > .section-title-toggle {
+        min-height: 40px;
+      }
+      .panel .section-title-toggle .section-title {
+        margin: 0;
+      }
+      .panel:has(> .section-title-toggle) > .section-title-toggle + * {
+        margin-top: 2px;
+      }
+      .panel:has(> .section-title-toggle) > :last-child:not(.section-title-toggle) {
+        margin-bottom: 14px;
+      }
+
       .section-chevron {
         flex: 0 0 auto;
         color: ${C.inkMuted};
