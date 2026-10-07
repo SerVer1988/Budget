@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
 import { auth, household } from "./storage.js";
@@ -6,6 +7,7 @@ import { auth, household } from "./storage.js";
 /* Совместный бюджет («режим двоих»): создать, войти по коду, выйти. Данные общие, правки обоих
    сливаются. После смены режима страница перезагружается, чтобы загрузить нужные данные. */
 export function HouseholdSettings() {
+  const [open, setOpen] = useState(false); // по умолчанию свёрнуто
   const [info, setInfo] = useState(undefined); // undefined — загрузка, null — не состоите
   const [unavailable, setUnavailable] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,7 +55,13 @@ export function HouseholdSettings() {
 
   return (
     <div className="panel">
-      <SectionTitle>Совместный бюджет</SectionTitle>
+      <button type="button" className="section-title-toggle" onClick={() => setOpen((v) => !v)}>
+        <SectionTitle>Совместный бюджет</SectionTitle>
+        <ChevronDown size={16} className={`section-chevron${open ? " open" : ""}`} />
+      </button>
+
+      {open && (
+      <>
 
       {info === undefined && <div className="muted" style={{ fontSize: 12 }}>Загрузка…</div>}
 
@@ -153,6 +161,8 @@ export function HouseholdSettings() {
       )}
 
       {error && <div style={{ fontSize: 12, color: C.danger, marginTop: 8 }}>{error}</div>}
+      </>
+      )}
     </div>
   );
 }

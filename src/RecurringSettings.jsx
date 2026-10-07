@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
 import { bucketName, formatMoney, moneyNum, todayStr } from "./format.js";
@@ -19,6 +19,7 @@ export function RecurringSettings({ settings, onSaveSettings }) {
   const [form, setForm] = useState(EMPTY);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
+  const [open, setOpen] = useState(false); // по умолчанию свёрнуто
   const [notify, setNotify] = useState(() => notifyEnabled());
   const [notifyMsg, setNotifyMsg] = useState("");
 
@@ -58,7 +59,13 @@ export function RecurringSettings({ settings, onSaveSettings }) {
 
   return (
     <div className="panel">
-      <SectionTitle>Регулярные платежи</SectionTitle>
+      <button type="button" className="section-title-toggle" onClick={() => setOpen((v) => !v)}>
+        <SectionTitle>Регулярные платежи</SectionTitle>
+        <ChevronDown size={16} className={`section-chevron${open ? " open" : ""}`} />
+      </button>
+
+      {open && (
+      <>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
         {list.map((r) => (
@@ -145,6 +152,8 @@ export function RecurringSettings({ settings, onSaveSettings }) {
           {notifyMsg || "В течение дня: заметки (прогноз, сравнение, советы), платежи и день выплаты. Приходят, пока приложение открыто или свёрнуто."}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

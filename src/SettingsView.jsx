@@ -175,6 +175,7 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
   const [draft, setDraft] = useState(settings);
   const [daysText, setDaysText] = useState((settings.reminderDays || []).join(", "));
   const [saved, setSaved] = useState(false);
+  const [banksOpen, setBanksOpen] = useState(false); // «Банки бюджета» по умолчанию свёрнуты
   const [needsOpen, setNeedsOpen] = useState(false);
   const [wantsOpen, setWantsOpen] = useState(false);
   const [openCatKey, setOpenCatKey] = useState(null);
@@ -229,12 +230,36 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
     });
   }
 
+  // «Сохранить» и «Очистить»: показываются и внизу экрана, и внутри раскрытых списков категорий
+  const actionButtons = (
+    <div className="button-row">
+      <button className="btn primary" type="button" onClick={save}>
+        {saved ? "Сохранено" : "Сохранить"}
+      </button>
+      <button
+        className="btn"
+        type="button"
+        style={{ color: C.danger }}
+        onClick={() => {
+          if (window.confirm("Удалить все операции? Настройки останутся.")) {
+            onWipeAll();
+          }
+        }}
+      >
+        Очистить
+      </button>
+    </div>
+  );
+
   return (
     <div className="screen-stack">
       <div className="panel">
-        <SectionTitle>Банки бюджета (50/30/20)</SectionTitle>
+        <button type="button" className="section-title-toggle" onClick={() => setBanksOpen((v) => !v)}>
+          <SectionTitle>Банки бюджета (50/30/20)</SectionTitle>
+          <ChevronDown size={16} className={`section-chevron${banksOpen ? " open" : ""}`} />
+        </button>
 
-        {[
+        {banksOpen && [
           { bucket: "needs", pct: 100 - Number(draft.wantPct || 0) - Number(draft.savePct || 0) },
           { bucket: "wants", pct: Number(draft.wantPct || 0) },
           { bucket: "savings", pct: Number(draft.savePct || 0) },
@@ -340,6 +365,8 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
             >
               Добавить категорию
             </button>
+
+            {actionButtons}
           </>
         )}
       </div>
@@ -387,27 +414,13 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
             >
               Добавить категорию
             </button>
+
+            {actionButtons}
           </>
         )}
       </div>
 
-      <div className="button-row">
-        <button className="btn primary" type="button" onClick={save}>
-          {saved ? "Сохранено" : "Сохранить"}
-        </button>
-        <button
-          className="btn"
-          type="button"
-          style={{ color: C.danger }}
-          onClick={() => {
-            if (window.confirm("Удалить все операции? Настройки останутся.")) {
-              onWipeAll();
-            }
-          }}
-        >
-          Очистить
-        </button>
-      </div>
+      {actionButtons}
 
       <RecurringSettings settings={settings} onSaveSettings={onSaveSettings} />
 
