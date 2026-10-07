@@ -12,6 +12,8 @@ const BALANCE_BEFORE = /(баланс|остаток|доступно|у вас 
 const EXPENSE_WORDS = /(покупк|оплат|списани|снятие|платёж|платеж|расход|перевод\s+(?:на|клиенту)|purchase|payment)/i;
 const INCOME_WORDS = /(зачислен|поступлен|пополнен|зарплат|аванс|возврат|кэшбэк|кешбэк|перевод\s+от|входящий\s+перевод|получен|deposit|refund)/i;
 
+const SERVICE_WORDS = /(вход в (?:сбербанк|сбер|альфа|озон|ozon|приложение)|никому не сообщ|одноразов|код подтвержд|пароль|не сообщайте|если входили не вы|вы вошли)/i;
+
 function toNumber(s) {
   return parseFloat(s.replace(/[\s\u00a0\u202f]/g, "").replace(",", "."));
 }
@@ -56,16 +58,18 @@ function findMerchant(text, afterIdx) {
    категории у пользователя (берётся первое, что реально есть в его списках). */
 const CATEGORY_RULES = [
   { re: /(магнит|пятерочка|пятёрочка|pyaterochka|5ka|перекресток|perekrestok|лента\b|ашан|auchan|вкусвилл|vkusvill|дикси|dixy|\bspar\b|азбука вкуса|окей|globus|гипермаркет|супермаркет|продукт|продукты)/i, names: ["Продукты", "Еда", "Питание"] },
-  { re: /(метро|такси|taxi|яндекс\s*go|yandex\s*go|uber|\bgett\b|транспорт|автобус|трамвай|тройка|mosgortrans|азс|lukoil|лукойл|газпромнефть|rosneft|роснефть|shell|парковк|каршеринг|delimobil|делимобиль|ржд|rzd|аэроэкспресс)/i, names: ["Транспорт", "Авто", "Дорога"] },
+  { re: /(метро|такси|taxi|яндекс\s*go|yandex\s*go|uber|\bgett\b|транспорт|автобус|трамвай|тройка|mosgortrans|азс|lukoil|лукойл|газпромнефть|rosneft|роснефть|shell|парковк|каршеринг|delimobil|делимобиль|ржд|rzd|аэроэкспресс|transport khab|yandex\\*\\d+\\*go)/i, names: ["Транспорт", "Авто", "Дорога"] },
   { re: /(мтс|mts|билайн|beeline|мегафон|megafon|tele2|теле2|yota|ростелеком|rostelecom|интернет|связь)/i, names: ["Связь", "Интернет", "Телефон"] },
-  { re: /(аптека|apteka|ригла|rigla|здравсити|36\.6|клиника|медицин|стоматолог|лаборатори|invitro|инвитро|гемотест)/i, names: ["Лекарства/здоровье", "Здоровье", "Лекарства"] },
-  { re: /(жкх|коммунал|мосэнерго|энергосбыт|водоканал|мосводоканал|теплосеть|мособлеирц|ук\s|управляющая|капремонт|электроэнерги|газпром межрегионгаз)/i, names: ["ЖКХ", "Коммуналка", "Коммунальные"] },
+  { re: /(аптека|apteka|ригла|rigla|здравсити|36\.6|клиника|медицин|стоматолог|лаборатори|invitro|инвитро|гемотест|farma|фарма)/i, names: ["Лекарства/здоровье", "Здоровье", "Лекарства"] },
+  { re: /(жкх|коммунал|мосэнерго|энергосбыт|водоканал|мосводоканал|теплосеть|мособлеирц|ук\s|управляющая|капремонт|электроэнерги|газпром межрегионгаз|gis_zkh|gis-zkh)/i, names: ["ЖКХ", "Коммуналка", "Коммунальные"] },
   { re: /(аренда|ипотек|найм квартиры)/i, names: ["Аренда/ипотека", "Аренда", "Ипотека"] },
   { re: /(табак|сигарет|tabak|iqos|вейп|кальян)/i, names: ["Сигареты", "Табак"] },
-  { re: /(макдоналдс|mcdonald|kfc|burger|бургер|ресторан|кафе|cafe|coffee|кофе|starbucks|шоколадница|додо|dodo|пицца|pizza|суши|sushi|delivery club|деливери|яндекс\s*еда|самокат|вкусно)/i, names: ["Кафе/рестораны", "Кафе", "Рестораны", "Еда вне дома"] },
-  { re: /(кино|cinema|kinopoisk|кинопоиск|театр|концерт|билет|ticket|ivi\b|okko|steam|playstation|игр)/i, names: ["Кино/развлечения", "Развлечения", "Кино"] },
+  { re: /(макдоналдс|mcdonald|kfc|burger|бургер|ресторан|кафе|cafe|coffee|кофе|starbucks|шоколадница|додо|dodo|пицца|pizza|суши|sushi|delivery club|деливери|яндекс\s*еда|самокат|вкусно|\\bkafe\\b|vypechka|выпечка|morozhennoe|мороженое)/i, names: ["Кафе/рестораны", "Кафе", "Рестораны", "Еда вне дома"] },
+  { re: /(кино|cinema|kinopoisk|кинопоиск|театр|концерт|билет|ticket|ivi\b|okko|steam|playstation|игр|kinoteatr)/i, names: ["Кино/развлечения", "Развлечения", "Кино"] },
   { re: /(wildberries|вайлдберриз|ozon|озон маркет|lamoda|ламода|dns|днс|м\.видео|mvideo|eldorado|эльдорадо|zara|h&m|uniqlo|одежда|обувь|шоппинг)/i, names: ["Шоппинг", "Одежда", "Покупки"] },
   { re: /(подписк|subscription|spotify|netflix|youtube|яндекс\s*плюс|yandex\s*plus|apple\.com|google\s*play|ivi|premier)/i, names: ["Подписки"] },
+  { re: /(tutorplace|репетитор|курсы|школа|университет|обучен)/i, names: ["Образование", "Учёба"] },
+  { re: /(produkty|ovoschi|frukty|овощи|фрукты)/i, names: ["Продукты", "Еда", "Питание"] },
   { re: /(цветы|подарок|gift|flowers|flowwow)/i, names: ["Подарки"] },
 ];
 
@@ -116,12 +120,16 @@ export function parseBankText(raw, source, settings) {
   // сумма: первая «число + валюта», перед которой не стоит «Баланс/Доступно/Остаток»
   let amount = null;
   let amountEnd = 0;
+  let sign = ""; // «+» или «−» вплотную к сумме: «+17 744 ₽», «-1 730 ₽»
   AMOUNT_RE.lastIndex = 0;
   let m;
   while ((m = AMOUNT_RE.exec(text))) {
     if (BALANCE_BEFORE.test(text.slice(Math.max(0, m.index - 20), m.index))) continue;
     amount = toNumber(m[1]);
     amountEnd = m.index + m[0].length;
+    const prevCh = m.index > 0 ? text[m.index - 1] : "";
+    if (prevCh === "+") sign = "+";
+    else if (prevCh === "-" || prevCh === "−" || prevCh === "–") sign = "-";
     break;
   }
 
@@ -129,18 +137,23 @@ export function parseBankText(raw, source, settings) {
   // «Возврат покупки» — доход, «Покупка … кэшбэк» — расход.
   const iIn = text.search(INCOME_WORDS);
   const iEx = text.search(EXPENSE_WORDS);
-  const type = iIn >= 0 && (iEx < 0 || iIn < iEx) ? "income" : "expense";
+  let type = iIn >= 0 && (iEx < 0 || iIn < iEx) ? "income" : "expense";
+  if (sign === "+") type = "income"; // знак надёжнее слов
+  else if (sign === "-") type = "expense";
 
   const merchant = amount != null ? findMerchant(text, amountEnd) : "";
   const suggestion = type === "expense" && merchant ? suggestCategory(merchant, settings || {}) : null;
 
+  const understood = amount != null && amount > 0;
   return {
     type,
-    amount: amount != null && amount > 0 ? amount : null,
+    amount: understood ? amount : null,
     merchant,
     card,
     suggestion,
-    understood: amount != null && amount > 0,
+    understood,
+    // «Вход в СберБанк Онлайн…», коды, пароли: денег в них нет, показывать в листе ожидания незачем
+    ignorable: !understood && SERVICE_WORDS.test(text),
   };
 }
 

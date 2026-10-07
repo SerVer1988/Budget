@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Pencil, X } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
@@ -32,10 +32,21 @@ export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, 
     [pending, settings, transactions]
   );
 
+  // Служебные уведомления (вход в приложение, коды) убираем сами: денег в них нет.
+  const dismissedRef = useRef(new Set());
+  useEffect(() => {
+    rows.forEach((r) => {
+      if (r.parsed.ignorable && !dismissedRef.current.has(r.row.id)) {
+        dismissedRef.current.add(r.row.id);
+        onDismiss(r.row);
+      }
+    });
+  }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Перевод между своими картами = два уведомления (списано + поступило): показываем одной строкой.
   const pairs = useMemo(() => findTransferPairs(rows), [rows]);
   const pairedIds = new Set(pairs.flatMap((p) => [p.out.row.id, p.in.row.id]));
-  const singles = rows.filter((r) => !pairedIds.has(r.row.id));
+  const singles = rows.filter((r) => !pairedIds.has(r.row.id) && !r.parsed.ignorable);
   const total = singles.length + pairs.length;
 
   if (!total) return null;
