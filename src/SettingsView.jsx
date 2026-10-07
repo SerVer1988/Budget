@@ -176,6 +176,8 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
   const [daysText, setDaysText] = useState((settings.reminderDays || []).join(", "));
   const [saved, setSaved] = useState(false);
   const [banksOpen, setBanksOpen] = useState(false); // «Банки бюджета» по умолчанию свёрнуты
+  const [ruleOpen, setRuleOpen] = useState(false); // «Правило распределения» свёрнуто
+  const [dataOpen, setDataOpen] = useState(false); // «Данные» свёрнуты
   const [needsOpen, setNeedsOpen] = useState(false);
   const [wantsOpen, setWantsOpen] = useState(false);
   const [openCatKey, setOpenCatKey] = useState(null);
@@ -282,7 +284,13 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
       </div>
 
       <div className="panel panel-compact">
-        <SectionTitle>Правило распределения</SectionTitle>
+        <button type="button" className="section-title-toggle" onClick={() => setRuleOpen((v) => !v)}>
+          <SectionTitle>Правило распределения</SectionTitle>
+          <ChevronDown size={16} className={`section-chevron${ruleOpen ? " open" : ""}`} />
+        </button>
+
+        {ruleOpen && (
+          <>
 
         <div className="form-grid-2">
           <div className="field">
@@ -320,6 +328,8 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
             />
           </div>
         </div>
+          </>
+        )}
       </div>
 
       <div className="panel">
@@ -365,8 +375,6 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
             >
               Добавить категорию
             </button>
-
-            {actionButtons}
           </>
         )}
       </div>
@@ -414,13 +422,9 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
             >
               Добавить категорию
             </button>
-
-            {actionButtons}
           </>
         )}
       </div>
-
-      {actionButtons}
 
       <RecurringSettings settings={settings} onSaveSettings={onSaveSettings} />
 
@@ -429,7 +433,13 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
       <HouseholdSettings />
 
       <div className="panel">
-        <SectionTitle>Данные</SectionTitle>
+        <button type="button" className="section-title-toggle" onClick={() => setDataOpen((v) => !v)}>
+          <SectionTitle>Данные</SectionTitle>
+          <ChevronDown size={16} className={`section-chevron${dataOpen ? " open" : ""}`} />
+        </button>
+
+        {dataOpen && (
+          <>
         <div className="button-row" style={{ marginBottom: 8 }}>
           <button className="btn" type="button" onClick={() => exportJsonBackup(settings, transactions || [])}>
             Резервная копия (JSON)
@@ -451,6 +461,8 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
         {importMsg && (
           <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{importMsg}</div>
         )}
+          </>
+        )}
       </div>
 
       <div className="panel">
@@ -462,6 +474,8 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
           Выйти
         </button>
       </div>
+
+      {actionButtons}
     </div>
   );
 }

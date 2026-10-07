@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
 import { inbox } from "./storage.js";
@@ -29,6 +30,7 @@ function CopyLine({ label, value }) {
 
 /* Настройка приёма банковских уведомлений: ключ + инструкция для приложения-автоматизации на телефоне. */
 export function InboxSettings() {
+  const [open, setOpen] = useState(false); // по умолчанию свёрнуто
   const [info, setInfo] = useState(undefined); // undefined — загрузка
   const [token, setToken] = useState(null);    // показывается только сразу после создания
   const [busy, setBusy] = useState(false);
@@ -66,7 +68,13 @@ export function InboxSettings() {
 
   return (
     <div className="panel panel-compact">
-      <SectionTitle>Банковские уведомления</SectionTitle>
+      <button type="button" className="section-title-toggle" onClick={() => setOpen((v) => !v)}>
+        <SectionTitle>Банковские уведомления</SectionTitle>
+        <ChevronDown size={16} className={`section-chevron${open ? " open" : ""}`} />
+      </button>
+
+      {open && (
+      <>
 
       {info === undefined && <div className="muted" style={{ fontSize: 12 }}>Загрузка…</div>}
 
@@ -114,6 +122,8 @@ export function InboxSettings() {
       )}
 
       {error && <div style={{ fontSize: 12, color: C.danger, marginTop: 8 }}>{error}</div>}
+      </>
+      )}
     </div>
   );
 }
