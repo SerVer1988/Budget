@@ -326,6 +326,116 @@ export function MonthCompareChart({ agg, prevAgg, monthKey, settings }) {
   );
 }
 
+/* Расходы по категориям по месяцам: на странице одна категория — столбцы за последние месяцы.
+   Листается стрелками по краям или свайпом вбок — следующая категория. */
+const CAT_MONTHS = 6;
+
+export function CategoryMonthsChart({ transactions, settings, monthKey }) {
+  const [page, setPage] = useState(0);
+  const [touchX, setTouchX] = useState(null);
+
+  const months = useMemo(() => {
+    const list = [];
+    for (let i = CAT_MONTHS - 1; i >= 0; i--) list.push(shiftMonth(monthKey, -i));
+    return list;
+  }, [monthKey]);
+
+  const pages = useMemo(() => {
+    const meta = {};
+    [["needs", settings.needCats || []], ["wants", settings.wantCats || []]].forEach(([bucket, cats]) => {
+      cats.forEach((c) => {
+        meta[`${bucket}:${c.name}`] = { key: `${bucket}:${c.name}`, name: c.name, bucket, color: c.color, sums: {} };
+      });
+    });
+    const inWindow = new Set(months);
+    (transactions || []).forEach((t) => {
+      if (t.type !== "expense") return;
+      const mk = monthKeyOf(t.date);
+      if (!inWindow.has(mk)) return;
+      const bucket = t.bucket || bucketOf(t.card);
+      const key = `${bucket}:${t.category}`;
+      if (!meta[key]) meta[key] = { key, name: t.category, bucket, color: bucket === "wants" ? C.alfa : C.sber, sums: {} };
+      meta[key].sums[mk] = (meta[key].sums[mk] || 0) + t.amount;
+    });
+    return Object.values(meta)
+      .map((m) => ({ ...m, total: months.reduce((a, mk) => a + (m.sums[mk] || 0), 0) }))
+      .filter((m) => m.total > 0)
+      .sort((a, b) => b.total - a.total);
+  }, [transactions, settings, months]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [monthKey]);
+
+  const n = pages.length;
+  if (!n) {
+    return <div className="small-note" style={{ padding: "18px 4px", textAlign: "center" }}>Пока нет расходов по категориям за последние месяцы.</div>;
+  }
+  const idx = Math.min(page, n - 1);
+  const cat = pages[idx];
+  const go = (d) => setPage((i) => (Math.min(i, n - 1) + d + n) % n);
+
+  const data = months.map((mk) => ({ mk, label: monthLabelShort(mk).split(" ")[0], value: cat.sums[mk] || 0 }));
+  const cur = cat.sums[monthKey] || 0;
+  const prev = cat.sums[shiftMonth(monthKey, -1)] || 0;
+  const pct = prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null;
+
+  return (
+    <div
+      onTouchStart={(e) => setTouchX(e.touches[0].clientX)}
+      onTouchEnd={(e) => {
+        if (touchX == null) return;
+        const dx = e.changedTouches[0].clientX - touchX;
+        setTouchX(null);
+        if (Math.abs(dx) > 50 && n > 1) go(dx < 0 ? 1 : -1);
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontWeight: 700, fontSize: 14 }}>
+        <span style={{ width: 10, height: 10, borderRadius: 5, background: cat.color, display: "inline-block" }} />
+        <span>{cat.name}</span>
+        <span className="small-note" style={{ fontWeight: 500 }}>
+          · {bucketName(settings, cat.bucket)} · {idx + 1}/{n}
+        </span>
+      </div>
+
+      <div className="chart-box chart-box-nav">
+        {n > 1 && (
+          <button type="button" className="chart-day-arrow chart-day-arrow-prev" onClick={() => go(-1)} aria-label="Предыдущая категория">
+            <ChevronLeft size={16} />
+          </button>
+        )}
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 6, right: 2, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+            <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.inkMuted }} tickLine={false} />
+            <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} width={34} tickLine={false} tickFormatter={compactAxis} />
+            <Tooltip formatter={(v) => [formatMoney(v), cat.name]} labelFormatter={(_, p) => (p && p[0] ? monthLabelShort(p[0].payload.mk) : "")} />
+            <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={34}>
+              {data.map((d) => (
+                <Cell key={d.mk} fill={cat.color} fillOpacity={d.mk === monthKey ? 1 : 0.4} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+        {n > 1 && (
+          <button type="button" className="chart-day-arrow chart-day-arrow-next" onClick={() => go(1)} aria-label="Следующая категория">
+            <ChevronRight size={16} />
+          </button>
+        )}
+      </div>
+
+      <div className="small-note" style={{ textAlign: "center", marginTop: 2 }}>
+        {monthLabelShort(monthKey)}: {formatMoney(cur)}
+        {pct != null && (
+          <span style={{ color: pct > 0 ? C.danger : pct < 0 ? C.sber : C.inkMuted, fontWeight: 700 }}>
+            {" "}({pct > 0 ? "+" : ""}{pct}% к прошлому мес.)
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* Карусель графиков в «Анализе»: заголовок со стрелками листает слайды по тапу,
    сам график при этом остаётся кликабельным (тултипы/бары не конфликтуют
    с переключением, т.к. стрелки — отдельные кнопки в шапке). */

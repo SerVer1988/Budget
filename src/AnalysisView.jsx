@@ -15,9 +15,8 @@ import {
   Legend,
 } from "recharts";
 import { BankCard, BankCardDetail, TotalBalanceCard, TxRow } from "./cards.jsx";
-import { ForecastPanel } from "./ForecastPanel.jsx";
 import { RecurringPanel } from "./RecurringPanel.jsx";
-import { ChartsCarousel, DailyExpenseChart, MonthCompareChart } from "./charts.jsx";
+import { CategoryMonthsChart, ChartsCarousel, DailyExpenseChart, MonthCompareChart } from "./charts.jsx";
 import { NotifyNudge } from "./NotifyNudge.jsx";
 import { FundLoans } from "./FundLoans.jsx";
 import { filterTypeOf, openLoans } from "./loans.js";
@@ -194,8 +193,6 @@ export function AnalysisView({
         </div>
       </div>
 
-      {isCurrentMonth && <ForecastPanel transactions={transactions} />}
-
       {(debtGroups.length > 0 || loans.length > 0) && (
         <div className="panel">
           <SectionTitle>Фонд</SectionTitle>
@@ -315,6 +312,10 @@ export function AnalysisView({
           {
             title: "Сравнение с прошлым месяцем",
             render: () => <MonthCompareChart agg={agg} prevAgg={prevAgg} monthKey={selectedMonth} settings={settings} />,
+          },
+          {
+            title: "Категории по месяцам",
+            render: () => <CategoryMonthsChart transactions={transactions} settings={settings} monthKey={selectedMonth} />,
           },
           {
             title: "Структура месяца",
