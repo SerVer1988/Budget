@@ -13,7 +13,7 @@ import badgeOzonImg from "./assets/badge-ozon.webp";
 import { TabBar } from "./TabBar.jsx";
 import { AddPageContent, FullAddForm, deriveFormInitialFromTx } from "./form.jsx";
 import { IncomeDistributionModal } from "./panels.jsx";
-import { Toast } from "./ui.jsx";
+import { ConfirmSheet, Toast } from "./ui.jsx";
 import { BUCKET_CARD, BUCKET_STYLE, C, DEFAULT_SETTINGS } from "./constants.js";
 import { aggregateOpenDebts, computeIncomeSplitWithDebts, syncLinkedDebt } from "./debts.js";
 import { bucketName, cardLabel, endOfMonthStr, formatMoney, monthLabel, todayMonthKey, todayStr, uid } from "./format.js";
@@ -42,6 +42,34 @@ export default function App() {
   const [newIncomeTx, setNewIncomeTx] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(todayMonthKey());
   const [toast, setToast] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(null); // id операции, ожидающей подтверждения удаления
+  const toastTimerRef = useRef(null);
+
+  // Плашка снизу. С undo — висит дольше и показывает кнопку «Отменить».
+  function showToast(text, opts = {}) {
+    clearTimeout(toastTimerRef.current);
+    const undoFn = opts.undo;
+    setToast({
+      text,
+      undo: undoFn ? () => { clearTimeout(toastTimerRef.current); setToast(null); undoFn(); } : null,
+    });
+    toastTimerRef.current = setTimeout(() => setToast(null), opts.ms || (undoFn ? 6500 : 2600));
+  }
+
+  // «Транспорт 40 ₽», «Доход 5 000 ₽», «Перевод 1 000 ₽» — что именно произошло
+  function describeTx(tx) {
+    if (!tx) return "Операция";
+    const money = formatMoney(Math.abs(tx.amount || 0));
+    if (tx.type === "transfer") return `Перевод ${money}`;
+    if (tx.type === "adjustment") return `Корректировка ${money}`;
+    if (tx.type === "income") return `${tx.category || "Доход"} ${money}`;
+    if (tx.type === "expense") return `${tx.category || "Расход"} ${money}`;
+    return `Долг ${money}`;
+  }
+  function describeTxs(list) {
+    if (!list.length) return "Операции";
+    return list.length === 1 ? describeTx(list[0]) : `${describeTx(list[0])} и ещё ${list.length - 1}`;
+  }
   const touchRef = useRef(null);
   const [authUser, setAuthUser] = useState(undefined); // undefined — проверяем сессию, null — не вошли
   const [stale, setStale] = useState(false); // на другом устройстве данные уже изменились
@@ -181,11 +209,12 @@ export default function App() {
 
   // Восстановление из JSON-копии: заменяет настройки и операции.
   function importBackup(data) {
+    const prevS = settings;
+    const prevT = transactions;
     const s = migrateSettings(data.settings);
     persistSettings(s);
     persistTransactions(migrateTransactions(data.transactions, s));
-    setToast("Данные восстановлены");
-    setTimeout(() => setToast(null), 1400);
+    showToast("Данные восстановлены", { undo: () => { persistSettings(prevS); persistTransactions(prevT); } });
   }
 
   // ---- Сверка остатка с банком: в уведомлении есть «Баланс/Остаток» → после внесения операции сравниваем
@@ -217,8 +246,7 @@ export default function App() {
     if (job.receivedAt) lsWrite(`budget:balcheck-at:${job.card}`, job.receivedAt);
     if (Math.abs(diff) < 1) {
       setBalanceAlert(null);
-      setToast("Остаток сошёлся с банком");
-      setTimeout(() => setToast(null), 1800);
+      showToast("Остаток сошёлся с банком");
     } else {
       setBalanceAlert({ card: job.card, bank: job.bankBalance, app, diff });
     }
@@ -275,9 +303,9 @@ export default function App() {
 
   // «Списать» личный долг (Фонд): возврат денег на/с карты или «простили» (деньги не двигаются).
   function repayLoan(loan, card, forgiven) {
+    const prevT = transactions;
     addTransactions([buildRepay(loan, card, todayStr(), forgiven)]);
-    setToast(forgiven ? "Долг закрыт без движения денег" : "Долг закрыт");
-    setTimeout(() => setToast(null), 1600);
+    showToast(forgiven ? "Долг закрыт без движения денег" : "Долг закрыт", { undo: () => persistTransactions(prevT) });
   }
 
   // Пара уведомлений «списано + поступило» = перевод между своими картами.
@@ -358,9 +386,9 @@ export default function App() {
     const withIds = newTxs.map((tx) => ({ ...tx, id: tx.id || uid() }));
     let next = [...transactions, ...withIds];
     withIds.forEach((tx) => { next = syncLinkedDebt(next, tx, meta?.asDebt); });
+    const prevT = transactions;
     persistTransactions(next);
-    setToast("Добавлено");
-    setTimeout(() => setToast(null), 1400);
+    showToast(`Добавлено: ${describeTxs(withIds)}`, { undo: () => persistTransactions(prevT) });
   }
 
   function addTransaction(tx, meta) {
@@ -369,7 +397,9 @@ export default function App() {
 
   // Вместе с операцией удаляется и привязанный к ней долг (трата чужой картой / перевод-заём).
   function deleteTransaction(id) {
-    if (transactions.find((t) => t.id === id)?.receipt) removeReceipt(id);
+    const prevT = transactions;
+    const tx = transactions.find((t) => t.id === id);
+    const receiptTimer = tx?.receipt ? setTimeout(() => removeReceipt(id), 7000) : null;
     persistTransactions(
       transactions.filter(
         (t) =>
@@ -378,15 +408,24 @@ export default function App() {
           !(t.type === "loan" && t.kind === "repay" && t.loanId === id) // удалили долг — уходят и его возвраты
       )
     );
-    setToast("Удалено");
-    setTimeout(() => setToast(null), 1200);
+    showToast(`Удалено: ${describeTx(tx)}`, {
+      undo: () => {
+        if (receiptTimer) clearTimeout(receiptTimer);
+        persistTransactions(prevT);
+      },
+    });
+  }
+
+  // Сначала спрашиваем «Вы хотите удалить?», потом удаляем.
+  function requestDelete(id) {
+    setConfirmDel(id);
   }
 
   function updateTransaction(id, updatedTx, meta) {
     const replaced = transactions.map((t) => (t.id === id ? { ...updatedTx, id } : t));
+    const prevT = transactions;
     persistTransactions(syncLinkedDebt(replaced, { ...updatedTx, id }, meta?.asDebt));
-    setToast("Изменено");
-    setTimeout(() => setToast(null), 1200);
+    showToast(`Изменено: ${describeTx(updatedTx)}`, { undo: () => persistTransactions(prevT) });
   }
 
   // Разбивка существующей операции при редактировании: первая часть занимает место
@@ -399,9 +438,9 @@ export default function App() {
     const newOnes = rest.map((tx) => ({ ...tx, splitGroup: groupId, id: uid() }));
     let next = transactions.map((t) => (t.id === id ? updatedFirst : t)).concat(newOnes);
     [updatedFirst, ...newOnes].forEach((tx) => { next = syncLinkedDebt(next, tx, false); });
+    const prevT = transactions;
     persistTransactions(next);
-    setToast("Изменено");
-    setTimeout(() => setToast(null), 1200);
+    showToast(`Изменено: ${describeTxs([updatedFirst, ...newOnes])}`, { undo: () => persistTransactions(prevT) });
   }
 
   // Списание долга между бюджетами: создаёт реальный перевод денег с карты
@@ -453,14 +492,17 @@ export default function App() {
     const updated = transactions.map((t) =>
       closeIds.has(t.id) ? { ...t, repaid: true, remainingAmount: 0 } : t
     );
+    const prevT = transactions;
     persistTransactions([...updated, ...created, settleTx]);
-    setToast(
-      `Переведено ${formatMoney(settleTx.amount)}: «${cardLabel(settings, debtorCard)}» → «${cardLabel(settings, creditorCard)}». Запись есть в операциях.`
+    showToast(
+      `Переведено ${formatMoney(settleTx.amount)}: «${cardLabel(settings, debtorCard)}» → «${cardLabel(settings, creditorCard)}». Запись есть в операциях.`,
+      { ms: 7000, undo: () => persistTransactions(prevT) }
     );
-    setTimeout(() => setToast(null), 3200);
   }
 
   function closeMonth(mk, mode, leftoverNeeds, leftoverWants) {
+    const prevS = settings;
+    const prevT = transactions;
     if (mode === "toSavings") {
       const date = endOfMonthStr(mk);
       const extra = [];
@@ -484,8 +526,7 @@ export default function App() {
       closedMonths: [...(settings.closedMonths || []), mk],
       needsWantsResetDate: advancedReset,
     });
-    setToast("Месяц закрыт");
-    setTimeout(() => setToast(null), 1200);
+    showToast("Месяц закрыт", { undo: () => { persistSettings(prevS); persistTransactions(prevT); } });
   }
 
   function toggleIncludeInTotal(key) {
@@ -521,8 +562,7 @@ export default function App() {
         try {
           await saveReceipt(receiptId, rec.data);
         } catch {
-          setToast("Не удалось сохранить фото чека — нужен интернет");
-          setTimeout(() => setToast(null), 2400);
+          showToast("Не удалось сохранить фото чека — нужен интернет", { ms: 3500 });
           return;
         }
         keepFlag = true;
@@ -738,7 +778,7 @@ export default function App() {
                 transactions={transactions}
                 selectedMonth={selectedMonth}
                 setSelectedMonth={setSelectedMonth}
-                onDelete={deleteTransaction}
+                onDelete={requestDelete}
                 onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx, transactions))}
                 onToggleInclude={toggleIncludeInTotal}
                 onCloseMonth={closeMonth}
@@ -756,7 +796,7 @@ export default function App() {
                 onPrev={() => goPage(-1)}
                 onNext={() => goPage(1)}
                 onSelectPage={(i) => selectPage(i + 1)}
-                onDeleteTx={deleteTransaction}
+                onDeleteTx={requestDelete}
                 onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx, transactions))}
                 onSaveSettings={persistSettings}
               />
@@ -784,7 +824,21 @@ export default function App() {
             onSelectAnalysis={() => selectPage(0)}
             onSelectSettings={() => selectPage(4)}
           />
-          <Toast text={toast} />
+          <Toast toast={toast} />
+          {confirmDel && (() => {
+            const tx = transactions.find((t) => t.id === confirmDel);
+            if (!tx) return null;
+            const when = tx.date ? new Date(`${tx.date}T00:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }) : "";
+            return (
+              <ConfirmSheet
+                title="Вы хотите удалить?"
+                text={`${describeTx(tx)}${when ? ` · ${when}` : ""}`}
+                confirmLabel="Удалить"
+                onCancel={() => setConfirmDel(null)}
+                onConfirm={() => { setConfirmDel(null); deleteTransaction(confirmDel); }}
+              />
+            );
+          })()}
         </div>
       </div>
     </ReceiptContext.Provider>

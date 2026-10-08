@@ -1424,18 +1424,71 @@ export function AppStyles() {
         left: 50%;
         bottom: calc(84px + env(safe-area-inset-bottom));
         transform: translateX(-50%);
-        max-width: min(360px, calc(100vw - 32px));
+        width: max-content;
+        max-width: min(380px, calc(100vw - 24px));
         z-index: 60;
-        border-radius: 999px;
-        padding: 10px 14px;
+        border-radius: 18px;
+        padding: 10px 12px 10px 14px;
         background: ${C.ink};
         color: #fff;
         display: flex;
         align-items: center;
-        gap: 7px;
-        font-size: 12px;
+        gap: 8px;
+        font-size: 13px;
         font-weight: 800;
         box-shadow: 0 12px 26px rgba(22,32,27,0.2);
+      }
+      .toast-text {
+        flex: 1;
+        min-width: 0;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+      .toast-undo {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-left: 4px;
+        padding: 7px 10px;
+        border: 0;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.16);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .confirm-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        background: rgba(22, 32, 27, 0.45);
+        padding: 0 12px calc(16px + env(safe-area-inset-bottom));
+      }
+      .confirm-sheet {
+        width: 100%;
+        max-width: 420px;
+        border-radius: 22px;
+        padding: 18px 16px 16px;
+        background: ${C.surface};
+        border: 1px solid ${C.border};
+        box-shadow: 0 -8px 30px rgba(22, 32, 27, 0.2);
+      }
+      .confirm-title {
+        font-size: 17px;
+        font-weight: 800;
+        margin-bottom: 4px;
+      }
+      .confirm-text {
+        font-size: 14px;
+        color: ${C.inkMuted};
+        margin-bottom: 12px;
+        overflow-wrap: anywhere;
       }
 
       .notice {

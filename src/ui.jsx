@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Check,
+  Undo2,
   Wallet,
 } from "lucide-react";
 import { C } from "./constants.js";
@@ -50,11 +51,38 @@ export function EmptyState({ onAdd }) {
   );
 }
 
-export function Toast({ text }) {
-  if (!text) return null;
+export function Toast({ toast }) {
+  if (!toast) return null;
   return (
-    <div className="toast">
-      <Check size={15} /> {text}
+    <div className="toast" role="status">
+      <Check size={15} style={{ flex: "none" }} />
+      <span className="toast-text">{toast.text}</span>
+      {toast.undo && (
+        <button type="button" className="toast-undo" onClick={toast.undo} aria-label="Отменить действие">
+          <Undo2 size={14} />
+          Отменить
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* Подтверждение опасного действия: плашка снизу с двумя кнопками. */
+export function ConfirmSheet({ title, text, confirmLabel = "Удалить", onConfirm, onCancel }) {
+  return (
+    <div className="confirm-overlay" onClick={onCancel}>
+      <div className="confirm-sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div className="confirm-title">{title}</div>
+        {text && <div className="confirm-text">{text}</div>}
+        <div className="button-row">
+          <button className="btn" type="button" onClick={onCancel}>
+            Отмена
+          </button>
+          <button className="btn primary" type="button" style={{ background: C.danger, borderColor: C.danger }} onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
