@@ -7,12 +7,18 @@ const CUR = "(?:₽|руб(?:\\.|лей|ля|ль)?|р\\.?|RUB|RUR)(?![A-Za-zА-
 // число вида «1 250,50», «850», «12345.67» (пробелы и неразрывные пробелы — разделители тысяч)
 const NUM = "(\\d{1,3}(?:[\\s\\u00a0\\u202f]\\d{3})+(?:[.,]\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)";
 const AMOUNT_RE = new RegExp(NUM + "\\s*" + CUR, "gi");
+// «Баланс: 1000р», «Остаток: 18 287,36 ₽», «Доступно 421 ₽» — остаток по карте после операции
+const BALANCE_RE = new RegExp("(?:баланс|остаток|доступно|available|balance)[^\\d]{0,14}" + NUM + "\\s*" + CUR, "i");
 const BALANCE_BEFORE = /(баланс|остаток|доступно|у вас ещ[её]|на счёте|на счете|available|balance)[^\d]{0,14}$/i;
 
 const EXPENSE_WORDS = /(покупк|оплат|списани|снятие|платёж|платеж|расход|перевод\s+(?:на|клиенту)|purchase|payment)/i;
 const INCOME_WORDS = /(зачислен|поступлен|пополнен|зарплат|аванс|возврат|кэшбэк|кешбэк|перевод\s+от|входящий\s+перевод|получен|deposit|refund)/i;
 
 const SERVICE_WORDS = /(вход в (?:сбербанк|сбер|альфа|озон|ozon|приложение)|никому не сообщ|одноразов|код подтвержд|пароль|не сообщайте|если входили не вы|вы вошли)/i;
+
+// Рекламные и информационные рассылки банков («Кэшбэк, доход от накоплений… как получать больше 👉»)
+const PROMO_WORDS = /(👉|подсказк|рекомендаци|как получать|узнайте|узнать больше|подробнее|подключите|подключи\b|оформите|откройте вклад|специальн\S* предложен|предложение для вас|акци[яию]|скидк|приглашаем|только сегодня|ознакомьтесь|получите больше|заработайте|советуем)/i;
+const OPERATION_WORDS = /(покупк|оплат|списани|зачислен|поступлен|пополнен|снятие|платёж|платеж|перевод|purchase|payment)/i;
 
 function toNumber(s) {
   return parseFloat(s.replace(/[\s\u00a0\u202f]/g, "").replace(",", "."));
@@ -136,13 +142,16 @@ export function parseBankText(raw, source, settings) {
     break;
   }
 
-  // Направление определяет то из слов, что встретилось в тексте раньше:
+  // Если знака нет, направление определяет то из слов, что встретилось в тексте раньше:
   // «Возврат покупки» — доход, «Покупка … кэшбэк» — расход.
   const iIn = text.search(INCOME_WORDS);
   const iEx = text.search(EXPENSE_WORDS);
-  let type = iIn >= 0 && (iEx < 0 || iIn < iEx) ? "income" : "expense";
-  if (sign === "+") type = "income"; // знак надёжнее слов
+  // 1) «−» перед суммой — расход, «+» — доход; 2) без знака смотрим на слова;
+  // 3) нет ни знака, ни слов расхода — считаем доходом.
+  let type;
+  if (sign === "+") type = "income";
   else if (sign === "-") type = "expense";
+  else type = iEx >= 0 && (iIn < 0 || iEx < iIn) ? "expense" : "income";
 
   let merchant = amount != null ? findMerchant(text, amountEnd) : "";
   // «Списание со счета…», «Получатель: …» — это не название места, а служебные слова банка
@@ -150,7 +159,10 @@ export function parseBankText(raw, source, settings) {
   const suggestion = type === "expense" && merchant ? suggestCategory(merchant, settings || {}) : null;
 
   const understood = amount != null && amount > 0;
+  const bm = BALANCE_RE.exec(text);
+  const balance = bm ? toNumber(bm[1]) : null;
   return {
+    balance: Number.isFinite(balance) ? balance : null, // остаток у банка после этой операции (для сверки)
     type,
     amount: understood ? amount : null,
     merchant,
@@ -158,7 +170,10 @@ export function parseBankText(raw, source, settings) {
     suggestion,
     understood,
     // «Вход в СберБанк Онлайн…», коды, пароли: денег в них нет, показывать в листе ожидания незачем
-    ignorable: !understood && SERVICE_WORDS.test(text),
+    // служебные (вход, коды), рассылки и тексты без единой цифры — это не операции, в лист ожидания их не берём
+    ignorable:
+      (!understood && (!/\d/.test(text) || SERVICE_WORDS.test(text))) ||
+      (PROMO_WORDS.test(text) && !OPERATION_WORDS.test(text)),
   };
 }
 

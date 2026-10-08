@@ -26,9 +26,13 @@ import { BankBadge, EmptyState, MonthNav, SectionTitle, StatBox } from "./ui.jsx
 import { BUCKET_CARD, C, TX_TYPE_FILTERS } from "./constants.js";
 import { aggregateOpenDebts } from "./debts.js";
 import { aggregateMonth, computeBalances, txCardsOf, txImpactFor, txNetImpact, txSearchText } from "./finance.js";
-import { bucketIconSrc, bucketName, dayOfMonth, daysInMonth, endOfMonthStr, formatMoney, monthLabel, shiftMonth, todayMonthKey, todayStr } from "./format.js";
+import { bucketIconSrc, bucketName, cardLabel, dayOfMonth, daysInMonth, endOfMonthStr, formatMoney, monthLabel, shiftMonth, todayMonthKey, todayStr } from "./format.js";
 
 export function AnalysisView({
+  balanceAlert,
+  onFixBalance,
+  onDismissBalance,
+  onDisableBalance,
   settings,
   transactions,
   selectedMonth,
@@ -146,6 +150,28 @@ export function AnalysisView({
     <div className="screen-stack">
       <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
       <NotifyNudge />
+
+      {balanceAlert && (
+        <div className="notice" style={{ borderColor: C.danger, background: "#FDF1EE", color: C.ink }}>
+          <div style={{ fontWeight: 800, marginBottom: 4 }}>Расхождение с банком · {{ sber: "Сбер", alfa: "Альфа", ozon: "Озон" }[balanceAlert.card] + " (" + cardLabel(settings, balanceAlert.card) + ")"}</div>
+          <div style={{ marginBottom: 8, fontSize: 13 }}>
+            В банке {formatMoney(balanceAlert.bank)}, в приложении {formatMoney(balanceAlert.app)}. Разница{" "}
+            {balanceAlert.diff > 0 ? "+" : "−"}
+            {formatMoney(Math.abs(balanceAlert.diff))}. Возможно, пропущена операция или не задан начальный остаток.
+          </div>
+          <div className="button-row" style={{ marginTop: 0 }}>
+            <button className="btn primary" type="button" onClick={onFixBalance}>
+              Добавить корректировку
+            </button>
+            <button className="btn" type="button" onClick={onDismissBalance}>
+              Понятно
+            </button>
+          </div>
+          <button type="button" className="small-note" style={{ marginTop: 8, background: "none", border: 0, padding: 0, textDecoration: "underline", cursor: "pointer" }} onClick={onDisableBalance}>
+            Не сверять {{ sber: "Сбер", alfa: "Альфа", ozon: "Озон" }[balanceAlert.card] + " (" + cardLabel(settings, balanceAlert.card) + ")"}
+          </button>
+        </div>
+      )}
 
       <InboxPanel
         pending={pending || []}
