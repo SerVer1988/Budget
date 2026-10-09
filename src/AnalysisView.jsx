@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { BankCard, BankCardDetail, TotalBalanceCard, TxRow } from "./cards.jsx";
 import { RecurringPanel } from "./RecurringPanel.jsx";
+import { PayPlanCard } from "./PayPlanCard.jsx";
 import { CategoryMonthsChart, ChartsCarousel, DailyExpenseChart, MonthCompareChart } from "./charts.jsx";
 import { NotifyNudge } from "./NotifyNudge.jsx";
 import { FundLoans } from "./FundLoans.jsx";
@@ -328,6 +329,8 @@ export function AnalysisView({
           )}
         </div>
       </BankCard>
+
+      {isCurrentMonth && <PayPlanCard transactions={transactions} settings={settings} />}
 
       <ChartsCarousel
         slides={[

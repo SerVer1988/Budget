@@ -142,6 +142,7 @@ const NOTE_TITLES = [
   [/^payday-countdown/, "До аванса"],
   [/^payday-distribute/, "Распределение дохода"],
   [/^forecast-/, "Прогноз до аванса"],
+  [/^plan-/, "План до выплаты"],
   [/^smart-/, "Баланс карты"],
   [/^debt-/, "Долги между бюджетами"],
   [/^cmp-/, "Расходы за месяц"],
@@ -152,7 +153,7 @@ const NOTE_TITLES = [
 
 function notePriority(n) {
   if (/^payday-/.test(n.id)) return 0;
-  if (/^forecast-/.test(n.id) || /^smart-/.test(n.id)) return 1;
+  if (/^forecast-/.test(n.id) || /^smart-/.test(n.id) || /^plan-/.test(n.id)) return 1;
   if (/^debt-/.test(n.id)) return 2;
   if (/^(cmp-|cat-)/.test(n.id)) return 3;
   if (/^(runway|savings-rule)/.test(n.id)) return 4;

@@ -2,6 +2,7 @@ import { C, FINANCE_TIPS, SMART_NOTE_THRESHOLD } from "./constants.js";
 import { computeRecurring } from "./recurring.js";
 import { comparisonPeriodText, computeForecast, computeMonthComparison, nextPaydayInfo, shortDate } from "./forecast.js";
 import { aggregateOpenDebts, computeIncomeSplit } from "./debts.js";
+import { computePayPlanInsights } from "./payplan.js";
 import { aggregateMonth, computeBalances, computeCategoryLimits, computeCumulativeAllocation, estimateAvgMonthlyNeeds } from "./finance.js";
 import { bucketName, bucketNameGen, cardLabel, dayOfMonth, dayOfYear, formatDateRu, formatMoney, needPctOf, ruPlural, todayMonthKey, todayStr } from "./format.js";
 
@@ -251,6 +252,7 @@ export function computeAllInsights(transactions, settings) {
 
   insights.push(...computeRecurringInsights(settings, today));
   insights.push(...computeForecastInsights(transactions, settings));
+  insights.push(...computePayPlanInsights(transactions, settings));
 
   ["sber", "alfa", "ozon"].forEach((card) => {
     const note = smartNotes[card];

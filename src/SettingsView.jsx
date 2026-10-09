@@ -1,6 +1,7 @@
 import { RecurringSettings } from "./RecurringSettings.jsx";
 import { Avatar, ProfileView } from "./ProfileView.jsx";
 import { profile } from "./storage.js";
+import { isMandatory } from "./payplan.js";
 import { InboxSettings } from "./InboxSettings.jsx";
 import React, { useState, useEffect, useRef } from "react";
 import {
@@ -106,7 +107,7 @@ export function CategoryPickerPanel({ cat, onChange }) {
   );
 }
 
-export function CategoryRow({ cat, open, onToggleOpen, onChange, onDelete }) {
+export function CategoryRow({ cat, open, onToggleOpen, onChange, onDelete, showMandatory }) {
   const Icon = getIcon(cat.icon);
 
   return (
@@ -142,6 +143,13 @@ export function CategoryRow({ cat, open, onToggleOpen, onChange, onDelete }) {
           <Trash2 size={14} />
         </button>
       </div>
+
+      {showMandatory && (
+        <label className="small-note" style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 2px 2px 48px", cursor: "pointer" }}>
+          <input type="checkbox" checked={isMandatory(cat)} onChange={(e) => onChange({ ...cat, mandatory: e.target.checked })} />
+          Обязательная (ЖКХ, алименты…): учитывается в плане до выплаты
+        </label>
+      )}
 
       {open && <CategoryPickerPanel cat={cat} onChange={onChange} />}
     </div>
@@ -363,6 +371,7 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
                   onToggleOpen={() => setOpenCatKey((k) => (k === `needs-${i}` ? null : `needs-${i}`))}
                   onChange={(next) => updateNeedCat(i, next)}
                   onDelete={() => setDraft((d) => ({ ...d, needCats: d.needCats.filter((_, k) => k !== i) }))}
+                  showMandatory
                 />
               ))}
             </div>

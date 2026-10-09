@@ -16,6 +16,7 @@ export function migrateCategoryList(list, defaults) {
       name: item.name || defaults[i]?.name || "Категория",
       icon: item.icon || defaults[i]?.icon || "HelpCircle",
       color: item.color || defaults[i]?.color || CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+      ...(typeof item.mandatory === "boolean" ? { mandatory: item.mandatory } : {}),
     };
   });
 }
