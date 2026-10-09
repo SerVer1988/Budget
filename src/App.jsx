@@ -604,7 +604,7 @@ export default function App() {
 
   function handleAutoDistribute() {
     if (!newIncomeTx) return;
-    const split = computeIncomeSplitWithDebts(newIncomeTx.amount, settings, transactions);
+    const split = computeIncomeSplitWithDebts(newIncomeTx.amount, settings, transactions, { date: newIncomeTx.date, incomeId: newIncomeTx.id, match: { date: newIncomeTx.date, amount: newIncomeTx.amount, card: newIncomeTx.card } });
     const sourceCard = newIncomeTx.card;
     const date = newIncomeTx.date;
 

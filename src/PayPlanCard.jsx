@@ -129,6 +129,19 @@ export function PayPlanCard({ transactions, settings }) {
             </>
           )}
 
+          {a && a.notes && a.notes.length > 0 && (
+            <div className="small-note" style={{ marginTop: 8 }}>
+              {a.monthPlan && (
+                <div style={{ marginBottom: 4, fontWeight: 700 }}>
+                  План месяца (≈ {formatMoney(Math.round(a.monthPlan.monthTotal))}): {needs} {formatMoney(Math.round(a.monthPlan.needTarget))}, {wants} {formatMoney(Math.round(a.monthPlan.wantTarget))}, {savings} {formatMoney(Math.round(a.monthPlan.saveTarget))}
+                </div>
+              )}
+              {a.notes.map((n, i) => (
+                <div key={i} style={{ marginBottom: 4 }}>{n}</div>
+              ))}
+            </div>
+          )}
+
           <div className="small-note" style={{ marginTop: 10, marginBottom: 0 }}>
             Суммы выплат и «обязательные» платежи берутся из ваших операций. Отметить категорию обязательной можно в настройках («Категории нужд»).
           </div>

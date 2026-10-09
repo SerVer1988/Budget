@@ -310,6 +310,31 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
         {ruleOpen && (
           <>
 
+        <div className="field">
+          <label>Режим распределения</label>
+          <div className="button-row" style={{ marginTop: 0 }}>
+            <button
+              type="button"
+              className={`btn${(draft.distMode || "payday") === "payday" ? " primary" : ""}`}
+              onClick={() => setDraft({ ...draft, distMode: "payday" })}
+            >
+              По выплате
+            </button>
+            <button
+              type="button"
+              className={`btn${draft.distMode === "month" ? " primary" : ""}`}
+              onClick={() => setDraft({ ...draft, distMode: "month" })}
+            >
+              По месяцу
+            </button>
+          </div>
+          <div className="small-note" style={{ marginTop: 6 }}>
+            {draft.distMode === "month"
+              ? "Проценты считаются от всего дохода за месяц. Каждую выплату приложение сначала отправляет в «Нужды» — столько, чтобы хватило до следующей выплаты (с обязательными платежами), затем в накопления и желания до плана месяца."
+              : "Каждая выплата делится по процентам сразу, в день зачисления."}
+          </div>
+        </div>
+
         <div className="form-grid-2">
           <div className="field">
             <label>{bucketName(draft, "wants")}, %</label>

@@ -1,6 +1,5 @@
 import { C } from "./constants.js";
 import { computeBalances } from "./finance.js";
-import { computeIncomeSplit } from "./debts.js";
 import { addDaysStr, shortDate } from "./forecast.js";
 import { bucketOf, dayOfMonth, daysInMonth, formatMoney, monthKeyOf, ruPlural, shiftMonth, todayStr } from "./format.js";
 
@@ -14,6 +13,13 @@ import { bucketOf, dayOfMonth, daysInMonth, formatMoney, monthKeyOf, ruPlural, s
 const MANDATORY_RE = /(жкх|коммунал|квартплат|алимент|аренд|ипотек|кредит|налог)/i;
 const VAR_WINDOW = 30; // темп «обычных» трат считаем по последним 30 дням
 const MIN_SPAN = 7; // меньше недели истории — план был бы случайным
+
+/* Обычное деление по процентам (то же, что computeIncomeSplit в debts.js, но без зависимости от него). */
+function pctSplit(amount, settings) {
+  const toOzon = amount * ((settings.savePct || 0) / 100);
+  const toAlfa = amount * ((settings.wantPct || 0) / 100);
+  return { toSber: amount - toOzon - toAlfa, toAlfa, toOzon };
+}
 
 const pad = (n) => String(n).padStart(2, "0");
 function parseDate(s) { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); }
@@ -171,6 +177,15 @@ function obligationsIn(transactions, settings, start, end, mandatory, today, inc
   return { items, total: items.reduce((s, i) => s + i.amount, 0) };
 }
 
+/* Нужды на один период: от start до ближайшей выплаты после start. */
+function needsForPeriod(ctx, start, includeOverdue) {
+  const nextP = paydayDates(ctx.settings, start, 1)[0];
+  if (!nextP) return null;
+  const days = daysBetween(start, nextP.date);
+  const obl = obligationsIn(ctx.transactions, ctx.settings, start, nextP.date, ctx.mandatory, ctx.today, includeOverdue);
+  return { start, end: nextP, days, obligations: obl.items, obligationsTotal: obl.total, total: obl.total + ctx.rate * days };
+}
+
 /* Что больше всего ушло в «Нуждах» в прошлом месяце. */
 function lastMonthTop(transactions, settings, today, mandatory) {
   const mk = shiftMonth(monthKeyOf(today), -1);
@@ -238,7 +253,21 @@ export function computePayPlan(transactions, settings, today = todayStr()) {
     const needNext = oblNext.total + v.rate * daysNext;
     const carry = have - need; // что перейдёт с этого периода (минус — придётся покрыть из выплаты)
     const after = { date: following.date, day: following.day, daysNext, obligations: oblNext.items, obligationsTotal: oblNext.total, needNext, expected, carry };
-    if (expected) {
+    if (expected && settings.distMode === "month") {
+      const m = computeMonthlySplit(expected, settings, transactions, { date: next.date, today, carry });
+      if (m) {
+        const rule = pctSplit(expected, settings);
+        Object.assign(after, {
+          toNeeds: Math.round(m.toSber),
+          toWants: Math.round(m.toAlfa),
+          toSavings: Math.round(m.toOzon),
+          byRule: { needs: Math.round(rule.toSber), wants: Math.round(rule.toAlfa), savings: Math.round(rule.toOzon) },
+          notes: m.notes,
+          monthPlan: m.plan,
+        });
+      }
+    }
+    if (expected && after.toNeeds == null) {
       const toNeeds = Math.min(expected, Math.max(0, ceil100(needNext - carry)));
       const rest = Math.max(0, expected - toNeeds);
       const wantPct = settings.wantPct || 0;
@@ -246,12 +275,115 @@ export function computePayPlan(transactions, settings, today = todayStr()) {
       const sum = wantPct + savePct;
       const toWants = sum > 0 ? Math.round((rest * wantPct) / sum / 100) * 100 : rest;
       const toSavings = Math.max(0, rest - toWants);
-      const rule = computeIncomeSplit(expected, settings);
+      const rule = pctSplit(expected, settings);
       Object.assign(after, { toNeeds, toWants, toSavings, byRule: { needs: Math.round(rule.toSber), wants: Math.round(rule.toAlfa), savings: Math.round(rule.toOzon) } });
     }
     plan.after = after;
   }
   return plan;
+}
+
+/* МЕСЯЧНОЕ ПЛАНИРОВАНИЕ: как распределить выплату amount, пришедшую в день date.
+   Порядок «сверху вниз»:
+   1) «Нужды» — столько, чтобы хватило до следующей выплаты (обязательные платежи + обычные траты), плюс то,
+      чего не покроет сама следующая выплата (например, маленький аванс перед крупными платежами);
+   2) «Подушка» — до месячного плана накоплений (процент от ожидаемого дохода за месяц);
+   3) «Желания» — до месячного плана желаний;
+   4) остаток — в «Подушку» (как непредвиденный бонус).
+   Возвращает { toSber, toAlfa, toOzon, mode: "month", notes, plan } или null, если данных мало
+   (тогда вызывающий код делит по процентам). opts: { date, today, incomeId, excludeIds, match, carry }. */
+export function computeMonthlySplit(amount, settings, transactions, opts = {}) {
+  const date = opts.date || todayStr();
+  const asOf = opts.today || date;
+  const exclude = new Set([...(opts.excludeIds || []), ...(opts.incomeId ? [opts.incomeId] : [])]);
+  const others = (transactions || []).filter((t) => !exclude.has(t.id));
+  // у только что внесённого дохода может ещё не быть id — тогда ищем его по дате, сумме и карте (amount добавляется ниже сам)
+  if (!opts.incomeId && opts.match) {
+    const m = opts.match;
+    let idx = -1;
+    others.forEach((t, i) => { if (t.type === "income" && t.date === m.date && t.amount === m.amount && (!m.card || t.card === m.card)) idx = i; });
+    if (idx >= 0) others.splice(idx, 1);
+  }
+  const mk = monthKeyOf(date);
+  const dim = daysInMonth(mk);
+  const payDays = [...new Set((settings.reminderDays && settings.reminderDays.length ? settings.reminderDays : [5, 15, 30]))];
+
+  // выплата ли это (дата рядом с одним из дней выплат)? иначе — обычное деление по процентам
+  const d = dayOfMonth(date);
+  const nearest = payDays.find((p) => Math.abs(d - Math.min(p, dim)) <= 3);
+  if (nearest == null) return null;
+
+  const mandatory = mandatoryNames(settings, others);
+  const v = variableSpending(others, settings, asOf, mandatory);
+  if (!v) return null;
+
+  const ctx = { transactions: others, settings, today: asOf, mandatory, rate: v.rate };
+  const p1 = needsForPeriod(ctx, date, date <= asOf);
+  if (!p1) return null;
+  const p2 = needsForPeriod(ctx, p1.end.date, false);
+  const p3 = p2 ? needsForPeriod(ctx, p2.end.date, false) : null;
+  const payouts = typicalPayouts(others, settings, asOf);
+  const payN1 = payouts[p1.end.day] || 0; // выплата, которая придёт в конце первого периода
+  const payN2 = p2 ? payouts[p2.end.day] || 0 : 0;
+
+  // сколько из текущей выплаты нужно «заранее»: следующая выплата может не покрыть свой период
+  const preFor3 = p3 && payN2 ? Math.max(0, p3.total - payN2) : 0;
+  const pre1 = p2 && payN1 ? Math.max(0, p2.total + preFor3 - payN1) : 0;
+  const required = p1.total + pre1;
+
+  const carry = typeof opts.carry === "number" ? opts.carry : computeBalances(others, settings, null).sber;
+  const toNeeds = Math.min(amount, Math.max(0, ceil100(required - carry)));
+
+  // план месяца: сколько ожидаем получить за календарный месяц выплаты
+  const inMonth = (t) => monthKeyOf(t.date) === mk;
+  const incomeSoFar = others.filter((t) => t.type === "income" && inMonth(t)).reduce((s, t) => s + t.amount, 0);
+  let futureExpected = 0;
+  payDays.forEach((p) => {
+    const dt = `${mk}-${pad(Math.min(p, dim))}`;
+    if (dt > date && nearest !== p) futureExpected += payouts[p] || 0;
+  });
+  const monthTotal = incomeSoFar + amount + futureExpected;
+  const savePct = settings.savePct || 0;
+  const wantPct = settings.wantPct || 0;
+  const saveTarget = (monthTotal * savePct) / 100;
+  const wantTarget = (monthTotal * wantPct) / 100;
+  const needTarget = monthTotal - saveTarget - wantTarget;
+
+  const inflow = (card) =>
+    others
+      .filter((t) => inMonth(t) && ((t.type === "transfer" && t.toCard === card) || (t.type === "income" && t.card === card)))
+      .reduce((s, t) => s + t.amount, 0);
+  const savedSoFar = inflow("ozon");
+  const wantsSoFar = inflow("alfa");
+
+  let rest = amount - toNeeds;
+  const remSave = Math.max(0, saveTarget - savedSoFar);
+  const remWant = Math.max(0, wantTarget - wantsSoFar);
+  let toSavings = Math.min(rest, ceil100(remSave));
+  rest -= toSavings;
+  let toWants = Math.min(rest, ceil100(remWant));
+  rest -= toWants;
+  toSavings += rest; // всё сверх плана — в накопления
+  toSavings = Math.max(0, amount - toNeeds - toWants);
+
+  const notes = [];
+  const endLabel = shortDate(p1.end.date);
+  notes.push(
+    `«Нужды»: до ${endLabel} нужно ≈ ${formatMoney(Math.round(p1.total))} (обязательные ${formatMoney(Math.round(p1.obligationsTotal))} и обычные траты ≈ ${formatMoney(Math.round(v.rate))} в день × ${p1.days})` +
+      (pre1 > 0 ? `, ещё ${formatMoney(Math.round(pre1))} заранее — следующая выплата не покроет весь свой период` : "") +
+      `. Уже на карте ${formatMoney(Math.round(carry))}.`
+  );
+  notes.push(`Накопления: по плану месяца ${formatMoney(Math.round(saveTarget))}, отложено ${formatMoney(Math.round(savedSoFar))}.`);
+  notes.push(`Желания: по плану месяца ${formatMoney(Math.round(wantTarget))}, уже выделено ${formatMoney(Math.round(wantsSoFar))}.`);
+
+  return {
+    toSber: toNeeds,
+    toAlfa: toWants,
+    toOzon: toSavings,
+    mode: "month",
+    notes,
+    plan: { monthTotal, needTarget, wantTarget, saveTarget, savedSoFar, wantsSoFar },
+  };
 }
 
 /* Заметки для уведомлений и ленты подсказок. */
