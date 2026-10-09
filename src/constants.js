@@ -139,6 +139,8 @@ export const DEFAULT_SETTINGS = {
   recurring: [],
   wantPct: 30,
   savePct: 20,
+  // Как распределять доход: "payday" — каждую выплату по процентам в день прихода; "month" — месячное планирование
+  distMode: "payday",
   reminderDays: [5, 15, 30],
   goal: 540000,
   openingBalance: { sber: 0, alfa: 0, ozon: 0 },

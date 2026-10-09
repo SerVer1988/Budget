@@ -1,5 +1,6 @@
 import { CARD_BUCKET, DEBT_PAYER_ORDER, DEBT_REPAY_CAP } from "./constants.js";
 import { bucketOf, uid } from "./format.js";
+import { computeMonthlySplit } from "./payplan.js";
 
 export function computeIncomeSplit(amount, settings) {
   const toOzon = amount * (settings.savePct / 100);
@@ -11,8 +12,13 @@ export function computeIncomeSplit(amount, settings) {
 /* Как обычный computeIncomeSplit, но если есть непогашенные "внутренние займы" между
    бюджетами — часть доли бакета-должника перенаправляется бакету-кредитору, пока долг
    не погасится. Возвращает ещё и repayments: сколько и по какому долгу ушло на погашение. */
-export function computeIncomeSplitWithDebts(amount, settings, transactions) {
-  const base = computeIncomeSplit(amount, settings);
+export function computeIncomeSplitWithDebts(amount, settings, transactions, opts) {
+  // Режим «По месяцу»: сначала нужды до следующей выплаты, потом накопления и желания до плана месяца.
+  // Если данных мало или это не день выплаты — обычное деление по процентам.
+  const monthly = settings.distMode === "month" ? computeMonthlySplit(amount, settings, transactions, opts || {}) : null;
+  const base = monthly || computeIncomeSplit(amount, settings);
+  const mode = monthly ? "month" : "payday";
+  const notes = monthly ? monthly.notes : [];
   const shareOf = { needs: base.toSber, wants: base.toAlfa, savings: base.toOzon };
 
   const activeDebts = (transactions || []).filter(
@@ -20,7 +26,7 @@ export function computeIncomeSplitWithDebts(amount, settings, transactions) {
   );
 
   if (activeDebts.length === 0) {
-    return { toSber: shareOf.needs, toAlfa: shareOf.wants, toOzon: shareOf.savings, repayments: [] };
+    return { toSber: shareOf.needs, toAlfa: shareOf.wants, toOzon: shareOf.savings, repayments: [], mode, notes };
   }
 
   const redirectedFrom = { needs: 0, wants: 0, savings: 0 };
@@ -45,7 +51,7 @@ export function computeIncomeSplitWithDebts(amount, settings, transactions) {
     repayments.push({ debtId: debt.id, amount: repay });
   });
 
-  return { toSber: shareOf.needs, toAlfa: shareOf.wants, toOzon: shareOf.savings, repayments };
+  return { toSber: shareOf.needs, toAlfa: shareOf.wants, toOzon: shareOf.savings, repayments, mode, notes };
 }
 
 /* ------------------------------------------------------------ внутренние долги, связанные с операциями

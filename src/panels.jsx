@@ -17,7 +17,7 @@ import { bucketName, bucketOf, cardLabel, clampPct, formatMoney, todayMonthKey }
 export function IncomeDistributionModal({ incomeTx, settings, transactions, onDistribute, onClose }) {
   if (!incomeTx) return null;
 
-  const split = computeIncomeSplitWithDebts(incomeTx.amount, settings, transactions);
+  const split = computeIncomeSplitWithDebts(incomeTx.amount, settings, transactions, { date: incomeTx.date, incomeId: incomeTx.id, match: { date: incomeTx.date, amount: incomeTx.amount, card: incomeTx.card } });
   const pctOf = (v) => (incomeTx.amount > 0 ? Math.round((v / incomeTx.amount) * 100) : 0);
   const hasRepayments = split.repayments.length > 0;
 
@@ -32,7 +32,7 @@ export function IncomeDistributionModal({ incomeTx, settings, transactions, onDi
             Поступило {formatMoney(incomeTx.amount)}
           </h3>
           <p style={{ fontSize: 13, color: C.inkMuted, margin: 0 }}>
-            {hasRepayments ? "Часть пойдёт на погашение долга:" : "Рекомендуем распределить:"}
+            {hasRepayments ? "Часть пойдёт на погашение долга:" : split.mode === "month" ? "Месячное планирование — рекомендуем распределить:" : "Рекомендуем распределить:"}
           </p>
         </div>
 
@@ -56,6 +56,14 @@ export function IncomeDistributionModal({ incomeTx, settings, transactions, onDi
             Пропорция временно изменена (вместо обычной): {split.repayments.map((r, i) => (
               <span key={r.debtId}>{i > 0 ? ", " : ""}{formatMoney(r.amount)} на погашение долга</span>
             ))}.
+          </div>
+        )}
+
+        {split.mode === "month" && split.notes.length > 0 && (
+          <div className="small-note" style={{ marginBottom: 16, textAlign: "left" }}>
+            {split.notes.map((n, i) => (
+              <div key={i} style={{ marginBottom: 4 }}>{n}</div>
+            ))}
           </div>
         )}
 
