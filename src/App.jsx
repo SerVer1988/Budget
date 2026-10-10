@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { storage, auth, household, inbox } from "./storage.js";
 import { learnMerchant } from "./bankParse.js";
-import { computeBalances } from "./finance.js";
+import { rememberOp } from "./dedupe.js";
 import { receivedParts } from "./InboxPanel.jsx";
 import cardNeedsImg from "./assets/card-needs.webp";
 import cardWantsImg from "./assets/card-wants.webp";
@@ -217,51 +217,9 @@ export default function App() {
     showToast("Данные восстановлены", { undo: () => { persistSettings(prevS); persistTransactions(prevT); } });
   }
 
-  // ---- Сверка остатка с банком: в уведомлении есть «Баланс/Остаток» → после внесения операции сравниваем
-  // с остатком в приложении и, если разошлись, предлагаем корректировку.
-  const [balanceAlert, setBalanceAlert] = useState(null);
-  const balanceCheckRef = useRef(null);
-  const lsRead = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
-  const lsWrite = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
-  const balanceOff = () => { try { return JSON.parse(lsRead("budget:balcheck-off") || "[]"); } catch { return []; } };
-
-  function queueBalanceCheck(card, bankBalance, receivedAt, ignoreIds) {
-    if (!["sber", "alfa", "ozon"].includes(card) || typeof bankBalance !== "number") return;
-    if (balanceOff().includes(card)) return;
-    // уведомление старее уже сверенного — остаток в нём устарел
-    const last = lsRead(`budget:balcheck-at:${card}`);
-    if (last && receivedAt && new Date(receivedAt) <= new Date(last)) return;
-    // в листе ожидания ещё лежат необработанные операции этого банка — остаток пока не сходится по определению
-    const others = (pending || []).filter((p) => !(ignoreIds || []).includes(p.id) && p.source === card);
-    if (others.length) return;
-    balanceCheckRef.current = { card, bankBalance, receivedAt };
-  }
-
-  useEffect(() => {
-    const job = balanceCheckRef.current;
-    if (!job) return;
-    balanceCheckRef.current = null;
-    const app = computeBalances(transactions, settings, todayStr())[job.card];
-    const diff = Math.round((job.bankBalance - app) * 100) / 100;
-    if (job.receivedAt) lsWrite(`budget:balcheck-at:${job.card}`, job.receivedAt);
-    if (Math.abs(diff) < 1) {
-      setBalanceAlert(null);
-      showToast("Остаток сошёлся с банком");
-    } else {
-      setBalanceAlert({ card: job.card, bank: job.bankBalance, app, diff });
-    }
-  }, [transactions]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function fixBalance() {
-    if (!balanceAlert) return;
-    addTransaction({ type: "adjustment", date: todayStr(), amount: balanceAlert.diff, card: balanceAlert.card, note: "Сверка с банком", hidden: false });
-    setBalanceAlert(null);
-  }
-
-  function disableBalanceCheck() {
-    if (!balanceAlert) return;
-    lsWrite("budget:balcheck-off", JSON.stringify([...new Set([...balanceOff(), balanceAlert.card])]));
-    setBalanceAlert(null);
+  // Корректировка баланса из листа ожидания (сверка остатка с банком — см. reconcile.js)
+  function fixBalance(card, diff) {
+    addTransaction({ type: "adjustment", date: todayStr(), amount: diff, card, note: "Сверка с банком", hidden: false });
   }
 
   // Лист ожидания: подтягиваем при запуске, при возвращении в приложение и раз в минуту.
@@ -286,7 +244,6 @@ export default function App() {
   function acceptPending(row, parsed) {
     if (!parsed.understood || parsed.type !== "expense" || !parsed.suggestion || !parsed.card) return;
     const { bucket, category } = parsed.suggestion;
-    queueBalanceCheck(parsed.card, parsed.balance, row.received_at, [row.id]);
     addTransaction({
       type: "expense",
       date: receivedParts(row.received_at).date,
@@ -298,6 +255,7 @@ export default function App() {
     });
     const learned = learnMerchant(settings, parsed.merchant, bucket, category);
     if (learned !== settings) persistSettings(learned);
+    rememberOp({ source: row.source, type: "expense", amount: parsed.amount, balance: parsed.balance, receivedAt: row.received_at });
     dropPending(row.id);
   }
 
@@ -318,6 +276,9 @@ export default function App() {
       toCard: p.in.parsed.card,
       note: "",
     });
+    [p.out, p.in].forEach((leg) =>
+      rememberOp({ source: leg.row.source, type: leg.parsed.type, amount: leg.parsed.amount, balance: leg.parsed.balance, receivedAt: leg.row.received_at })
+    );
     dropPending(p.out.row.id);
     dropPending(p.in.row.id);
   }
@@ -332,6 +293,7 @@ export default function App() {
       note: "",
       pendingId: p.out.row.id,
       pendingIds: [p.out.row.id, p.in.row.id],
+      opFps: [p.out, p.in].map((leg) => ({ source: leg.row.source, type: leg.parsed.type, amount: leg.parsed.amount, balance: leg.parsed.balance, receivedAt: leg.row.received_at })),
     });
   }
 
@@ -339,13 +301,11 @@ export default function App() {
   function finishPending(tx) {
     const pid = formInitial?.pendingId;
     if (!pid || formInitial?.editId) return;
-    if ((tx.type === "expense" || tx.type === "income") && tx.card) {
-      queueBalanceCheck(tx.card, formInitial.bankBalance, formInitial.bankReceivedAt, formInitial.pendingIds || [pid]);
-    }
     if (tx.type === "expense" && formInitial.merchant) {
       const learned = learnMerchant(settings, formInitial.merchant, tx.bucket, tx.category);
       if (learned !== settings) persistSettings(learned);
     }
+    (formInitial.opFps || (formInitial.opFp ? [formInitial.opFp] : [])).forEach((op) => rememberOp(op));
     (formInitial.pendingIds || [pid]).forEach((id) => dropPending(id));
   }
 
@@ -362,8 +322,7 @@ export default function App() {
       note: parsed.merchant || "",
       merchant: parsed.merchant || "",
       pendingId: row.id,
-      bankBalance: parsed.balance,
-      bankReceivedAt: row.received_at,
+      opFp: { source: row.source, type: parsed.type, amount: parsed.amount, balance: parsed.balance, receivedAt: row.received_at },
     });
   }
 
@@ -762,10 +721,8 @@ export default function App() {
             ) : pageIndex === 0 ? (
               <AnalysisView
                 onPostRecurring={postRecurring}
-                balanceAlert={balanceAlert}
                 onFixBalance={fixBalance}
-                onDismissBalance={() => setBalanceAlert(null)}
-                onDisableBalance={disableBalanceCheck}
+                onBalanceOk={(text) => showToast(text)}
                 pending={pending}
                 onAcceptPending={acceptPending}
                 onEditPending={editPending}

@@ -54,6 +54,9 @@ function translit(text) {
   return t;
 }
 
+// Неудавшаяся операция («Не прошла покупка …») — денег никто не списывал
+const FAILED_WORDS = /(не прошла|не прошёл|не прошел|отклонен|отказано|недостаточно средств|ошибка операции|declined)/i;
+
 // SMS с кодом подтверждения: операции ещё нет (это только запрос на подтверждение), записывать её нельзя
 const CODE_WORDS = /(никому не (?:сообщайте|говорите|передавайте)|не сообщайте|код подтвержд|(?:^|[^а-яё])код(?![а-яё])|пароль|одноразов|смс-?код|sms-?код)/i;
 
@@ -91,6 +94,10 @@ function findMerchant(text, afterIdx) {
   candidate = candidate.replace(/^(в|на|в\s+магазине|в\s+компании|для|от)\s+/i, "");
   if (candidate.length >= 2 && !/^\d+$/.test(candidate)) return candidate.slice(0, 60);
 
+  // «Покупка в PRICHAL. 182.40 RUR. Карта *1775 …» (Озон) — место стоит между «в» и точкой перед суммой
+  const inDot = /(?:покупка|оплата)\s+в\s+(.+?)\.\s+\d/i.exec(text);
+  if (inDot) return cleanMerchant(inDot[1]);
+
   // «Покупка: MAGNIT, 450.00 RUR» — место стоит между словом операции и суммой
   const between = /(?:покупка|оплата)[:\s]+([^,;\d]{2,40}?)\s*[,;]\s*\d/i.exec(text);
   if (between) return cleanMerchant(between[1]);
@@ -114,9 +121,9 @@ const CATEGORY_RULES = [
   { re: /(макдоналдс|mcdonald|kfc|burger|бургер|ресторан|кафе|cafe|coffee|кофе|starbucks|шоколадница|додо|dodo|пицца|pizza|суши|sushi|delivery club|деливери|яндекс\s*еда|самокат|вкусно|\bkafe\b|vypechka|выпечка|morozhennoe|мороженое|shaurma|шаурма|bufet|bulochnaya|булочная|sinor pomidor|sp_sev vorota|kitaika|ersh\b|dostavka sushi|chin-chin)/i, names: ["Кафе/рестораны", "Кафе и рестораны", "Кафе", "Рестораны", "Еда вне дома"] },
   { re: /(кино|cinema|kinopoisk|кинопоиск|театр|концерт|билет|ticket|ivi\b|okko|steam|playstation|игр|kinoteatr|кинокасса|kinokassa|kassa 2|bouling|боулинг|primnet bilety)/i, names: ["Кино/развлечения", "Развлечения", "Кино"] },
   { re: /(wildberries|вайлдберриз|ozon|озон маркет|lamoda|ламода|dns|днс|м\.видео|mvideo|eldorado|эльдорадо|zara|h&m|uniqlo|одежда|обувь|шоппинг)/i, names: ["Шоппинг", "Одежда", "Покупки"] },
-  { re: /(подписк|subscription|spotify|netflix|youtube|яндекс\s*плюс|yandex\s*plus|apple\.com|google\s*play|ivi|premier|starproai|redcom|рэдком|vk\*huawei|ozon premium)/i, names: ["Подписки"] },
+  { re: /(подписк|subscription|spotify|netflix|youtube|яндекс\s*плюс|yandex\s*plus|apple\.com|google\s*play|ivi|premier|starproai|yandex\s*\d*\s*plus|яндекс\s*плюс|redcom|рэдком|vk\*huawei|ozon premium)/i, names: ["Подписки"] },
   { re: /(tutorplace|репетитор|курсы|школа|университет|обучен)/i, names: ["Образование", "Учёба"] },
-  { re: /(produkty|ovoschi|frukty|ovoshchi|овощи|фрукты|samberi|самбери|белорское|belorskoe|dostavka pyaterochka)/i, names: ["Продукты", "Еда", "Питание"] },
+  { re: /(produkty|ovoschi|frukty|ovoshchi|овощи|фрукты|blizkij|близкий|prichal|причал|bristol|бристоль|samberi|самбери|белорское|belorskoe|dostavka pyaterochka)/i, names: ["Продукты", "Еда", "Питание"] },
   { re: /(arlekin|игрушк)/i, names: ["Дети"] },
   { re: /(sp_bigudi|парикмахер|барбер|салон красоты|маникюр)/i, names: ["Уход"] },
   { re: /(белый кролик|ветеринар|зоомагазин)/i, names: ["Животные"] },
@@ -214,6 +221,7 @@ export function parseBankText(raw, source, settings) {
     // служебные (вход, коды), рассылки и тексты без единой цифры — это не операции, в лист ожидания их не берём
     ignorable:
       CODE_WORDS.test(text) ||
+      FAILED_WORDS.test(text) ||
       (!understood && (!/\d/.test(text) || SERVICE_WORDS.test(text))) ||
       (PROMO_WORDS.test(text) && !OPERATION_WORDS.test(text)),
   };

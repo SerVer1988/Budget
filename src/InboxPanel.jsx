@@ -5,6 +5,8 @@ import { C } from "./constants.js";
 import { bucketName, cardLabel, formatMoney } from "./format.js";
 import { findTransferPairs, looksDuplicate, parseBankText } from "./bankParse.js";
 import { MONTHS_SHORT } from "./constants.js";
+import { duplicateIds, rememberOp } from "./dedupe.js";
+import { bankName, disableBank, findMismatches, ignoreMismatch, markOkNotified, recordBalance } from "./reconcile.js";
 
 const SOURCE_NAME = { sber: "Сбер", alfa: "Альфа", ozon: "Озон", other: "Банк" };
 
@@ -20,8 +22,9 @@ export function receivedParts(iso) {
 
 /* «Лист ожидания»: уведомления банков, которые ещё не стали операциями.
    ✓ — внести как есть (если угадана категория), ✎ — открыть форму и поправить, ✕ — убрать. */
-export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, onDismiss, onAcceptTransfer, onEditTransfer, onDismissTransfer }) {
+export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, onDismiss, onAcceptTransfer, onEditTransfer, onDismissTransfer, onFixBalance, onBalanceOk }) {
   const [open, setOpen] = useState({}); // id записи → показан исходный текст
+  const [balVer, setBalVer] = useState(0); // перерисовать после «убрать расхождение»
   const rows = useMemo(
     () =>
       pending.map((row) => {
@@ -32,22 +35,41 @@ export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, 
     [pending, settings, transactions]
   );
 
-  // Служебные уведомления (вход в приложение, коды) убираем сами: денег в них нет.
+  // Повторы: та же операция пришла и SMS, и push (или дважды подряд) — оставляем одну, самую подробную.
+  const dupIds = useMemo(() => duplicateIds(rows), [rows]);
+
+  // Служебные уведомления (вход в приложение, коды) и повторы убираем сами: денег в них нет / операция уже есть.
   const dismissedRef = useRef(new Set());
   useEffect(() => {
     rows.forEach((r) => {
-      if (r.parsed.ignorable && !dismissedRef.current.has(r.row.id)) {
+      if ((r.parsed.ignorable || dupIds.has(r.row.id)) && !dismissedRef.current.has(r.row.id)) {
         dismissedRef.current.add(r.row.id);
         onDismiss(r.row);
       }
     });
-  }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rows, dupIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Перевод между своими картами = два уведомления (списано + поступило): показываем одной строкой.
-  const pairs = useMemo(() => findTransferPairs(rows), [rows]);
+  const visible = useMemo(() => rows.filter((r) => !r.parsed.ignorable && !dupIds.has(r.row.id)), [rows, dupIds]);
+  const pairs = useMemo(() => findTransferPairs(visible), [visible]);
   const pairedIds = new Set(pairs.flatMap((p) => [p.out.row.id, p.in.row.id]));
-  const singles = rows.filter((r) => !pairedIds.has(r.row.id) && !r.parsed.ignorable);
-  const total = singles.length + pairs.length;
+  const singles = visible.filter((r) => !pairedIds.has(r.row.id));
+
+  // Остатки банков из уведомлений: запоминаем и сверяем с остатком в приложении.
+  const { mismatches, matched } = useMemo(() => {
+    rows.forEach((r) => {
+      if (r.parsed.balance != null && r.parsed.card) recordBalance(r.parsed.card, r.parsed.balance, r.row.received_at);
+    });
+    return findMismatches({ rows: visible, transactions, settings });
+  }, [rows, visible, transactions, settings, balVer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    matched.forEach((m) => {
+      if (markOkNotified(m.card, m.at) && onBalanceOk) onBalanceOk(`Остаток ${bankName(m.card)} сошёлся с банком`);
+    });
+  }, [matched]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const total = singles.length + pairs.length + mismatches.length;
 
   if (!total) return null;
 
@@ -73,6 +95,38 @@ export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, 
                   <Pencil size={14} />
                 </button>
                 <button type="button" className="btn" aria-label="Убрать перевод" style={{ width: 34, height: 32, padding: 0 }} onClick={() => onDismissTransfer(p)}>
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        {mismatches.map((m) => {
+          const plus = m.diff > 0;
+          return (
+            <div className="fc-row" key={`bal-${m.card}`} style={{ alignItems: "flex-start" }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="fc-name">Корректировка баланса · {bankName(m.card)}</div>
+                <div className="fc-sub">
+                  В банке {formatMoney(m.bank)}, в приложении {formatMoney(m.expected)}. Возможно, пропущена операция или не задан начальный остаток.
+                </div>
+                <button
+                  type="button"
+                  className="fc-sub"
+                  style={{ background: "none", border: 0, padding: 0, textDecoration: "underline", cursor: "pointer" }}
+                  onClick={() => { disableBank(m.card); setBalVer((v) => v + 1); }}
+                >
+                  Не сверять {bankName(m.card)}
+                </button>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "0 0 auto" }}>
+                <span className="fc-val mono" style={{ color: plus ? C.sber : C.danger }}>
+                  {plus ? "+" : "−"}{formatMoney(Math.abs(m.diff))}
+                </span>
+                <button type="button" className="btn primary" aria-label="Добавить корректировку" title="Добавить корректировку" style={{ width: 34, height: 32, padding: 0 }} onClick={() => onFixBalance && onFixBalance(m.card, m.diff)}>
+                  <Check size={15} />
+                </button>
+                <button type="button" className="btn" aria-label="Убрать" title="Убрать" style={{ width: 34, height: 32, padding: 0 }} onClick={() => { ignoreMismatch(m.card, m.at); setBalVer((v) => v + 1); }}>
                   <X size={15} />
                 </button>
               </div>
@@ -126,7 +180,10 @@ export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, 
                 <button type="button" className="btn" aria-label="Править" style={{ width: 34, height: 32, padding: 0 }} onClick={() => onEdit(row, parsed)}>
                   <Pencil size={14} />
                 </button>
-                <button type="button" className="btn" aria-label="Убрать" style={{ width: 34, height: 32, padding: 0 }} onClick={() => onDismiss(row)}>
+                <button type="button" className="btn" aria-label="Убрать" style={{ width: 34, height: 32, padding: 0 }} onClick={() => {
+                  if (parsed.understood) rememberOp({ source: row.source, type: parsed.type, amount: parsed.amount, balance: parsed.balance, receivedAt: row.received_at });
+                  onDismiss(row);
+                }}>
                   <X size={15} />
                 </button>
               </div>
