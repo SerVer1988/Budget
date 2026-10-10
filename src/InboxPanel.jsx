@@ -3,10 +3,10 @@ import { Check, Pencil, X } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
 import { bucketName, cardLabel, formatMoney } from "./format.js";
-import { findTransferPairs, looksDuplicate, parseBankText } from "./bankParse.js";
+import { findTransferPairs, inferFromBalance, looksDuplicate, parseBankText } from "./bankParse.js";
 import { MONTHS_SHORT } from "./constants.js";
 import { duplicateIds, rememberOp } from "./dedupe.js";
-import { bankName, disableBank, findMismatches, ignoreMismatch, markOkNotified, recordBalance } from "./reconcile.js";
+import { bankName, disableBank, findMismatches, ignoreMismatch, markOkNotified, previousBalance, recordBalance } from "./reconcile.js";
 
 const SOURCE_NAME = { sber: "Сбер", alfa: "Альфа", ozon: "Озон", other: "Банк" };
 
@@ -28,7 +28,13 @@ export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, 
   const rows = useMemo(
     () =>
       pending.map((row) => {
-        const parsed = parseBankText(row.raw_text, row.source, settings);
+        let parsed = parseBankText(row.raw_text, row.source, settings);
+        // нет суммы, но есть остаток — считаем операцию по разнице с прошлым остатком этого банка
+        if (!parsed.understood && !parsed.ignorable && parsed.balance != null && parsed.card) {
+          const prev = previousBalance(parsed.card, row.received_at);
+          const inferred = prev ? inferFromBalance(parsed, prev.b) : null;
+          if (inferred) parsed = inferred;
+        }
         const when = receivedParts(row.received_at);
         return { row, parsed, when, dup: looksDuplicate(parsed, when.date, transactions) };
       }),
@@ -157,6 +163,7 @@ export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, 
                   {title}
                 </div>
                 <div className="fc-sub">{sub}</div>
+                {parsed.inferred && <div className="fc-sub">{parsed.inferNote}. Проверьте.</div>}
                 {(!parsed.understood || open[row.id]) && (
                   <div className="fc-sub" style={{ marginTop: 2, wordBreak: "break-word" }}>{open[row.id] ? row.raw_text : row.raw_text.slice(0, 110)}</div>
                 )}

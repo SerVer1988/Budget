@@ -244,6 +244,25 @@ export function looksDuplicate(parsed, receivedDate, transactions) {
    тексте есть слова про перевод или пополнение (чтобы не склеить случайное совпадение сумм у покупок).
    items — [{ row, parsed }]. Возвращает [{ out, in, amount }] (out и in — элементы items). */
 const TRANSFER_WORDS = /(перевод|пополнен|поступлен|зачислен)/i;
+/* Уведомление без суммы операции, но с остатком («Остаток: 12 306,4 ₽; ··2768» — у Альфы сумма стоит в заголовке push,
+   который не всегда доходит). Если известен прошлый остаток, сумму можно вычислить по разнице:
+   — остаток не изменился → это повтор уже учтённого, игнорируем;
+   — изменился → операция на эту разницу (рост — поступление, падение — расход), помечаем «по остатку». */
+export function inferFromBalance(parsed, prevBalance) {
+  if (parsed.understood || parsed.ignorable || parsed.balance == null || typeof prevBalance !== "number") return null;
+  const delta = Math.round((parsed.balance - prevBalance) * 100) / 100;
+  if (Math.abs(delta) < 0.01) return { ...parsed, ignorable: true };
+  const fmt = (n) => n.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₽";
+  return {
+    ...parsed,
+    type: delta > 0 ? "income" : "expense",
+    amount: Math.abs(delta),
+    understood: true,
+    inferred: true,
+    inferNote: `Сумма посчитана по остатку: было ${fmt(prevBalance)}, стало ${fmt(parsed.balance)}`,
+  };
+}
+
 export function findTransferPairs(items, windowMinutes = 10) {
   const used = new Set();
   const pairs = [];

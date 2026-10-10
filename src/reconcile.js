@@ -7,6 +7,9 @@ import { computeBalances } from "./finance.js";
 
 const CARDS = ["sber", "alfa", "ozon"];
 const REC_KEY = "budget:lastbal:"; // + банк → { b, at }
+const HIST_KEY = "budget:balhist:"; // + банк → [{ b, at }] последние остатки (для расчёта суммы по разнице остатков)
+const HIST_MAX = 30;
+const HIST_FRESH_MS = 14 * 24 * 3600 * 1000;
 const IGN_KEY = "budget:balcheck-ign"; // { банк: время остатка, который пользователь убрал }
 const OFF_KEY = "budget:balcheck-off"; // [банки, которые не сверяем]
 const OK_KEY = "budget:balcheck-ok"; // { банк: время остатка, о совпадении которого уже сказали }
@@ -37,9 +40,29 @@ export function recordBalance(card, balance, atIso) {
   if (!CARDS.includes(card) || typeof balance !== "number" || !Number.isFinite(balance)) return;
   const at = Date.parse(atIso);
   if (!at) return;
+  const iso = new Date(at).toISOString();
+  const hist = lsJson(HIST_KEY + card, []);
+  if (!hist.some((h) => h.at === iso && h.b === balance)) {
+    hist.push({ b: balance, at: iso });
+    hist.sort((x, y) => Date.parse(x.at) - Date.parse(y.at));
+    lsSet(HIST_KEY + card, JSON.stringify(hist.slice(-HIST_MAX)));
+  }
   const cur = lsJson(REC_KEY + card, null);
   if (cur && Date.parse(cur.at) > at) return;
-  lsSet(REC_KEY + card, JSON.stringify({ b: balance, at: new Date(at).toISOString() }));
+  lsSet(REC_KEY + card, JSON.stringify({ b: balance, at: iso }));
+}
+
+/* Последний известный остаток банка строго до момента atIso (или null, если не было или слишком давно). */
+export function previousBalance(card, atIso) {
+  const at = Date.parse(atIso);
+  if (!at) return null;
+  const hist = lsJson(HIST_KEY + card, []);
+  let best = null;
+  hist.forEach((h) => {
+    const t = Date.parse(h.at);
+    if (t < at - 500 && at - t <= HIST_FRESH_MS && (!best || t > Date.parse(best.at))) best = h;
+  });
+  return best;
 }
 
 /* Убрать расхождение: не показывать его, пока не придёт более новый остаток. */
