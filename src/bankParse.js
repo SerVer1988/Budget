@@ -3,7 +3,7 @@
    поправит в листе ожидания. Распознаём: направление (расход/доход), сумму, место покупки, предложение категории. */
 
 // \\b в JS не видит кириллицу как «слово», поэтому конец слова проверяем явным списком букв
-const CUR = "(?:₽|руб(?:\\.|лей|ля|ль)?|р\\.?|RUB|RUR)(?![A-Za-zА-Яа-яЁё])";
+const CUR = "(?:₽|руб(?:\\.|лей|ля|ль)?|[рr]\\.?|RUB|RUR)(?![A-Za-zА-Яа-яЁё])";
 // число вида «1 250,50», «850», «12345.67» (пробелы и неразрывные пробелы — разделители тысяч)
 const NUM = "(\\d{1,3}(?:[\\s\\u00a0\\u202f]\\d{3})+(?:[.,]\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)";
 const AMOUNT_RE = new RegExp(NUM + "\\s*" + CUR, "gi");
@@ -11,14 +11,51 @@ const AMOUNT_RE = new RegExp(NUM + "\\s*" + CUR, "gi");
 const BALANCE_RE = new RegExp("(?:баланс|остаток|доступно|available|balance)[^\\d]{0,14}" + NUM + "\\s*" + CUR, "i");
 const BALANCE_BEFORE = /(баланс|остаток|доступно|у вас ещ[её]|на счёте|на счете|available|balance)[^\d]{0,14}$/i;
 
-const EXPENSE_WORDS = /(покупк|оплат|списани|снятие|платёж|платеж|расход|перевод\s+(?:на|клиенту)|purchase|payment)/i;
-const INCOME_WORDS = /(зачислен|поступлен|пополнен|зарплат|аванс|возврат|кэшбэк|кешбэк|перевод\s+от|входящий\s+перевод|получен|deposit|refund)/i;
+const EXPENSE_WORDS = /(покупк|оплат|списани|снятие|выдач|платёж|платеж|расход|перевод(?!\s+(?:от|из)(?![а-яё]))|purchase|payment)/i;
+const INCOME_WORDS = /(отмен\S*\s+(?:покупк|оплат|операци)|зачислен|поступлен|пополнен|зарплат|аванс|возврат|кэшбэк|кешбэк|перевод\s+от|входящий\s+перевод|получен|deposit|refund)/i;
 
 const SERVICE_WORDS = /(вход в (?:сбербанк|сбер|альфа|озон|ozon|приложение)|никому не сообщ|одноразов|код подтвержд|пароль|не сообщайте|если входили не вы|вы вошли)/i;
 
 // Рекламные и информационные рассылки банков («Кэшбэк, доход от накоплений… как получать больше 👉»)
 const PROMO_WORDS = /(👉|подсказк|рекомендаци|как получать|узнайте|узнать больше|подробнее|подключите|подключи\b|оформите|откройте вклад|специальн\S* предложен|предложение для вас|акци[яию]|скидк|приглашаем|только сегодня|ознакомьтесь|получите больше|заработайте|советуем)/i;
 const OPERATION_WORDS = /(покупк|оплат|списани|зачислен|поступлен|пополнен|снятие|платёж|платеж|перевод|purchase|payment)/i;
+
+// SMS часто приходят латиницей («Pokupka 450r MAGNIT Balans: 1000r») — переводим ключевые слова в привычный вид
+const TRANSLIT = [
+  [/nikomu\s+ne\s+(?:soobshchayte|soobschayte|soobshaite|govorite|peredavayte|soobshite)/gi, "никому не сообщайте"],
+  [/perevod\s+ot\b/gi, "перевод от"],
+  [/perevod\s+iz\b/gi, "перевод из"],
+  [/perevod\s+na\b/gi, "перевод на"],
+  [/\bperevod\w*/gi, "перевод"],
+  [/\bpokupk\w*/gi, "покупка"],
+  [/\boplat\w*/gi, "оплата"],
+  [/\bspisani\w*/gi, "списание"],
+  [/\bsnyat\w*/gi, "снятие"],
+  [/\bvydach\w*/gi, "выдача"],
+  [/\bpostuplen\w*/gi, "поступление"],
+  [/\bzachislen\w*/gi, "зачисление"],
+  [/\bpopolnen\w*/gi, "пополнение"],
+  [/\bvozvrat\w*/gi, "возврат"],
+  [/\botmena\b/gi, "отмена"],
+  [/\bdostupno\b/gi, "доступно"],
+  [/\bbalans\w*/gi, "баланс"],
+  [/\bostatok\b/gi, "остаток"],
+  [/\bkarta\b/gi, "карта"],
+  [/\bschet\b/gi, "счёт"],
+  [/\bkod\b/gi, "код"],
+  [/\bparol\w*/gi, "пароль"],
+  [/\bzarplat\w*/gi, "зарплата"],
+  [/\bkeshbek\b|\bcashback\b/gi, "кэшбэк"],
+  [/\bplatezh\w*|\bplatyozh\w*/gi, "платёж"],
+];
+function translit(text) {
+  let t = text;
+  for (const [re, to] of TRANSLIT) t = t.replace(re, to);
+  return t;
+}
+
+// SMS с кодом подтверждения: операции ещё нет (это только запрос на подтверждение), записывать её нельзя
+const CODE_WORDS = /(никому не (?:сообщайте|говорите|передавайте)|не сообщайте|код подтвержд|(?:^|[^а-яё])код(?![а-яё])|пароль|одноразов|смс-?код|sms-?код)/i;
 
 function toNumber(s) {
   return parseFloat(s.replace(/[\s\u00a0\u202f]/g, "").replace(",", "."));
@@ -48,11 +85,15 @@ function cleanMerchant(s) {
 /* Место покупки: слова после суммы до «Баланс/Доступно/Карта/…», либо «в <место>» перед суммой. */
 function findMerchant(text, afterIdx) {
   const tail = text.slice(afterIdx).replace(/^[\s,.:;·|\-–—]+/, "");
-  const stop = /(баланс|остаток|доступно|у вас ещ[её]|сч[её]т\s+карты|сч[её]т\b|карта|карт[аы]\s*\*|\s\*\d{2,4}|[•·]{2}|available|balance|\bmir\b|мир\s|visa|mastercard|\d{1,2}:\d{2}|[·|]|\.\s|$)/i;
+  const stop = /(баланс|остаток|доступно|у вас ещ[её]|сч[её]т\s+карты|сч[её]т\b|карта|карт[аы]\s*\*|\s\*\d{2,4}|[•·]{2}|available|balance|\bmir\b|мир\s|visa|mastercard|\d{1,2}:\d{2}|\d{2}\.\d{2}\.\d{2,4}|[·|]|\.\s|$)/i;
   const m = stop.exec(tail);
   let candidate = cleanMerchant(m ? tail.slice(0, m.index) : tail);
   candidate = candidate.replace(/^(в|на|в\s+магазине|в\s+компании|для|от)\s+/i, "");
   if (candidate.length >= 2 && !/^\d+$/.test(candidate)) return candidate.slice(0, 60);
+
+  // «Покупка: MAGNIT, 450.00 RUR» — место стоит между словом операции и суммой
+  const between = /(?:покупка|оплата)[:\s]+([^,;\d]{2,40}?)\s*[,;]\s*\d/i.exec(text);
+  if (between) return cleanMerchant(between[1]);
 
   // «Оплата в Магнит на 450 ₽»
   const before = /(?:в|на)\s+[«"]?([^«»"\d,.;:]{2,40}?)[»"]?\s+(?:на\s+(?:сумму\s+)?)?\d/i.exec(text);
@@ -63,7 +104,7 @@ function findMerchant(text, afterIdx) {
 /* Правила предложения категории: по ключевым словам в названии места. names — возможные названия
    категории у пользователя (берётся первое, что реально есть в его списках). */
 const CATEGORY_RULES = [
-  { re: /(магнит|пятерочка|пятёрочка|pyaterochka|5ka|перекресток|perekrestok|лента\b|ашан|auchan|вкусвилл|vkusvill|дикси|dixy|\bspar\b|азбука вкуса|окей|globus|гипермаркет|супермаркет|продукт|продукты)/i, names: ["Продукты", "Еда", "Питание"] },
+  { re: /(магнит|magnit|lenta|пятерочка|пятёрочка|pyaterochka|5ka|перекресток|perekrestok|лента\b|ашан|auchan|вкусвилл|vkusvill|дикси|dixy|\bspar\b|азбука вкуса|окей|globus|гипермаркет|супермаркет|продукт|продукты)/i, names: ["Продукты", "Еда", "Питание"] },
   { re: /(метро|такси|taxi|яндекс\s*go|yandex\s*go|uber|\bgett\b|транспорт|автобус|трамвай|тройка|mosgortrans|азс|lukoil|лукойл|газпромнефть|rosneft|роснефть|shell|парковк|каршеринг|delimobil|делимобиль|ржд|rzd|аэроэкспресс|transport khab|т-карта|транспортная карта|транспорт хабаровск|yandex\*\d+\*go)/i, names: ["Транспорт", "Такси", "Авто", "Дорога"] },
   { re: /(мтс|mts|билайн|beeline|мегафон|megafon|tele2|теле2|yota|ростелеком|rostelecom|интернет|связь)/i, names: ["Связь", "Интернет", "Телефон"] },
   { re: /(аптека|apteka|ригла|rigla|здравсити|36\.6|клиника|медицин|стоматолог|лаборатори|invitro|инвитро|гемотест|farma|фарма|farm-torg|asteri|aptechnoe|semejnaya|аптекарь)/i, names: ["Лекарства/здоровье", "Здоровье", "Лекарства"] },
@@ -123,7 +164,7 @@ export function learnMerchant(settings, merchant, bucket, category) {
 /* Главная функция. source: sber | alfa | ozon | other. Возвращает:
    { type: "expense"|"income", amount, merchant, card, suggestion, understood } */
 export function parseBankText(raw, source, settings) {
-  const text = String(raw || "").replace(/\s+/g, " ").trim();
+  const text = translit(String(raw || "").replace(/\s+/g, " ").trim());
   const card = source === "alfa" ? "alfa" : source === "ozon" ? "ozon" : source === "sber" ? "sber" : null;
 
   // сумма: первая «число + валюта», перед которой не стоит «Баланс/Доступно/Остаток»
@@ -172,6 +213,7 @@ export function parseBankText(raw, source, settings) {
     // «Вход в СберБанк Онлайн…», коды, пароли: денег в них нет, показывать в листе ожидания незачем
     // служебные (вход, коды), рассылки и тексты без единой цифры — это не операции, в лист ожидания их не берём
     ignorable:
+      CODE_WORDS.test(text) ||
       (!understood && (!/\d/.test(text) || SERVICE_WORDS.test(text))) ||
       (PROMO_WORDS.test(text) && !OPERATION_WORDS.test(text)),
   };
