@@ -9,7 +9,8 @@ const KEEP_MS = 12 * 3600 * 1000;
 const KEY = "budget:seen-ops";
 
 function same(a, b) {
-  if (a.s !== b.s || a.t !== b.t || Math.abs(a.a - b.a) >= 0.005) return false;
+  // направление сравниваем, только если оно известно у обеих копий (у push без заголовка оно может быть угадано неверно)
+  if (a.s !== b.s || (a.c && b.c && a.t !== b.t) || Math.abs(a.a - b.a) >= 0.005) return false;
   const dt = Math.abs(a.at - b.at);
   if (a.b != null && b.b != null) return Math.abs(a.b - b.b) < 0.005 && dt <= SAME_BALANCE_WINDOW;
   return dt <= NO_BALANCE_WINDOW;
@@ -22,13 +23,14 @@ function fingerprint(r) {
     a: r.parsed.amount,
     b: typeof r.parsed.balance === "number" ? r.parsed.balance : null,
     at: Date.parse(r.row.received_at) || 0,
+    c: r.parsed.typeSource !== "default", // направление известно наверняка
   };
 }
 
 // чем больше сведений в записи, тем лучше её оставить
 function score(r) {
   const p = r.parsed;
-  return (p.merchant ? 4 : 0) + (p.balance != null ? 2 : 0) + (p.suggestion ? 1 : 0);
+  return (p.typeSource !== "default" ? 8 : 0) + (p.merchant ? 4 : 0) + (p.balance != null ? 2 : 0) + (p.suggestion ? 1 : 0);
 }
 
 function loadSeen() {
@@ -52,6 +54,7 @@ export function rememberOp(op) {
       a: Number(op.amount),
       b: typeof op.balance === "number" ? op.balance : null,
       at: Date.parse(op.receivedAt) || Date.now(),
+      c: true, // внесённую пользователем операцию считаем подтверждённой
     });
     localStorage.setItem(KEY, JSON.stringify(list.slice(-200)));
   } catch {

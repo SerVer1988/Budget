@@ -6,7 +6,7 @@
 const CUR = "(?:₽|руб(?:\\.|лей|ля|ль)?|[рr]\\.?|RUB|RUR)(?![A-Za-zА-Яа-яЁё])";
 // число вида «1 250,50», «850», «12345.67» (пробелы и неразрывные пробелы — разделители тысяч)
 const NUM = "(\\d{1,3}(?:[\\s\\u00a0\\u202f]\\d{3})+(?:[.,]\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)";
-const AMOUNT_RE = new RegExp(NUM + "\\s*" + CUR, "gi");
+const AMOUNT_RE = new RegExp("(?<![\\d:])" + NUM + "\\s*" + CUR, "gi");
 // «Баланс: 1000р», «Остаток: 18 287,36 ₽», «Доступно 421 ₽» — остаток по карте после операции
 const BALANCE_RE = new RegExp("(?:баланс|остаток|доступно|available|balance)[^\\d]{0,14}" + NUM + "\\s*" + CUR, "i");
 const BALANCE_BEFORE = /(баланс|остаток|доступно|у вас ещ[её]|на счёте|на счете|available|balance)[^\d]{0,14}$/i;
@@ -197,9 +197,16 @@ export function parseBankText(raw, source, settings) {
   // 1) «−» перед суммой — расход, «+» — доход; 2) без знака смотрим на слова;
   // 3) нет ни знака, ни слов расхода — считаем доходом.
   let type;
-  if (sign === "+") type = "income";
-  else if (sign === "-") type = "expense";
-  else type = iEx >= 0 && (iIn < 0 || iEx < iIn) ? "expense" : "income";
+  let typeSource; // откуда известно направление: знак, слова или «по умолчанию» (ничего не нашли)
+  if (sign === "+") { type = "income"; typeSource = "sign"; }
+  else if (sign === "-") { type = "expense"; typeSource = "sign"; }
+  else if (iEx >= 0 || iIn >= 0) { type = iEx >= 0 && (iIn < 0 || iEx < iIn) ? "expense" : "income"; typeSource = "words"; }
+  else {
+    // ни знака, ни слов: у Сбера так приходит текст push без заголовка («MIR-3104 13:26 635р Баланс…»), это почти всегда покупка;
+    // у остальных банков — доход. Дальше направление уточняется по изменению остатка (см. refineDirection).
+    type = card === "sber" ? "expense" : "income";
+    typeSource = "default";
+  }
 
   let merchant = amount != null ? findMerchant(text, amountEnd) : "";
   // «Списание со счета…», «Получатель: …» — это не название места, а служебные слова банка
@@ -210,6 +217,7 @@ export function parseBankText(raw, source, settings) {
   const bm = BALANCE_RE.exec(text);
   const balance = bm ? toNumber(bm[1]) : null;
   return {
+    typeSource,
     balance: Number.isFinite(balance) ? balance : null, // остаток у банка после этой операции (для сверки)
     type,
     amount: understood ? amount : null,
@@ -261,6 +269,21 @@ export function inferFromBalance(parsed, prevBalance) {
     inferred: true,
     inferNote: `Сумма посчитана по остатку: было ${fmt(prevBalance)}, стало ${fmt(parsed.balance)}`,
   };
+}
+
+/* Направление по изменению остатка. Нужно, когда в тексте нет ни знака, ни слов («MIR-3104 13:26 635р Баланс: 3182р»):
+   остаток упал на сумму операции — расход, вырос — доход. */
+export function refineDirection(parsed, prevBalance) {
+  if (!parsed.understood || parsed.typeSource !== "default" || parsed.balance == null || typeof prevBalance !== "number") return parsed;
+  const delta = parsed.balance - prevBalance;
+  const tol = 1.5;
+  let type = null;
+  if (Math.abs(delta - parsed.amount) <= tol) type = "income";
+  else if (Math.abs(delta + parsed.amount) <= tol) type = "expense";
+  else if (Math.abs(delta) >= 1) type = delta > 0 ? "income" : "expense";
+  if (!type) return parsed;
+  const fmt = (n) => n.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + " ₽";
+  return { ...parsed, type, typeSource: "balance", directionNote: `Направление определено по остатку: было ${fmt(prevBalance)}, стало ${fmt(parsed.balance)}` };
 }
 
 export function findTransferPairs(items, windowMinutes = 10) {

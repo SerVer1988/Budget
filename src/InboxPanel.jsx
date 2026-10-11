@@ -3,7 +3,7 @@ import { Check, Pencil, X } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
 import { bucketName, cardLabel, formatMoney } from "./format.js";
-import { findTransferPairs, inferFromBalance, looksDuplicate, parseBankText } from "./bankParse.js";
+import { findTransferPairs, inferFromBalance, looksDuplicate, parseBankText, refineDirection } from "./bankParse.js";
 import { MONTHS_SHORT } from "./constants.js";
 import { duplicateIds, rememberOp } from "./dedupe.js";
 import { bankName, disableBank, findMismatches, ignoreMismatch, markOkNotified, previousBalance, recordBalance } from "./reconcile.js";
@@ -34,6 +34,10 @@ export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, 
           const prev = previousBalance(parsed.card, row.received_at);
           const inferred = prev ? inferFromBalance(parsed, prev.b) : null;
           if (inferred) parsed = inferred;
+        } else if (parsed.understood && parsed.typeSource === "default" && parsed.balance != null && parsed.card) {
+          // направление не видно из текста — смотрим, куда сдвинулся остаток
+          const prev = previousBalance(parsed.card, row.received_at);
+          if (prev) parsed = refineDirection(parsed, prev.b);
         }
         const when = receivedParts(row.received_at);
         return { row, parsed, when, dup: looksDuplicate(parsed, when.date, transactions) };
@@ -164,6 +168,7 @@ export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, 
                 </div>
                 <div className="fc-sub">{sub}</div>
                 {parsed.inferred && <div className="fc-sub">{parsed.inferNote}. Проверьте.</div>}
+                {parsed.directionNote && <div className="fc-sub">{parsed.directionNote}.</div>}
                 {(!parsed.understood || open[row.id]) && (
                   <div className="fc-sub" style={{ marginTop: 2, wordBreak: "break-word" }}>{open[row.id] ? row.raw_text : row.raw_text.slice(0, 110)}</div>
                 )}
