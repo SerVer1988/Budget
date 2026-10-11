@@ -185,7 +185,8 @@ function obligationsIn(transactions, settings, start, end, mandatory, today, inc
    4) Обязательные вычитаются из бюджета; остальное делится между обычными категориями пропорционально их средним.
       Если обычные траты вписываются в остаток — норма = среднее, если нет — траты урезаются пропорционально
       (но не глубже чем до половины обычного, чтобы норма оставалась реалистичной).
-   Возвращает { norm: { [категория]: число }, basis: "plan" | "average", budget, income }. */
+   У новых категорий без истории — равная доля нераспределённого остатка бюджета.
+   Возвращает { norm: { [категория]: число }, basis: "plan" | "average", budget, income, fresh }. */
 export function computeCategoryNorms(transactions, settings, categories, bucket, currentMonthKey) {
   const { avg } = computeCategoryAverages(transactions, settings, categories, bucket, currentMonthKey);
   const averageOnly = { norm: { ...avg }, basis: "average", budget: 0, income: 0 };
@@ -232,8 +233,18 @@ export function computeCategoryNorms(transactions, settings, categories, bucket,
   categories.forEach((c) => {
     if (norm[c.name] == null) norm[c.name] = (avg[c.name] || 0) * k;
   });
+
+  // Новые категории без истории трат: им достаётся равная доля того, что осталось в бюджете
+  // (но не меньше 3% бюджета), чтобы у плитки была норма и шкала, как у остальных.
+  const fresh = categories.filter((c) => !(norm[c.name] > 0));
+  if (fresh.length) {
+    const used = categories.reduce((sum, c) => sum + (norm[c.name] > 0 ? norm[c.name] : 0), 0);
+    const share = Math.max((budget - used) / fresh.length, budget * 0.03);
+    fresh.forEach((c) => { norm[c.name] = share; });
+  }
+
   Object.keys(norm).forEach((n) => { norm[n] = norm[n] > 0 ? Math.max(50, Math.round(norm[n] / 50) * 50) : 0; });
-  return { norm, basis: "plan", budget, income };
+  return { norm, basis: "plan", budget, income, fresh: fresh.length };
 }
 
 /* Нужды на один период: от start до ближайшей выплаты после start. */

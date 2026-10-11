@@ -163,7 +163,7 @@ export function CategoryPanel({
       </div>
       {catNorms.basis === "plan" && (
         <div className="small-note" style={{ margin: "6px 4px 0" }}>
-          «из …» — норма на месяц: ваши обычные траты в рамках бюджета «{title}» (≈ {formatMoney(Math.round(catNorms.budget))}). Обязательные платежи не урезаются.
+          «из …» — норма на месяц: ваши обычные траты в рамках бюджета «{title}» (≈ {formatMoney(Math.round(catNorms.budget))}). Обязательные платежи не урезаются.{catNorms.fresh > 0 ? " У новых категорий без истории — доля нераспределённого бюджета." : ""}
         </div>
       )}
 
