@@ -1,5 +1,5 @@
 import { C } from "./constants.js";
-import { computeBalances } from "./finance.js";
+import { aggregateMonth, computeBalances, computeCategoryAverages } from "./finance.js";
 import { addDaysStr, shortDate } from "./forecast.js";
 import { bucketOf, dayOfMonth, daysInMonth, formatMoney, monthKeyOf, ruPlural, shiftMonth, todayStr } from "./format.js";
 
@@ -10,7 +10,7 @@ import { bucketOf, dayOfMonth, daysInMonth, formatMoney, monthKeyOf, ruPlural, s
    Если не хватит — сколько можно тратить в день и по каким категориям; плюс подсказка, сколько из ближайшей
    выплаты отправить в «Нужды», чтобы хватило до следующей. */
 
-const MANDATORY_RE = /(жкх|коммунал|квартплат|алимент|аренд|ипотек|кредит|налог)/i;
+const MANDATORY_RE = /(жкх|коммунал|квартплат|алимент|аренд|ипотек|кредит|налог|связь|интернет)/i;
 const VAR_WINDOW = 30; // темп «обычных» трат считаем по последним 30 дням
 const MIN_SPAN = 7; // меньше недели истории — план был бы случайным
 
@@ -175,6 +175,65 @@ function obligationsIn(transactions, settings, start, end, mandatory, today, inc
 
   items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   return { items, total: items.reduce((s, i) => s + i.amount, 0) };
+}
+
+/* НОРМА ПО КАТЕГОРИЯМ — «сколько на самом деле нужно потратить на категорию за месяц».
+   1) Ориентир — ваши обычные траты: среднее по последним (до трёх) месяцам.
+   2) Обязательные платежи (ЖКХ, алименты, регулярные платежи) не урезаются: берётся регулярный платёж или обычный размер.
+   3) Месячный бюджет бюджета («Нужды»/«Желания») = ожидаемый доход за месяц × процент из правила 50/30/20.
+      Доход — среднее по последним месяцам с доходом (нет истории — норм нет, показываем среднее).
+   4) Обязательные вычитаются из бюджета; остальное делится между обычными категориями пропорционально их средним.
+      Если обычные траты вписываются в остаток — норма = среднее, если нет — траты урезаются пропорционально
+      (но не глубже чем до половины обычного, чтобы норма оставалась реалистичной).
+   Возвращает { norm: { [категория]: число }, basis: "plan" | "average", budget, income }. */
+export function computeCategoryNorms(transactions, settings, categories, bucket, currentMonthKey) {
+  const { avg } = computeCategoryAverages(transactions, settings, categories, bucket, currentMonthKey);
+  const averageOnly = { norm: { ...avg }, basis: "average", budget: 0, income: 0 };
+
+  // ожидаемый доход за месяц
+  const incomes = [];
+  let mk = currentMonthKey;
+  for (let i = 0; i < 6 && incomes.length < 3; i++) {
+    mk = shiftMonth(mk, -1);
+    const inc = aggregateMonth(mk, transactions, settings).incomeTotal;
+    if (inc > 0) incomes.push(inc);
+  }
+  if (!incomes.length) return averageOnly;
+  const income = incomes.reduce((a, b) => a + b, 0) / incomes.length;
+
+  const wantPct = settings.wantPct || 0;
+  const savePct = settings.savePct || 0;
+  const pct = bucket === "wants" ? wantPct : 100 - wantPct - savePct;
+  const budget = (income * pct) / 100;
+  if (!(budget > 0)) return averageOnly;
+
+  // фиксированные (обязательные) и обычные категории
+  const recurringByCat = {};
+  (settings.recurring || []).forEach((r) => {
+    if (r.active && r.bucket === bucket && r.category) recurringByCat[r.category] = (recurringByCat[r.category] || 0) + r.amount;
+  });
+  const norm = {};
+  let fixedTotal = 0;
+  let variableAvg = 0;
+  categories.forEach((c) => {
+    if (recurringByCat[c.name] > 0) {
+      norm[c.name] = recurringByCat[c.name];
+      fixedTotal += norm[c.name];
+    } else if (bucket === "needs" && isMandatory(c)) {
+      norm[c.name] = avg[c.name] || 0;
+      fixedTotal += norm[c.name];
+    } else {
+      variableAvg += avg[c.name] || 0;
+    }
+  });
+
+  const room = Math.max(0, budget - fixedTotal);
+  const k = variableAvg > 0 ? Math.max(0.5, Math.min(1, room / variableAvg)) : 1;
+  categories.forEach((c) => {
+    if (norm[c.name] == null) norm[c.name] = (avg[c.name] || 0) * k;
+  });
+  Object.keys(norm).forEach((n) => { norm[n] = norm[n] > 0 ? Math.max(50, Math.round(norm[n] / 50) * 50) : 0; });
+  return { norm, basis: "plan", budget, income };
 }
 
 /* Нужды на один период: от start до ближайшей выплаты после start. */

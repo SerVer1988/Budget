@@ -24,8 +24,10 @@ function Heading({ children }) {
   return <div className="small-note" style={{ fontWeight: 800, margin: "14px 0 2px", color: C.ink }}>{children}</div>;
 }
 
-/* «План до выплаты»: хватит ли «Нужд» до ближайшей выплаты, где «утекают» деньги и сколько из выплаты
-   отправить в «Нужды», чтобы хватило до следующей. */
+/* «План до выплаты».
+   Сверху — только главное: хватит ли «Нужд» до выплаты и сколько куда перевести с ближайшей выплаты
+   (по правилу режима: «По выплате» — по процентам, «По месяцу» — месячное планирование).
+   Всё остальное (расчёт, обязательные платежи, топ прошлого месяца) — под «Подробнее». */
 export function PayPlanCard({ transactions, settings }) {
   const [open, setOpen] = useState(false);
   const plan = useMemo(() => computePayPlan(transactions, settings), [transactions, settings]);
@@ -34,6 +36,7 @@ export function PayPlanCard({ transactions, settings }) {
   const needs = bucketName(settings, "needs");
   const wants = bucketName(settings, "wants");
   const savings = bucketName(settings, "savings");
+  const monthMode = settings.distMode === "month";
 
   const header = (
     <button type="button" className="section-title-toggle" onClick={() => setOpen((v) => !v)}>
@@ -46,7 +49,7 @@ export function PayPlanCard({ transactions, settings }) {
     return (
       <div className="panel">
         {header}
-        {open && <div className="small-note">Нужна хотя бы неделя трат, чтобы составить план до выплаты.</div>}
+        <div className="small-note">Нужна хотя бы неделя трат, чтобы составить план до выплаты.</div>
       </div>
     );
   }
@@ -56,15 +59,45 @@ export function PayPlanCard({ transactions, settings }) {
   const short = plan.status === "short";
   const a = plan.after;
 
+  // куда переводить с ближайшей выплаты
+  let move = null;
+  if (a && a.expected) {
+    move = monthMode && a.toNeeds != null
+      ? { needs: a.toNeeds, wants: a.toWants, savings: a.toSavings }
+      : { needs: a.byRule.needs, wants: a.byRule.wants, savings: a.byRule.savings };
+  }
+
   return (
     <div className="panel">
       {header}
 
-      <div style={{ fontSize: 14, fontWeight: 800, color: short ? C.danger : C.sber, margin: "2px 0 4px" }}>
+      <div style={{ fontSize: 14, fontWeight: 800, color: short ? C.danger : C.sber, margin: "2px 0 6px" }}>
         {short
           ? `До ${shortDate(plan.next.date)} (${days}) не хватает ≈ ${formatMoney(Math.round(plan.gap))}`
-          : `Хватит до ${shortDate(plan.next.date)} (${days}), запас ≈ ${formatMoney(Math.round(plan.surplus))}`}
+          : `Хватит до ${shortDate(plan.next.date)} (${days})`}
       </div>
+
+      {move && (
+        <>
+          <div className="small-note" style={{ fontWeight: 700, color: C.ink }}>
+            Выплата {shortDate(plan.next.date)} ≈ {formatMoney(a.expected)} · {monthMode ? "по месяцу" : "по выплате"}. Переведите:
+          </div>
+          <div className="fc-list">
+            <Row name={`В «${needs}»`} value={formatMoney(move.needs)} />
+            <Row name={`В «${wants}»`} value={formatMoney(move.wants)} />
+            <Row name={`В «${savings}»`} value={formatMoney(move.savings)} />
+          </div>
+        </>
+      )}
+
+      <button
+        type="button"
+        className="small-note"
+        style={{ background: "none", border: 0, padding: "8px 0 0", textDecoration: "underline", cursor: "pointer", color: C.inkMuted }}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? "Свернуть" : "Подробнее"}
+      </button>
 
       {open && (
         <>
@@ -105,30 +138,6 @@ export function PayPlanCard({ transactions, settings }) {
             </>
           )}
 
-          {a && (
-            <>
-              <Heading>
-                Выплата {shortDate(plan.next.date)}
-                {a.expected ? ` (≈ ${formatMoney(a.expected)})` : ""}: как распределить, чтобы хватило до {shortDate(a.date)}
-              </Heading>
-              {a.expected ? (
-                <div className="fc-list">
-                  <Row
-                    name={`В «${needs}»`}
-                    sub={`${a.daysNext} ${ruPlural(a.daysNext, "день", "дня", "дней")}: обычные траты ≈ ${formatMoney(Math.round((a.needNext - a.obligationsTotal)))}${a.obligationsTotal > 0 ? `, обязательные ${formatMoney(Math.round(a.obligationsTotal))}` : ""}. По правилу 50/30/20 было бы ${formatMoney(a.byRule.needs)}`}
-                    value={formatMoney(a.toNeeds)}
-                  />
-                  <Row name={`В «${wants}»`} sub={`по правилу ${formatMoney(a.byRule.wants)}`} value={formatMoney(a.toWants)} />
-                  <Row name={`В «${savings}»`} sub={`по правилу ${formatMoney(a.byRule.savings)}`} value={formatMoney(a.toSavings)} />
-                </div>
-              ) : (
-                <div className="small-note">
-                  До {shortDate(a.date)} понадобится ≈ {formatMoney(Math.round(a.needNext))}. Когда в истории появятся доходы в дни выплат, подскажу, как распределить каждую выплату.
-                </div>
-              )}
-            </>
-          )}
-
           {a && a.notes && a.notes.length > 0 && (
             <div className="small-note" style={{ marginTop: 8 }}>
               {a.monthPlan && (
@@ -139,6 +148,12 @@ export function PayPlanCard({ transactions, settings }) {
               {a.notes.map((n, i) => (
                 <div key={i} style={{ marginBottom: 4 }}>{n}</div>
               ))}
+            </div>
+          )}
+
+          {a && !a.expected && (
+            <div className="small-note" style={{ marginTop: 8 }}>
+              До {shortDate(a.date)} понадобится ≈ {formatMoney(Math.round(a.needNext))}. Когда в истории появятся доходы в дни выплат, подскажу, как распределить каждую выплату.
             </div>
           )}
 

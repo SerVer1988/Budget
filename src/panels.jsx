@@ -10,7 +10,8 @@ import { computeSavingsSeries } from "./savings.js";
 import { CategoryTile, ListTile, StatBox } from "./ui.jsx";
 import { BUCKET_STYLE, C, getIcon } from "./constants.js";
 import { computeIncomeSplitWithDebts } from "./debts.js";
-import { aggregateMonth, categoryStats, computeCategoryAverages, estimateMonthlyRate, ozonDayStats } from "./finance.js";
+import { aggregateMonth, categoryStats, estimateMonthlyRate, ozonDayStats } from "./finance.js";
+import { computeCategoryNorms } from "./payplan.js";
 import { bucketName, bucketOf, cardLabel, clampPct, formatMoney, todayMonthKey } from "./format.js";
 
 /* ============================================================ NEW: Income Modal & Limit Status */
@@ -106,10 +107,12 @@ export function CategoryPanel({
   const inflow = card === "sber" ? agg.sberInflow : agg.alfaInflow;
   const outflow = card === "sber" ? agg.sberOutflow : agg.alfaOutflow;
   const monthlyTotals = card === "sber" ? agg.needCatTotals : agg.wantCatTotals;
-  const catAverages = useMemo(
-    () => computeCategoryAverages(transactions, settings, categories, bucket, todayMonthKey()).avg,
+  // «из …» на плитке — норма на месяц (обычные траты в рамках бюджета), а не просто прошлый месяц
+  const catNorms = useMemo(
+    () => computeCategoryNorms(transactions, settings, categories, bucket, todayMonthKey()),
     [transactions, settings, categories, bucket]
   );
+  const catAverages = catNorms.norm;
 
   return (
     <div className="add-panel">
@@ -158,6 +161,11 @@ export function CategoryPanel({
           );
         })}
       </div>
+      {catNorms.basis === "plan" && (
+        <div className="small-note" style={{ margin: "6px 4px 0" }}>
+          «из …» — норма на месяц: ваши обычные траты в рамках бюджета «{title}» (≈ {formatMoney(Math.round(catNorms.budget))}). Обязательные платежи не урезаются.
+        </div>
+      )}
 
       <CategoryDonut
         categories={categories}
