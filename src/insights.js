@@ -225,7 +225,7 @@ export function computeAllInsights(transactions, settings) {
 
   if (settings.reminderDays.includes(day)) {
     const todayIncome = transactions
-      .filter((t) => t.type === "income" && t.date === today)
+      .filter((t) => t.type === "income" && !t.excludeIncome && t.date === today)
       .reduce((sum, t) => sum + t.amount, 0);
 
     if (todayIncome <= 0) {
@@ -236,7 +236,7 @@ export function computeAllInsights(transactions, settings) {
         text: `Сегодня день выплаты — не забудьте занести доход на вкладке «Добавить», приложение подскажет, сколько перевести в «${bucketName(settings, "wants")}» и «${bucketName(settings, "savings")}».`,
       });
     } else {
-      const todayIds = transactions.filter((t) => t.type === "income" && t.date === today).map((t) => t.id);
+      const todayIds = transactions.filter((t) => t.type === "income" && !t.excludeIncome && t.date === today).map((t) => t.id);
       const monthly = settings.distMode === "month" ? computeIncomeSplitWithDebts(todayIncome, settings, transactions, { date: today, excludeIds: todayIds }) : null;
       const split = monthly && monthly.mode === "month" ? monthly : computeIncomeSplit(todayIncome, settings);
       const needPct = needPctOf(settings);

@@ -104,8 +104,17 @@ export function ProfileView({ user, avatar, onAvatarChange, settings, transactio
     setPhotoMsg("");
     try {
       const dataUrl = await resizeToAvatar(file);
-      await profile.saveAvatar(dataUrl);
-      onAvatarChange(dataUrl);
+      try {
+        await profile.saveAvatar(dataUrl);
+        onAvatarChange(dataUrl);
+      } catch (err) {
+        if (err && err.local) {
+          onAvatarChange(dataUrl); // на этом устройстве фото сохранено, сервер его не принял
+          setPhotoMsg(err.message);
+        } else {
+          throw err;
+        }
+      }
     } catch (err) {
       setPhotoMsg(err?.message === "bad image" ? "Не удалось открыть картинку" : err?.message || "Не удалось загрузить фото");
     } finally {

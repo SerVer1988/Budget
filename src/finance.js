@@ -49,7 +49,7 @@ export function aggregateMonth(mk, transactions, settings) {
   inMonth.forEach((t) => {
     if (t.type === "income") {
       acc[t.card].income += t.amount;
-      incomeTotal += t.amount;
+      if (!t.excludeIncome) incomeTotal += t.amount; // «не заработок» лежит на карте, но доходом месяца не считается
     } else if (t.type === "expense") {
       acc[t.card].spent += t.amount;
       const bucket = t.bucket || (t.card === "alfa" ? "wants" : "needs");
@@ -119,7 +119,7 @@ export function computeCumulativeAllocation(transactions, settings) {
   const recent = sinceDate ? transactions.filter((t) => t.date > sinceDate) : transactions;
 
   let recentIncome = 0;
-  recent.forEach((t) => { if (t.type === "income") recentIncome += t.amount; });
+  recent.forEach((t) => { if (t.type === "income" && !t.excludeIncome) recentIncome += t.amount; });
 
   let needsSpent = 0;
   let wantsSpent = 0;
@@ -137,7 +137,7 @@ export function computeCumulativeAllocation(transactions, settings) {
   // Savings intentionally stays fully cumulative, all-time — a "подушка" is meant to
   // keep growing across months, unlike Needs/Wants which should roughly zero out.
   let allTimeIncome = 0;
-  transactions.forEach((t) => { if (t.type === "income") allTimeIncome += t.amount; });
+  transactions.forEach((t) => { if (t.type === "income" && !t.excludeIncome) allTimeIncome += t.amount; });
   let saveSpent = 0;
   transactions.forEach((t) => {
     if (t.type === "adjustment" && t.card === "ozon" && t.amount < 0) saveSpent += -t.amount;

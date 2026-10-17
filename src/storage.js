@@ -707,40 +707,57 @@ export const profile = {
     return lsGet(avatarCacheKey()) || "";
   },
 
-  // Возвращает data-URL или "" (фото нет). Без сети отдаёт копию.
+  // Возвращает data-URL или "" (фото нет). Локальная копия никогда не теряется: если на сервере фото нет,
+  // а у нас есть, оставляем своё и пробуем дозагрузить его на сервер.
   async loadAvatar() {
     if (!session) return "";
+    const local = lsGet(avatarCacheKey()) || "";
     try {
       const token = await ensureToken();
       const r = await http(`/rest/v1/${TABLE}?user_id=eq.${uid()}&key=eq.${enc(AVATAR_KEY)}&select=value`, { token });
       if (!r.ok) throw new Error("avatar get");
       const v = Array.isArray(r.data) && r.data[0] ? r.data[0].value : null;
       const img = v && typeof v.img === "string" ? v.img : "";
-      if (img) lsSet(avatarCacheKey(), img); else lsDel(avatarCacheKey());
-      return img;
+      if (img) {
+        lsSet(avatarCacheKey(), img);
+        return img;
+      }
+      if (local) {
+        profile.saveAvatar(local).catch(() => { /* дозагрузим при следующем открытии */ });
+        return local;
+      }
+      return "";
     } catch {
-      return lsGet(avatarCacheKey()) || "";
+      return local;
     }
   },
 
+  // Фото сначала сохраняется на этом устройстве (оно не пропадёт), потом отправляется на сервер.
+  // Если сервер не принял — кидает ошибку с local: true: фото уже сохранено локально, а текст ошибки говорит, что не так.
   async saveAvatar(dataUrl) {
     if (!session) throw new Error("not signed in");
-    const token = await ensureToken();
-    const r = await http(`/rest/v1/${TABLE}?on_conflict=user_id,key`, {
-      method: "POST",
-      token,
-      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
-      body: { user_id: uid(), key: AVATAR_KEY, value: { img: dataUrl }, updated_at: new Date().toISOString() },
-    });
-    if (!r.ok) throw new Error("Не удалось сохранить фото. Проверьте соединение.");
     lsSet(avatarCacheKey(), dataUrl);
+    const localOnly = (why) => Object.assign(new Error(`Фото сохранено только на этом устройстве: ${why}.`), { local: true });
+    let r;
+    try {
+      const token = await ensureToken();
+      r = await http(`/rest/v1/${TABLE}?on_conflict=user_id,key`, {
+        method: "POST",
+        token,
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: { user_id: uid(), key: AVATAR_KEY, value: { img: dataUrl }, updated_at: new Date().toISOString() },
+      });
+    } catch {
+      throw localOnly("нет связи с сервером");
+    }
+    if (!r.ok) throw localOnly(`сервер ответил ${r.status}`);
   },
 
   async removeAvatar() {
     if (!session) throw new Error("not signed in");
+    lsDel(avatarCacheKey());
     const token = await ensureToken();
     const r = await http(`/rest/v1/${TABLE}?user_id=eq.${uid()}&key=eq.${enc(AVATAR_KEY)}`, { method: "DELETE", token });
-    if (!r.ok) throw new Error("Не удалось удалить фото. Проверьте соединение.");
-    lsDel(avatarCacheKey());
+    if (!r.ok) throw new Error(`Не удалось удалить фото на сервере (код ${r.status}).`);
   },
 };

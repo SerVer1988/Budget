@@ -144,6 +144,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
   const [toCard, setToCard] = useState(initial?.toCard || "alfa");
   const [category, setCategory] = useState(initial?.category || defaultCategoryFor(initialBucket));
   const [note, setNote] = useState(initial?.note || "");
+  const [notEarned, setNotEarned] = useState(!!initial?.excludeIncome); // доход «не заработок»: не делится и не входит в статистику
   // Личные долги: кто и в какую сторону ("lent" — вы дали в долг, "borrowed" — вам дали).
   const [loanDir, setLoanDir] = useState(initial?.direction || "lent");
   const [person, setPerson] = useState(initial?.person || "");
@@ -173,6 +174,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
     setToCard(initial?.toCard || "alfa");
     setCategory(initial?.category || defaultCategoryFor(b));
     setNote(initial?.note || "");
+    setNotEarned(!!initial?.excludeIncome);
     setLoanDir(initial?.direction || "lent");
     setPerson(initial?.person || "");
     setDueDate(initial?.dueDate || "");
@@ -328,6 +330,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         amount: amountNum,
         card,
         note: note.trim(),
+        ...(notEarned ? { excludeIncome: true } : {}),
       });
     } else if (type === "expense") {
       onSubmit(
@@ -536,6 +539,10 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         <div className="field">
           <label>Куда пришёл доход</label>
           <CardPicker options={cardOptions} value={card} onChange={setCard} />
+          <label className="small-note" style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 10, cursor: "pointer", textAlign: "left" }}>
+            <input type="checkbox" style={{ marginTop: 2 }} checked={notEarned} onChange={(e) => setNotEarned(e.target.checked)} />
+            <span>Не заработок (оплата за услугу, возврат, разовый перевод): не считать доходом и не делить по картам</span>
+          </label>
         </div>
       )}
 
@@ -740,7 +747,7 @@ export function deriveFormInitialFromTx(tx, transactions) {
     return { ...base, card: tx.card, bucket: tx.bucket || bucketOf(tx.card), category: tx.category };
   }
   if (tx.type === "income") {
-    return { ...base, card: tx.card };
+    return { ...base, card: tx.card, excludeIncome: !!tx.excludeIncome };
   }
   if (tx.type === "transfer") {
     const linked = (transactions || []).some((t) => t.type === "debt" && t.sourceTxId === tx.id);

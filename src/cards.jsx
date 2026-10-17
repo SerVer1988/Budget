@@ -159,7 +159,7 @@ export function TxRow({ tx, settings, onDelete, onEdit }) {
     : tx.type === "loan" ? (loanCash(tx) < 0 ? "−" : loanCash(tx) > 0 ? "+" : "")
     : (tx.type === "adjustment" && tx.amount < 0) ? "−" : "+";
 
-  const label = tx.type === "income" ? (tx.note || `Доход (${cardLabel(settings, tx.card)})`)
+  const label = tx.type === "income" ? ((tx.note || `Доход (${cardLabel(settings, tx.card)})`) + (tx.excludeIncome ? " · не заработок" : ""))
     : tx.type === "expense" ? (tx.note || tx.category)
     : tx.type === "transfer" ? (tx.note || `${cardLabel(settings, tx.fromCard)} → ${cardLabel(settings, tx.toCard)}`)
     : tx.type === "debt" ? (tx.note || `Долг: «${bucketName(settings, tx.toBucket)}» → «${bucketName(settings, tx.fromBucket)}»${tx.repaid ? " · погашено" : ` · осталось ${formatMoney(tx.remainingAmount)}`}`)

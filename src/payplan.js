@@ -76,7 +76,7 @@ export function typicalPayouts(transactions, settings, today) {
   const from = addDaysStr(today, -100);
   const buckets = {}; // `${месяц}:${день выплаты}` → сумма
   transactions.forEach((t) => {
-    if (t.type !== "income" || t.date < from || t.date > today) return;
+    if (t.type !== "income" || t.excludeIncome || t.date < from || t.date > today) return;
     const mk = monthKeyOf(t.date);
     const dim = daysInMonth(mk);
     const d = dayOfMonth(t.date);
@@ -406,7 +406,7 @@ export function computeMonthlySplit(amount, settings, transactions, opts = {}) {
 
   // план месяца: сколько ожидаем получить за календарный месяц выплаты
   const inMonth = (t) => monthKeyOf(t.date) === mk;
-  const incomeSoFar = others.filter((t) => t.type === "income" && inMonth(t)).reduce((s, t) => s + t.amount, 0);
+  const incomeSoFar = others.filter((t) => t.type === "income" && !t.excludeIncome && inMonth(t)).reduce((s, t) => s + t.amount, 0);
   let futureExpected = 0;
   payDays.forEach((p) => {
     const dt = `${mk}-${pad(Math.min(p, dim))}`;
@@ -421,7 +421,7 @@ export function computeMonthlySplit(amount, settings, transactions, opts = {}) {
 
   const inflow = (card) =>
     others
-      .filter((t) => inMonth(t) && ((t.type === "transfer" && t.toCard === card) || (t.type === "income" && t.card === card)))
+      .filter((t) => inMonth(t) && ((t.type === "transfer" && t.toCard === card) || (t.type === "income" && !t.excludeIncome && t.card === card)))
       .reduce((s, t) => s + t.amount, 0);
   const savedSoFar = inflow("ozon");
   const wantsSoFar = inflow("alfa");

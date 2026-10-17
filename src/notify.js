@@ -75,7 +75,7 @@ export function buildNotices(transactions, settings, today) {
 
   const days = settings.reminderDays || [];
   if (days.includes(dayOfMonth(today))) {
-    const gotIncome = transactions.some((t) => t.type === "income" && t.date === today);
+    const gotIncome = transactions.some((t) => t.type === "income" && !t.excludeIncome && t.date === today);
     if (!gotIncome) {
       notices.push({
         key: `${today}:payday`,

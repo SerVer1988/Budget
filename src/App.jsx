@@ -555,7 +555,7 @@ export default function App() {
     addTransaction(tx, meta);
     finishPending(tx);
     // Если это доход — показываем модалку автоматического распределения
-    if (tx.type === "income") {
+    if (tx.type === "income" && !tx.excludeIncome) {
       setNewIncomeTx(tx);
     }
     closeForm();
