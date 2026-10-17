@@ -539,9 +539,9 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         <div className="field">
           <label>Куда пришёл доход</label>
           <CardPicker options={cardOptions} value={card} onChange={setCard} />
-          <label className="small-note" style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 10, cursor: "pointer", textAlign: "left" }}>
-            <input type="checkbox" style={{ marginTop: 2 }} checked={notEarned} onChange={(e) => setNotEarned(e.target.checked)} />
-            <span>Не заработок (оплата за услугу, возврат, разовый перевод): не считать доходом и не делить по картам</span>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, cursor: "pointer" }}>
+            <input type="checkbox" checked={notEarned} onChange={(e) => setNotEarned(e.target.checked)} style={{ width: "auto" }} />
+            <span style={{ textTransform: "none", letterSpacing: 0 }}>Не заработок</span>
           </label>
         </div>
       )}
