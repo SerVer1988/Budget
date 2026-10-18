@@ -29,7 +29,7 @@ import { AppStyles } from "./AppStyles.jsx";
 import { AnalysisView } from "./AnalysisView.jsx";
 import { AuthScreen } from "./AuthScreen.jsx";
 import { SettingsView } from "./SettingsView.jsx";
-import { SpaceContext, SpaceStrip, SpaceSwitch, spaceNamesOf } from "./spaces.jsx";
+import { SpaceContext, SpaceSwitch, spaceNamesOf } from "./spaces.jsx";
 import { SharedView } from "./SharedView.jsx";
 import { sharedCatsOf } from "./shared.js";
 
@@ -922,8 +922,6 @@ export default function App() {
                 onClose={() => setNewIncomeTx(null)}
               />
             )}
-
-            {readOnly && partnerData && !formInitial && <SpaceStrip />}
 
             {showPartnerPlaceholder ? (
               <div className="screen-stack">

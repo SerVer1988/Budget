@@ -1,5 +1,6 @@
 import { RecurringSettings } from "./RecurringSettings.jsx";
 import { Avatar, ProfileView } from "./ProfileView.jsx";
+import { SettingsExtras } from "./SettingsExtras.jsx";
 import { profile } from "./storage.js";
 import { isMandatory } from "./payplan.js";
 import { InboxSettings } from "./InboxSettings.jsx";
@@ -240,11 +241,6 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
         user={user}
         avatar={avatar}
         onAvatarChange={setAvatar}
-        settings={settings}
-        transactions={transactions}
-        onImport={onImport}
-        onSaveSettings={onSaveSettings}
-        onWipeAll={onWipeAll}
         userEmail={userEmail}
         onSignOut={onSignOut}
         onBack={() => { setShowProfile(false); window.scrollTo?.(0, 0); }}
@@ -465,6 +461,14 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
       <InboxSettings />
 
       {actionButtons}
+
+      <SettingsExtras
+        settings={settings}
+        transactions={transactions}
+        onImport={onImport}
+        onSaveSettings={onSaveSettings}
+        onWipeAll={onWipeAll}
+      />
     </div>
   );
 }

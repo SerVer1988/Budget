@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Check, ChevronDown, Lock } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
 import { household, partner } from "./storage.js";
@@ -145,33 +145,6 @@ export function SpaceSwitch({ variant }) {
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-/* Узкая плашка сверху, пока открыт чужой бюджет: чтобы не перепутать и знать, что править нельзя. */
-export function SpaceStrip() {
-  const ctx = useContext(SpaceContext);
-  if (!ctx || !ctx.enabled || ctx.current !== "partner") return null;
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 6,
-        margin: "0 0 8px",
-        padding: "6px 12px",
-        borderRadius: 12,
-        background: C.amberSoft,
-        border: `1px solid ${C.amber}`,
-        color: C.ink,
-        fontSize: 12,
-        fontWeight: 700,
-      }}
-    >
-      <Lock size={13} />
-      Бюджет «{ctx.names.partner}» · только просмотр
     </div>
   );
 }
