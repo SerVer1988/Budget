@@ -34,8 +34,8 @@ export function InboxPanel({ pending, settings, transactions, onAccept, onEdit, 
           const prev = previousBalance(parsed.card, row.received_at);
           const inferred = prev ? inferFromBalance(parsed, prev.b) : null;
           if (inferred) parsed = inferred;
-        } else if (parsed.understood && parsed.typeSource === "default" && parsed.balance != null && parsed.card) {
-          // направление не видно из текста — смотрим, куда сдвинулся остаток
+        } else if (parsed.understood && parsed.balance != null && parsed.card) {
+          // сверяем направление с тем, куда сдвинулся остаток (он надёжнее знака и слов в тексте)
           const prev = previousBalance(parsed.card, row.received_at);
           if (prev) parsed = refineDirection(parsed, prev.b);
         }

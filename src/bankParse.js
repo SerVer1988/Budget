@@ -271,17 +271,21 @@ export function inferFromBalance(parsed, prevBalance) {
   };
 }
 
-/* Направление по изменению остатка. Нужно, когда в тексте нет ни знака, ни слов («MIR-3104 13:26 635р Баланс: 3182р»):
-   остаток упал на сумму операции — расход, вырос — доход. */
+/* Направление по изменению остатка. Остаток из банка — самое надёжное: если он упал ровно на сумму операции,
+   это расход, если вырос — доход, что бы ни подсказывали знак и слова в тексте («+100р» у Сбера при покупке).
+   Если в тексте нет ни знака, ни слов («MIR-3104 13:26 635р Баланс: 3182р»), остаток решает и при неточном совпадении
+   (кроме Сбера: там без подсказок считаем покупкой, а лишнее поступление между уведомлениями не делает её доходом). */
 export function refineDirection(parsed, prevBalance) {
-  if (!parsed.understood || parsed.typeSource !== "default" || parsed.balance == null || typeof prevBalance !== "number") return parsed;
+  if (!parsed.understood || parsed.balance == null || typeof prevBalance !== "number") return parsed;
+  const isDefault = parsed.typeSource === "default";
   const delta = parsed.balance - prevBalance;
   const tol = 1.5;
   let type = null;
   if (Math.abs(delta - parsed.amount) <= tol) type = "income";
   else if (Math.abs(delta + parsed.amount) <= tol) type = "expense";
-  else if (Math.abs(delta) >= 1) type = delta > 0 ? "income" : "expense";
+  else if (isDefault && parsed.card !== "sber" && Math.abs(delta) >= 1) type = delta > 0 ? "income" : "expense";
   if (!type) return parsed;
+  if (type === parsed.type && !isDefault) return parsed;
   const fmt = (n) => n.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + " ₽";
   return { ...parsed, type, typeSource: "balance", directionNote: `Направление определено по остатку: было ${fmt(prevBalance)}, стало ${fmt(parsed.balance)}` };
 }
