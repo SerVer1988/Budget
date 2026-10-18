@@ -60,7 +60,7 @@ function Fold({ title, open, onToggle, children }) {
   );
 }
 
-export function ProfileView({ user, avatar, onAvatarChange, settings, transactions, onImport, onSaveSettings, userEmail, onSignOut, onBack }) {
+export function ProfileView({ user, avatar, onAvatarChange, settings, transactions, onImport, onSaveSettings, onWipeAll, userEmail, onSignOut, onBack }) {
   const fileRef = useRef(null);
   const importInputRef = useRef(null);
   const [name, setName] = useState(user?.name || "");
@@ -245,6 +245,19 @@ export function ProfileView({ user, avatar, onAvatarChange, settings, transactio
         </button>
         <input ref={importInputRef} type="file" accept="application/json,.json" style={{ display: "none" }} onChange={handleImportFile} />
         {importMsg && <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{importMsg}</div>}
+        <button
+          className="btn"
+          type="button"
+          style={{ width: "100%", marginTop: 10, color: C.danger }}
+          onClick={() => {
+            if (!window.confirm("Удалить всю историю операций?\nНастройки, категории и цели останутся. Перед этим лучше сделать резервную копию.")) return;
+            const word = (window.prompt("Для подтверждения введите слово: удалить") || "").trim().toLowerCase();
+            if (word !== "удалить") { window.alert("Слово не совпало — ничего не удалено."); return; }
+            onWipeAll();
+          }}
+        >
+          Удалить историю (стереть данные)
+        </button>
       </Fold>
 
       <HouseholdSettings />

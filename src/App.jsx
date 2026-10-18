@@ -110,17 +110,14 @@ export default function App() {
   useEffect(() => {
     if (!authUser) return undefined;
     // В совместном бюджете чужие правки подтягиваем сами; в личном — предлагаем обновиться плашкой.
-    function onStale() {
-      if (household.scope() === "household") refreshData();
-      else setStale(true);
-    }
+    function onStale() { refreshData(); } // чужие правки (другое устройство, партнёр) подтягиваем сами
     function check() {
       if (document.visibilityState === "visible") {
         storage.checkStale().then((isStale) => { if (isStale) onStale(); });
       }
     }
     function onMerged() { refreshData(); }
-    const timer = setInterval(() => { if (household.scope() === "household") check(); }, 30000);
+    const timer = setInterval(check, 30000);
     document.addEventListener("visibilitychange", check);
     window.addEventListener("budget-conflict", onStale);
     window.addEventListener("budget-merged", onMerged);
@@ -299,6 +296,15 @@ export default function App() {
     setSettings(s);
     setTransactions(t);
     setStale(false);
+  }
+
+  // Удалить всю историю операций (настройки остаются). Пока висит плашка, можно отменить.
+  function wipeHistory() {
+    const prevT = transactions;
+    const withReceipts = transactions.filter((t) => t.receipt).map((t) => t.id);
+    const timer = withReceipts.length ? setTimeout(() => withReceipts.forEach((id) => removeReceipt(id)), 9000) : null;
+    persistTransactions([]);
+    showToast("История операций удалена", { ms: 9000, undo: () => { if (timer) clearTimeout(timer); persistTransactions(prevT); } });
   }
 
   async function persistTransactions(next) {
@@ -834,12 +840,7 @@ export default function App() {
 
       {receiptViewId && <ReceiptModal txId={receiptViewId} onClose={() => setReceiptViewId(null)} />}
 
-      {stale && (
-        <div className="sync-banner">
-          <span>Данные изменились на другом устройстве. Обновите, чтобы не потерять правки.</span>
-          <button type="button" onClick={() => window.location.reload()}>Обновить</button>
-        </div>
-      )}
+
 
       <div className="app-viewport">
         <div className="app-shell">
@@ -952,7 +953,7 @@ export default function App() {
                 onImport={importBackup}
                 onSaveSettings={persistSettings}
                 onSave={persistSettings}
-                onWipeAll={() => { transactions.filter((t) => t.receipt).forEach((t) => removeReceipt(t.id)); persistTransactions([]); }}
+                onWipeAll={wipeHistory}
                 user={authUser}
                 userEmail={authUser?.email}
                 onSignOut={async () => {

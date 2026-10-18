@@ -256,6 +256,7 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
         transactions={transactions}
         onImport={onImport}
         onSaveSettings={onSaveSettings}
+        onWipeAll={onWipeAll}
         userEmail={userEmail}
         onSignOut={onSignOut}
         onBack={() => { setShowProfile(false); window.scrollTo?.(0, 0); }}
