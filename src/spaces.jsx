@@ -36,12 +36,12 @@ export function SpaceSwitch({ variant }) {
   const rows = [
     { id: "me", name: names.me, disabled: false, hint: "" },
     { id: "partner", name: names.partner, disabled: !partnerShares, hint: partnerShares ? "только просмотр" : "доступ не открыт" },
-    { id: "shared", name: names.shared, disabled: true, hint: "скоро" },
+    { id: "shared", name: names.shared, disabled: false, hint: "общие траты" },
   ];
 
   const wrapStyle =
     variant === "hero"
-      ? { position: "absolute", right: "calc(4% + 4px)", top: "calc(13% - 22px)", zIndex: 6, lineHeight: 1.25 }
+      ? { position: "absolute", right: "1%", top: "2.4%", zIndex: 6, lineHeight: 1.25 }
       : { position: "relative", display: "flex", justifyContent: "flex-end", margin: "0 0 6px", lineHeight: 1.25 };
 
   return (
@@ -55,8 +55,8 @@ export function SpaceSwitch({ variant }) {
             display: "flex",
             alignItems: "center",
             gap: 1,
-            height: 24,
-            padding: "0 5px 0 2px",
+            height: variant === "hero" ? 20 : 24,
+            padding: "0 3px 0 2px",
             borderRadius: 999,
             border: `1.5px solid ${color}`,
             background: "rgba(255,255,255,0.92)",
@@ -66,12 +66,12 @@ export function SpaceSwitch({ variant }) {
         >
           <span
             style={{
-              width: 18,
-              height: 18,
+              width: variant === "hero" ? 15 : 18,
+              height: variant === "hero" ? 15 : 18,
               borderRadius: "50%",
               background: color,
               color: "#fff",
-              fontSize: 11,
+              fontSize: variant === "hero" ? 10 : 11,
               fontWeight: 800,
               display: "flex",
               alignItems: "center",
@@ -80,7 +80,7 @@ export function SpaceSwitch({ variant }) {
           >
             {initialOf(names[current])}
           </span>
-          <ChevronDown size={14} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+          <ChevronDown size={variant === "hero" ? 12 : 14} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
         </button>
 
         {open && (
@@ -96,7 +96,7 @@ export function SpaceSwitch({ variant }) {
               style={{
                 position: "absolute",
                 right: 0,
-                top: 30,
+                top: variant === "hero" ? 26 : 30,
                 zIndex: 41,
                 minWidth: 188,
                 background: C.surface,

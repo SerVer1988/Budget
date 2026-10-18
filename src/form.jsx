@@ -1,5 +1,5 @@
 import { knownPeople } from "./loans.js";
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useContext } from "react";
 import {
   X,
 } from "lucide-react";
@@ -7,6 +7,7 @@ import { CategoryPanel, OzonPanel } from "./panels.jsx";
 import { ReceiptField } from "./ReceiptViewer.jsx";
 import { C, CARD_BUCKET } from "./constants.js";
 import { computeBalances } from "./finance.js";
+import { SpaceContext } from "./spaces.jsx";
 import { bucketName, bucketNameGen, bucketOf, cardLabel, catListOf, evalMoneyExpr, formatMoney, homeCardOf, moneyNum, todayStr, uid } from "./format.js";
 
 /* ============================================================ Add form */
@@ -156,6 +157,11 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
 
   // Фото чека: data — новое фото (dataURL), remove — убрать сохранённое.
   const [receipt, setReceipt] = useState({ data: null, remove: false });
+
+  // Общая трата (пространство пары): расход остаётся в вашем бюджете и дополнительно записывается в «Общую».
+  const spaceCtx = useContext(SpaceContext);
+  const [sharedOn, setSharedOn] = useState(false);
+  const [sharedCat, setSharedCat] = useState("");
 
   const [split, setSplit] = useState(false);
   const [splitAmount2, setSplitAmount2] = useState("");
@@ -343,7 +349,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
           category,
           note: note.trim(),
         },
-        { receipt }
+        { receipt, ...(sharedOn && spaceCtx?.sharedAvailable ? { shared: { catId: sharedCat || spaceCtx.sharedCats?.[0]?.id } } : {}) }
       );
     } else if (type === "transfer") {
       onSubmit(
@@ -494,6 +500,28 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
               <div className="small-note" style={{ marginBottom: 11 }}>
                 Часть 1: {formatMoney(Math.max(0, part1Num))} · спишется с «{cardLabel(settings, card)}»: {formatMoney(amountNum)}
               </div>
+            </>
+          )}
+
+          {!split && !isEdit && spaceCtx?.sharedAvailable && (
+            <>
+              <div className="field" style={{ marginTop: 11, marginBottom: sharedOn ? 11 : 0 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                  <input type="checkbox" checked={sharedOn} onChange={(e) => setSharedOn(e.target.checked)} style={{ width: "auto" }} />
+                  <span style={{ textTransform: "none", letterSpacing: 0 }}>Общая трата ({spaceCtx.names.shared})</span>
+                </label>
+              </div>
+              {sharedOn && (
+                <div className="field">
+                  <label>Общая категория</label>
+                  <select value={sharedCat || spaceCtx.sharedCats?.[0]?.id || ""} onChange={(e) => setSharedCat(e.target.value)}>
+                    {(spaceCtx.sharedCats || []).map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <div className="small-note" style={{ marginTop: 6 }}>Платили вы, расход делится пополам.</div>
+                </div>
+              )}
             </>
           )}
         </>

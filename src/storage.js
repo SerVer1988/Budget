@@ -169,7 +169,7 @@ function isDirty(k) { return dirtyRead().includes(k); }
 
 function clearUserCache(userId) {
   try {
-    const prefixes = [`${PREFIX}u:${userId}:`, `${PREFIX}h:`, HH_CACHE(userId), `${PREFIX}partner:${userId}`];
+    const prefixes = [`${PREFIX}u:${userId}:`, `${PREFIX}h:`, HH_CACHE(userId), `${PREFIX}partner:${userId}`, `${PREFIX}shared:${userId}`];
     Object.keys(localStorage).filter((k) => prefixes.some((p) => k.startsWith(p))).forEach((k) => localStorage.removeItem(k));
   } catch { /* ignore */ }
 }
@@ -705,6 +705,77 @@ export const partner = {
       if (cached) return { ...cached, offline: true };
       throw e;
     }
+  },
+};
+
+/* ---------------------------------------------------------------- «Общая» книга пары */
+// Общие траты и категории двух привязанных аккаунтов (supabase-shared.sql). Каждая запись — массив целиком,
+// меняется «прочитал → применил правку → записал, если за это время никто не менял» (при конфликте повторяем).
+const SHARED_NOT_SET_UP = "Общая книга не настроена: выполните supabase-shared.sql в Supabase";
+const SHARED_KEYS = ["shared-items", "shared-cats"];
+let pairKeyMemo = null;
+const sharedCacheKey = () => `${PREFIX}shared:${uid()}`;
+
+async function sharedPairKey() {
+  if (pairKeyMemo && pairKeyMemo.uid === uid()) return pairKeyMemo.key;
+  const key = await rpc("my_pair_key", {}, SHARED_NOT_SET_UP);
+  if (!key || typeof key !== "string") throw new Error("Аккаунты не привязаны друг к другу");
+  pairKeyMemo = { uid: uid(), key };
+  return key;
+}
+
+function parseList(raw) {
+  const v = safeJson(raw || "");
+  return Array.isArray(v) ? v : [];
+}
+
+export const shared = {
+  // { "shared-items": [...], "shared-cats": [...] }; без сети — последняя сохранённая копия.
+  async load() {
+    if (!session) throw new Error("not signed in");
+    try {
+      const pk = await sharedPairKey();
+      const token = await ensureToken();
+      const r = await http(`/rest/v1/shared_data?pair_key=eq.${enc(pk)}&select=key,value`, { token });
+      if (!r.ok) throw new Error(r.status === 404 ? SHARED_NOT_SET_UP : `shared read ${r.status}`);
+      const out = { "shared-items": [], "shared-cats": [] };
+      (Array.isArray(r.data) ? r.data : []).forEach((row) => { if (SHARED_KEYS.includes(row.key)) out[row.key] = parseList(row.value); });
+      lsSet(sharedCacheKey(), JSON.stringify(out));
+      return out;
+    } catch (e) {
+      const cached = safeJson(lsGet(sharedCacheKey()) || "");
+      if (cached) return { ...cached, offline: true };
+      throw e;
+    }
+  },
+
+  // mutate(текущий массив) → новый массив. Возвращает записанный массив.
+  async update(key, mutate) {
+    if (!session) throw new Error("not signed in");
+    if (!SHARED_KEYS.includes(key)) throw new Error("bad key");
+    const pk = await sharedPairKey();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const token = await ensureToken();
+      const g = await http(`/rest/v1/shared_data?pair_key=eq.${enc(pk)}&key=eq.${enc(key)}&select=value,updated_at`, { token });
+      if (!g.ok) throw new Error(g.status === 404 ? SHARED_NOT_SET_UP : `shared read ${g.status}`);
+      const row = Array.isArray(g.data) && g.data[0] ? g.data[0] : null;
+      const next = mutate(row ? parseList(row.value) : []);
+      const value = JSON.stringify(next);
+      if (row) {
+        const w = await http(`/rest/v1/shared_data?pair_key=eq.${enc(pk)}&key=eq.${enc(key)}&updated_at=eq.${enc(row.updated_at)}`, {
+          method: "PATCH", token, headers: { Prefer: "return=representation" }, body: { value, updated_at: new Date().toISOString() },
+        });
+        if (!w.ok) throw new Error(`shared write ${w.status}`);
+        if (Array.isArray(w.data) && w.data.length) return next;
+      } else {
+        const w = await http(`/rest/v1/shared_data?on_conflict=pair_key,key`, {
+          method: "POST", token, headers: { Prefer: "resolution=ignore-duplicates,return=representation" }, body: { pair_key: pk, key, value },
+        });
+        if (!w.ok) throw new Error(`shared insert ${w.status}`);
+        if (Array.isArray(w.data) && w.data.length) return next;
+      }
+    }
+    throw new Error("Не удалось сохранить: данные одновременно менял второй аккаунт. Попробуйте ещё раз");
   },
 };
 

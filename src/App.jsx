@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { storage, auth, household, inbox, partner } from "./storage.js";
+import { storage, auth, household, inbox, partner, shared } from "./storage.js";
 import { learnMerchant } from "./bankParse.js";
 import { rememberOp } from "./dedupe.js";
 import { receivedParts } from "./InboxPanel.jsx";
@@ -29,6 +29,8 @@ import { AnalysisView } from "./AnalysisView.jsx";
 import { AuthScreen } from "./AuthScreen.jsx";
 import { SettingsView } from "./SettingsView.jsx";
 import { SpaceContext, SpaceStrip, SpaceSwitch, spaceNamesOf } from "./spaces.jsx";
+import { SharedView } from "./SharedView.jsx";
+import { sharedCatsOf } from "./shared.js";
 
 /* ============================================================ App */
 export default function App() {
@@ -80,6 +82,10 @@ export default function App() {
   const [space, setSpace] = useState("me");
   const [partnerData, setPartnerData] = useState(null); // { settings, transactions } партнёра, только чтение
   const [partnerState, setPartnerState] = useState("idle"); // idle | loading | ready | noaccess | error
+  const [sharedData, setSharedData] = useState({ items: [], cats: [] }); // «Общая» книга пары
+  const [sharedState, setSharedState] = useState("idle"); // idle | loading | ready | error
+  const [sharedError, setSharedError] = useState("");
+  const [sharedFormOpen, setSharedFormOpen] = useState(false);
   const readOnly = space === "partner" && pageIndex !== 4; // на странице «Настройки» всегда мои данные
   const readOnlyRef = useRef(false);
   readOnlyRef.current = readOnly;
@@ -196,9 +202,57 @@ export default function App() {
     }
   }
 
+  // «Общая» книга: загружаем, как только известно, что аккаунты привязаны.
+  useEffect(() => {
+    if (!partnerInfo?.partner) return undefined;
+    loadShared();
+    function onVisible() { if (document.visibilityState === "visible") loadShared(true); }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [partnerInfo?.partner?.id]);
+
+  async function loadShared(silent) {
+    if (!silent) setSharedState((st) => (st === "ready" ? st : "loading"));
+    try {
+      const d = await shared.load();
+      setSharedData({ items: d["shared-items"] || [], cats: d["shared-cats"] || [] });
+      setSharedState("ready");
+      setSharedError("");
+    } catch (e) {
+      setSharedState((st) => (st === "ready" ? st : "error"));
+      setSharedError(e?.message || "Не получилось загрузить общую книгу.");
+    }
+  }
+
+  // Изменить общий список (траты или категории): применяем правку к свежим данным на сервере.
+  async function sharedMutate(key, fn) {
+    try {
+      const next = await shared.update(key, fn);
+      setSharedData((d) => ({ ...d, [key === "shared-items" ? "items" : "cats"]: next }));
+      return true;
+    } catch (e) {
+      showToast(e?.message || "Не удалось сохранить в общую книгу", { ms: 3500 });
+      return false;
+    }
+  }
+  const addSharedItem = (item) => sharedMutate("shared-items", (arr) => (arr.some((i) => i.id === item.id) ? arr : [...arr, item]));
+  const deleteSharedItem = (id) => sharedMutate("shared-items", (arr) => arr.filter((i) => i.id !== id));
+  async function addSharedCat(cat) {
+    await sharedMutate("shared-cats", (arr) => {
+      const base = arr.length ? arr : sharedCatsOf([]);   // первую правку начинаем со стандартного списка
+      return [...base, cat];
+    });
+  }
+
   function selectSpace(id) {
     if (id === space) return;
     setFormInitial(null);
+    if (id === "shared") {
+      setSpace("shared");
+      setPageIndex(0);
+      loadShared(true);
+      return;
+    }
     if (id === "partner") {
       if (!partnerInfo?.partner_shares) { showToast(`«${spaceNames.partner}» пока не открыл доступ к бюджету`); return; }
       setPartnerData(null);
@@ -422,6 +476,8 @@ export default function App() {
     const prevT = transactions;
     const tx = transactions.find((t) => t.id === id);
     const receiptTimer = tx?.receipt ? setTimeout(() => removeReceipt(id), 7000) : null;
+    const sharedItem = tx?.sharedId ? sharedData.items.find((i) => i.id === tx.sharedId) : null;
+    if (sharedItem) deleteSharedItem(sharedItem.id);
     persistTransactions(
       transactions.filter(
         (t) =>
@@ -433,6 +489,7 @@ export default function App() {
     showToast(`Удалено: ${describeTx(tx)}`, {
       undo: () => {
         if (receiptTimer) clearTimeout(receiptTimer);
+        if (sharedItem) addSharedItem(sharedItem);
         persistTransactions(prevT);
       },
     });
@@ -444,7 +501,12 @@ export default function App() {
   }
 
   function updateTransaction(id, updatedTx, meta) {
-    const replaced = transactions.map((t) => (t.id === id ? { ...updatedTx, id } : t));
+    const old = transactions.find((t) => t.id === id);
+    if (old?.sharedId) {
+      // расход связан с записью в «Общей»: подтягиваем сумму, дату и заметку
+      sharedMutate("shared-items", (arr) => arr.map((i) => (i.id === old.sharedId ? { ...i, amount: updatedTx.amount, date: updatedTx.date, note: updatedTx.note || "" } : i)));
+    }
+    const replaced = transactions.map((t) => (t.id === id ? { ...updatedTx, id, ...(old?.sharedId ? { sharedId: old.sharedId } : {}) } : t));
     const prevT = transactions;
     persistTransactions(syncLinkedDebt(replaced, { ...updatedTx, id }, meta?.asDebt));
     showToast(`Изменено: ${describeTx(updatedTx)}`, { undo: () => persistTransactions(prevT) });
@@ -616,8 +678,15 @@ export default function App() {
       return;
     }
 
-    addTransaction(tx, meta);
-    finishPending(tx);
+    let txOut = tx;
+    if (metaIn?.shared?.catId && tx.type === "expense") {
+      // Общая трата (вариант А): остаётся вашим расходом и дополнительно записывается в «Общую».
+      const sid = uid();
+      txOut = { ...tx, sharedId: sid };
+      addSharedItem({ id: sid, kind: "expense", date: tx.date, amount: tx.amount, catId: metaIn.shared.catId, note: tx.note || "", paidBy: authUser.id, split: 50, createdBy: authUser.id });
+    }
+    addTransaction(txOut, meta);
+    finishPending(txOut);
     // Если это доход — показываем модалку автоматического распределения
     if (tx.type === "income" && !tx.excludeIncome) {
       setNewIncomeTx(tx);
@@ -676,6 +745,7 @@ export default function App() {
   // открытую страницу (Нужды/Желания/Подушка). Повторное нажатие (мы уже там и форма
   // закрыта) — сразу открывает "Новую операцию".
   function handleSelectAdd() {
+    if (space === "shared") { setPageIndex(0); setSharedFormOpen(true); return; }
     if (!formInitial && pageIndex >= 1 && pageIndex <= 3) {
       openForm(defaultAddFormFor(pageIndex));
     } else {
@@ -684,7 +754,7 @@ export default function App() {
   }
 
   function goPage(delta) {
-    if (formInitial) return;
+    if (formInitial || space === "shared") return;
     setPageIndex((i) => Math.max(0, Math.min(4, i + delta)));
   }
 
@@ -744,7 +814,15 @@ export default function App() {
   const viewSettings = readOnly && partnerData ? partnerData.settings : settings;
   const viewTransactions = readOnly && partnerData ? partnerData.transactions : transactions;
   const spaceCtx = partnerInfo
-    ? { enabled: true, current: space, names: spaceNames, partnerShares: !!partnerInfo.partner_shares, onSelect: selectSpace }
+    ? {
+        enabled: true,
+        current: space,
+        names: spaceNames,
+        partnerShares: !!partnerInfo.partner_shares,
+        onSelect: selectSpace,
+        sharedAvailable: sharedState === "ready",
+        sharedCats: sharedCatsOf(sharedData.cats),
+      }
     : null;
   const showPartnerPlaceholder = readOnly && !partnerData && !formInitial && pageIndex !== 4;
   const openReceipt = readOnly ? () => showToast("Фото чеков партнёра недоступны") : setReceiptViewId;
@@ -809,6 +887,24 @@ export default function App() {
                   onCancel={closeForm}
                 />
               </div>
+            ) : space === "shared" && pageIndex !== 4 ? (
+              <SharedView
+                items={sharedData.items}
+                cats={sharedData.cats}
+                names={spaceNames}
+                myId={authUser?.id}
+                partnerId={partnerInfo?.partner?.id}
+                state={sharedState === "idle" ? "loading" : sharedState}
+                errorText={sharedError}
+                onRetry={() => loadShared()}
+                selectedMonth={selectedMonth}
+                setSelectedMonth={setSelectedMonth}
+                formOpen={sharedFormOpen}
+                setFormOpen={setSharedFormOpen}
+                onAddItem={addSharedItem}
+                onDeleteItem={deleteSharedItem}
+                onAddCat={addSharedCat}
+              />
             ) : pageIndex === 0 ? (
               <AnalysisView
                 readOnly={readOnly}
