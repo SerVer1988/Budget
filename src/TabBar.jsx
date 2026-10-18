@@ -37,10 +37,19 @@ export function NavIconAdd({ size = 34 }) {
   );
 }
 
-export function TabBar({ pageIndex, onSelectAdd, onSelectAnalysis, onSelectSettings }) {
+export function NavIconLock({ size = 34 }) {
+  return (
+    <svg viewBox="0 0 24 24" style={{ width: size * 0.7, height: size * 0.7 }} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+
+export function TabBar({ pageIndex, locked, onSelectAdd, onSelectAnalysis, onSelectSettings }) {
   const items = [
     { id: "analysis", label: "Анализ", Icon: NavIconAnalysis, iconSize: 22, cls: "", onClick: onSelectAnalysis, active: pageIndex === 0 },
-    { id: "add", label: "Добавить", Icon: NavIconAdd, iconSize: 34, cls: "add", onClick: onSelectAdd, active: pageIndex >= 1 && pageIndex <= 3 },
+    { id: "add", label: "Добавить", Icon: locked ? NavIconLock : NavIconAdd, iconSize: 34, cls: "add", onClick: onSelectAdd, active: pageIndex >= 1 && pageIndex <= 3 },
     { id: "settings", label: "Настройки", Icon: NavIconSettings, iconSize: 22, cls: "", onClick: onSelectSettings, active: pageIndex === 4 },
   ];
 

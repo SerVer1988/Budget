@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import { Camera, ChevronDown, ChevronLeft, Share2, Trash2, User } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { HouseholdSettings } from "./HouseholdSettings.jsx";
+import { PartnerSettings } from "./spaces.jsx";
 import { C } from "./constants.js";
 import { auth, profile } from "./storage.js";
 import { exportCsv, exportJsonBackup } from "./backup.js";
@@ -59,7 +60,7 @@ function Fold({ title, open, onToggle, children }) {
   );
 }
 
-export function ProfileView({ user, avatar, onAvatarChange, settings, transactions, onImport, userEmail, onSignOut, onBack }) {
+export function ProfileView({ user, avatar, onAvatarChange, settings, transactions, onImport, onSaveSettings, userEmail, onSignOut, onBack }) {
   const fileRef = useRef(null);
   const importInputRef = useRef(null);
   const [name, setName] = useState(user?.name || "");
@@ -247,6 +248,8 @@ export function ProfileView({ user, avatar, onAvatarChange, settings, transactio
       </Fold>
 
       <HouseholdSettings />
+
+      <PartnerSettings settings={settings} onSaveSettings={onSaveSettings} />
 
       <div className="panel">
         <button className="btn" type="button" style={{ width: "100%" }} onClick={shareApp}>

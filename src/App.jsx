@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { storage, auth, household, inbox } from "./storage.js";
+import { storage, auth, household, inbox, partner } from "./storage.js";
 import { learnMerchant } from "./bankParse.js";
 import { rememberOp } from "./dedupe.js";
 import { receivedParts } from "./InboxPanel.jsx";
@@ -28,6 +28,7 @@ import { AppStyles } from "./AppStyles.jsx";
 import { AnalysisView } from "./AnalysisView.jsx";
 import { AuthScreen } from "./AuthScreen.jsx";
 import { SettingsView } from "./SettingsView.jsx";
+import { SpaceContext, SpaceStrip, SpaceSwitch, spaceNamesOf } from "./spaces.jsx";
 
 /* ============================================================ App */
 export default function App() {
@@ -73,6 +74,16 @@ export default function App() {
   const touchRef = useRef(null);
   const [authUser, setAuthUser] = useState(undefined); // undefined — проверяем сессию, null — не вошли
   const [stale, setStale] = useState(false); // на другом устройстве данные уже изменились
+
+  // Пространства пары: «me» — мой бюджет, «partner» — бюджет партнёра (только просмотр).
+  const [partnerInfo, setPartnerInfo] = useState(null); // { partner: { id, email }, i_share, partner_shares } | null
+  const [space, setSpace] = useState("me");
+  const [partnerData, setPartnerData] = useState(null); // { settings, transactions } партнёра, только чтение
+  const [partnerState, setPartnerState] = useState("idle"); // idle | loading | ready | noaccess | error
+  const readOnly = space === "partner" && pageIndex !== 4; // на странице «Настройки» всегда мои данные
+  const readOnlyRef = useRef(false);
+  readOnlyRef.current = readOnly;
+  const spaceNames = spaceNamesOf(settings);
 
   // Картинки трёх страниц (Нужды/Желания/Подушка) и значки банков — в кэш браузера сразу,
   // ещё до первого свайпа, иначе при переключении страниц был бы короткий мерцающий момент.
@@ -153,6 +164,56 @@ export default function App() {
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", run); };
   }, [loaded, transactions, settings]);
 
+  // Привязанный партнёр: сведения о связи (если выполнен supabase-partner.sql и аккаунты привязаны).
+  useEffect(() => {
+    if (!authUser || !loaded || household.scope() === "household") return undefined;
+    let alive = true;
+    partner.info().then((i) => { if (alive) setPartnerInfo(i); }).catch(() => { if (alive) setPartnerInfo(null); });
+    return () => { alive = false; };
+  }, [authUser?.id, loaded]);
+
+  // Бюджет партнёра обновляем, когда возвращаемся в приложение (пока открыто его пространство).
+  useEffect(() => {
+    if (space !== "partner") return undefined;
+    function onVisible() { if (document.visibilityState === "visible") loadPartnerData(); }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [space, partnerInfo?.partner?.id]);
+
+  async function loadPartnerData() {
+    if (!partnerInfo?.partner) return;
+    setPartnerState((st) => (st === "ready" ? st : "loading"));
+    try {
+      const d = await partner.loadData(partnerInfo.partner.id);
+      if (!d.settings && !d.transactions) { setPartnerData(null); setPartnerState("noaccess"); return; }
+      const s = d.settings ? migrateSettings(JSON.parse(d.settings)) : DEFAULT_SETTINGS;
+      const t = d.transactions ? migrateTransactions(JSON.parse(d.transactions), s) : [];
+      setPartnerData({ settings: s, transactions: t });
+      setPartnerState("ready");
+    } catch (e) {
+      console.warn("Не удалось загрузить бюджет партнёра", e);
+      setPartnerState((st) => (st === "ready" ? st : "error"));
+    }
+  }
+
+  function selectSpace(id) {
+    if (id === space) return;
+    setFormInitial(null);
+    if (id === "partner") {
+      if (!partnerInfo?.partner_shares) { showToast(`«${spaceNames.partner}» пока не открыл доступ к бюджету`); return; }
+      setPartnerData(null);
+      setPartnerState("loading");
+      setSpace("partner");
+      loadPartnerData();
+    } else {
+      setSpace("me");
+    }
+  }
+
+  // Чужой бюджет — только просмотр: любое изменяющее действие даёт подсказку и ничего не делает.
+  const blocked = () => showToast(`Бюджет «${spaceNames.partner}» — только просмотр`);
+  const ro = (fn) => (...args) => (readOnlyRef.current ? blocked() : fn(...args));
+
   // Читает настройки и операции из хранилища. failed — если что-то не удалось прочитать
   // (например, нет сети): тогда обновлять экран по этим данным нельзя.
   async function loadAll() {
@@ -187,6 +248,7 @@ export default function App() {
   }
 
   async function persistTransactions(next) {
+    if (readOnlyRef.current) { showToast(`Бюджет «${spaceNames.partner}» — только просмотр`); return; }
     setTransactions(next);
     try {
       const res = await storage.set("transactions", JSON.stringify(next));
@@ -198,6 +260,7 @@ export default function App() {
   }
 
   async function persistSettings(next) {
+    if (readOnlyRef.current) { showToast(`Бюджет «${spaceNames.partner}» — только просмотр`); return; }
     setSettings(next);
     try {
       const res = await storage.set("settings", JSON.stringify(next));
@@ -500,6 +563,7 @@ export default function App() {
   }
 
   function openForm(initial) {
+    if (readOnlyRef.current) { showToast(`Бюджет «${spaceNames.partner}» — только просмотр`); return; }
     setFormInitial(initial || { type: "expense", card: "sber", bucket: "needs" });
   }
 
@@ -677,8 +741,17 @@ export default function App() {
   const folderBucketKey = pageIndex === 1 ? "needs" : pageIndex === 2 ? "wants" : pageIndex === 3 ? "savings" : null;
   const heroBg = folderBucketKey ? BUCKET_STYLE[folderBucketKey].folderBg : undefined;
 
+  const viewSettings = readOnly && partnerData ? partnerData.settings : settings;
+  const viewTransactions = readOnly && partnerData ? partnerData.transactions : transactions;
+  const spaceCtx = partnerInfo
+    ? { enabled: true, current: space, names: spaceNames, partnerShares: !!partnerInfo.partner_shares, onSelect: selectSpace }
+    : null;
+  const showPartnerPlaceholder = readOnly && !partnerData && !formInitial && pageIndex !== 4;
+  const openReceipt = readOnly ? () => showToast("Фото чеков партнёра недоступны") : setReceiptViewId;
+
   return (
-    <ReceiptContext.Provider value={setReceiptViewId}>
+    <SpaceContext.Provider value={spaceCtx}>
+    <ReceiptContext.Provider value={openReceipt}>
       <AppStyles />
 
       {receiptViewId && <ReceiptModal txId={receiptViewId} onClose={() => setReceiptViewId(null)} />}
@@ -708,7 +781,25 @@ export default function App() {
               />
             )}
 
-            {formInitial ? (
+            {readOnly && partnerData && !formInitial && <SpaceStrip />}
+
+            {showPartnerPlaceholder ? (
+              <div className="screen-stack">
+                <SpaceSwitch />
+                <div className="panel" style={{ textAlign: "center" }}>
+                  {partnerState === "noaccess" ? (
+                    <div className="muted" style={{ fontSize: 13 }}>«{spaceNames.partner}» пока не открыл доступ к бюджету.</div>
+                  ) : partnerState === "error" ? (
+                    <>
+                      <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>Не получилось загрузить бюджет «{spaceNames.partner}».</div>
+                      <button type="button" className="btn" onClick={loadPartnerData}>Повторить</button>
+                    </>
+                  ) : (
+                    <div className="muted" style={{ fontSize: 13 }}>Загружаю бюджет «{spaceNames.partner}»…</div>
+                  )}
+                </div>
+              </div>
+            ) : formInitial ? (
               <div className="screen-stack">
                 <FullAddForm
                   settings={settings}
@@ -720,41 +811,42 @@ export default function App() {
               </div>
             ) : pageIndex === 0 ? (
               <AnalysisView
-                onPostRecurring={postRecurring}
-                onFixBalance={fixBalance}
+                readOnly={readOnly}
+                onPostRecurring={ro(postRecurring)}
+                onFixBalance={ro(fixBalance)}
                 onBalanceOk={(text) => showToast(text)}
-                pending={pending}
-                onAcceptPending={acceptPending}
-                onEditPending={editPending}
-                onDismissPending={(row) => dropPending(row.id)}
-                onRepayLoan={repayLoan}
-                onAcceptTransfer={acceptTransfer}
-                onEditTransfer={editTransfer}
-                onDismissTransfer={(p) => { dropPending(p.out.row.id); dropPending(p.in.row.id); }}
-                settings={settings}
-                transactions={transactions}
+                pending={readOnly ? [] : pending}
+                onAcceptPending={ro(acceptPending)}
+                onEditPending={ro(editPending)}
+                onDismissPending={ro((row) => dropPending(row.id))}
+                onRepayLoan={ro(repayLoan)}
+                onAcceptTransfer={ro(acceptTransfer)}
+                onEditTransfer={ro(editTransfer)}
+                onDismissTransfer={ro((p) => { dropPending(p.out.row.id); dropPending(p.in.row.id); })}
+                settings={viewSettings}
+                transactions={viewTransactions}
                 selectedMonth={selectedMonth}
                 setSelectedMonth={setSelectedMonth}
-                onDelete={requestDelete}
-                onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx, transactions))}
-                onToggleInclude={toggleIncludeInTotal}
-                onCloseMonth={closeMonth}
-                onWriteOffDebtGroup={writeOffDebtGroup}
+                onDelete={ro(requestDelete)}
+                onEditTx={ro((tx) => openForm(deriveFormInitialFromTx(tx, transactions)))}
+                onToggleInclude={ro(toggleIncludeInTotal)}
+                onCloseMonth={ro(closeMonth)}
+                onWriteOffDebtGroup={ro(writeOffDebtGroup)}
                 goToAdd={() => selectPage(1)}
               />
             ) : pageIndex >= 1 && pageIndex <= 3 ? (
               <AddPageContent
                 pageIndex={pageIndex - 1}
-                settings={settings}
-                transactions={transactions}
+                settings={viewSettings}
+                transactions={viewTransactions}
                 openForm={openForm}
                 canPrev={pageIndex > 0}
                 canNext={pageIndex < 4}
                 onPrev={() => goPage(-1)}
                 onNext={() => goPage(1)}
                 onSelectPage={(i) => selectPage(i + 1)}
-                onDeleteTx={requestDelete}
-                onEditTx={(tx) => openForm(deriveFormInitialFromTx(tx, transactions))}
+                onDeleteTx={ro(requestDelete)}
+                onEditTx={ro((tx) => openForm(deriveFormInitialFromTx(tx, transactions)))}
                 onSaveSettings={persistSettings}
               />
             ) : (
@@ -777,6 +869,7 @@ export default function App() {
 
           <TabBar
             pageIndex={pageIndex}
+            locked={readOnly}
             onSelectAdd={handleSelectAdd}
             onSelectAnalysis={() => selectPage(0)}
             onSelectSettings={() => selectPage(4)}
@@ -799,5 +892,6 @@ export default function App() {
         </div>
       </div>
     </ReceiptContext.Provider>
+    </SpaceContext.Provider>
   );
 }

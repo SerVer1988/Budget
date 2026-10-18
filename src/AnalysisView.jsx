@@ -26,10 +26,12 @@ import { computeForecast } from "./forecast.js";
 import { BankBadge, EmptyState, MonthNav, SectionTitle, StatBox } from "./ui.jsx";
 import { BUCKET_CARD, C, TX_TYPE_FILTERS } from "./constants.js";
 import { aggregateOpenDebts } from "./debts.js";
+import { SpaceSwitch } from "./spaces.jsx";
 import { aggregateMonth, computeBalances, txCardsOf, txImpactFor, txNetImpact, txSearchText } from "./finance.js";
 import { bucketIconSrc, bucketName, cardLabel, dayOfMonth, daysInMonth, endOfMonthStr, formatMoney, monthLabel, shiftMonth, todayMonthKey, todayStr } from "./format.js";
 
 export function AnalysisView({
+  readOnly,
   onFixBalance,
   onBalanceOk,
   settings,
@@ -147,10 +149,11 @@ export function AnalysisView({
 
   return (
     <div className="screen-stack">
+      <SpaceSwitch />
       <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
       <NotifyNudge />
 
-      <InboxPanel
+      {!readOnly && <InboxPanel
         pending={pending || []}
         settings={settings}
         transactions={transactions}
@@ -162,7 +165,7 @@ export function AnalysisView({
         onDismissTransfer={onDismissTransfer}
         onFixBalance={onFixBalance}
         onBalanceOk={onBalanceOk}
-      />
+      />}
 
       {showCloseBanner && (
         <div className="notice" style={{ borderColor: C.ozon, background: C.ozonSoft, color: "#0F3E70" }}>

@@ -169,7 +169,7 @@ function isDirty(k) { return dirtyRead().includes(k); }
 
 function clearUserCache(userId) {
   try {
-    const prefixes = [`${PREFIX}u:${userId}:`, `${PREFIX}h:`, HH_CACHE(userId)];
+    const prefixes = [`${PREFIX}u:${userId}:`, `${PREFIX}h:`, HH_CACHE(userId), `${PREFIX}partner:${userId}`];
     Object.keys(localStorage).filter((k) => prefixes.some((p) => k.startsWith(p))).forEach((k) => localStorage.removeItem(k));
   } catch { /* ignore */ }
 }
@@ -297,6 +297,8 @@ function householdErrorText(r, notFound) {
   if (/already_member/.test(msg)) return "Вы уже состоите в совместном бюджете";
   if (/invalid_code/.test(msg)) return "Неверный код приглашения";
   if (/household_full/.test(msg)) return "В этом бюджете уже двое участников";
+  if (/already_linked/.test(msg)) return "Аккаунт уже привязан к партнёру";
+  if (/own_code/.test(msg)) return "Это ваш собственный код: отправьте его партнёру";
   if (/not_owner/.test(msg)) return "Это может сделать только владелец";
   if (/not_authenticated/.test(msg)) return "Нужно войти в аккаунт";
   if (r.status === 404) return notFound || "Совместный бюджет не настроен: выполните supabase-household.sql в Supabase";
@@ -649,6 +651,60 @@ export const household = {
 
   async removeMember(userId) {
     await rpc("remove_member", { p_user: userId });
+  },
+};
+
+/* ---------------------------------------------------------------- привязка аккаунтов («пространства») */
+// У каждого остаётся свой аккаунт и свои данные. Партнёр может только ЧИТАТЬ бюджет, если вы разрешили
+// (supabase-partner.sql). Ничего из его данных в ваше хранилище не пишется.
+const PARTNER_NOT_SET_UP = "Привязка аккаунтов не настроена: выполните supabase-partner.sql в Supabase";
+const partnerCacheKey = () => `${PREFIX}partner:${uid()}`;
+
+export const partner = {
+  // { partner: { id, email }, i_share, partner_shares } или null, если привязки нет.
+  async info() {
+    if (!session) throw new Error("not signed in");
+    return (await rpc("partner_info", {}, PARTNER_NOT_SET_UP)) || null;
+  },
+
+  async createInvite() {
+    if (!session) throw new Error("not signed in");
+    return rpc("create_partner_invite", {}, PARTNER_NOT_SET_UP);
+  },
+
+  async accept(code) {
+    if (!session) throw new Error("not signed in");
+    await rpc("accept_partner_invite", { p_code: code }, PARTNER_NOT_SET_UP);
+  },
+
+  async setSharing(share) {
+    if (!session) throw new Error("not signed in");
+    await rpc("set_partner_sharing", { p_share: !!share }, PARTNER_NOT_SET_UP);
+  },
+
+  async unlink() {
+    if (!session) throw new Error("not signed in");
+    await rpc("unlink_partner", {}, PARTNER_NOT_SET_UP);
+    lsDel(partnerCacheKey());
+  },
+
+  // Бюджет партнёра: { settings, transactions } — строки JSON или null (если партнёр не открыл доступ).
+  // Без сети показываем последнюю сохранённую копию (offline: true).
+  async loadData(partnerId) {
+    if (!session) throw new Error("not signed in");
+    try {
+      const token = await ensureToken();
+      const r = await http(`/rest/v1/${TABLE}?user_id=eq.${enc(partnerId)}&key=in.(settings,transactions)&select=key,value`, { token });
+      if (!r.ok) throw new Error(`partner read ${r.status}`);
+      const out = { settings: null, transactions: null };
+      (Array.isArray(r.data) ? r.data : []).forEach((row) => { out[row.key] = row.value; });
+      lsSet(partnerCacheKey(), JSON.stringify(out));
+      return out;
+    } catch (e) {
+      const cached = safeJson(lsGet(partnerCacheKey()) || "");
+      if (cached) return { ...cached, offline: true };
+      throw e;
+    }
   },
 };
 

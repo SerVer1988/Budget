@@ -9,6 +9,7 @@ import { C, CARD_BUCKET } from "./constants.js";
 import { bucketIconSrc, bucketName, cardLabel, formatMoney, ruPlural } from "./format.js";
 import { shortDate } from "./forecast.js";
 import { loanCash } from "./loans.js";
+import { SpaceSwitch } from "./spaces.jsx";
 
 export function TotalBalanceCard({ total, settings, onToggle }) {
   const items = [
@@ -280,6 +281,8 @@ export function FolderHero({
         <div className="hero-badge">
           <BankBadge src={bucketIconSrc(settings, CARD_BUCKET[card])} />
         </div>
+
+        <SpaceSwitch variant="hero" />
 
         <button
           type="button"
