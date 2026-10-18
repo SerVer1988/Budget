@@ -235,15 +235,26 @@ export function PartnerSettings({ settings, onSaveSettings }) {
   return (
     <div className="panel">
       <button type="button" className="section-title-toggle" onClick={() => setOpen((v) => !v)}>
-        <SectionTitle>Пространства пары</SectionTitle>
+        <SectionTitle>Совместный бюджет</SectionTitle>
         <ChevronDown size={16} className={`section-chevron${open ? " open" : ""}`} />
       </button>
 
       {open && (
         <>
           {inHousehold && (
-            <div className="muted" style={{ fontSize: 12 }}>
-              Сейчас включён общий бюджет (одни данные на двоих). Привязка отдельных аккаунтов недоступна: выйдите из общего бюджета выше.
+            <div>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+                Этот аккаунт ещё подключён к старому общему бюджету (одни данные на двоих). Чтобы привязать отдельные аккаунты, выйдите из него: ваша копия данных останется у вас.
+              </div>
+              <button
+                type="button"
+                className="btn"
+                style={{ width: "100%", color: C.danger }}
+                disabled={busy}
+                onClick={() => run(() => household.leave({ keepCopy: true }), { confirmText: "Выйти из старого общего бюджета? Копия данных останется в вашем аккаунте.", reload: true })}
+              >
+                Выйти из старого общего бюджета
+              </button>
             </div>
           )}
 
@@ -309,6 +320,19 @@ export function PartnerSettings({ settings, onSaveSettings }) {
               </label>
               <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
                 {info.partner_shares ? "Партнёр открыл вам свой бюджет." : "Партнёр пока не открыл вам свой бюджет."}
+              </div>
+
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", marginBottom: 6 }}>
+                <input
+                  type="checkbox"
+                  style={{ width: "auto", marginTop: 2 }}
+                  checked={settings.partnerNotify !== false}
+                  onChange={(e) => onSaveSettings({ ...settings, partnerNotify: e.target.checked })}
+                />
+                <span style={{ fontSize: 13 }}>Уведомлять о тратах партнёра</span>
+              </label>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
+                Когда партнёр вносит расход (свой, если он открыл бюджет, или общую трату), вы увидите сообщение в приложении, а при включённых уведомлениях устройства ещё и системное. Оно приходит, пока приложение открыто или когда вы в него возвращаетесь.
               </div>
 
               <div className="field">

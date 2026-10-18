@@ -231,18 +231,6 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
       <button className="btn primary" type="button" onClick={save}>
         {saved ? "Сохранено" : "Сохранить"}
       </button>
-      <button
-        className="btn"
-        type="button"
-        style={{ color: C.danger }}
-        onClick={() => {
-          if (window.confirm("Удалить все операции? Настройки останутся.")) {
-            onWipeAll();
-          }
-        }}
-      >
-        Очистить
-      </button>
     </div>
   );
 

@@ -1,7 +1,6 @@
 import React, { useRef, useState } from "react";
 import { Camera, ChevronDown, ChevronLeft, Share2, Trash2, User } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
-import { HouseholdSettings } from "./HouseholdSettings.jsx";
 import { PartnerSettings } from "./spaces.jsx";
 import { C } from "./constants.js";
 import { auth, profile } from "./storage.js";
@@ -259,8 +258,6 @@ export function ProfileView({ user, avatar, onAvatarChange, settings, transactio
           Удалить историю (стереть данные)
         </button>
       </Fold>
-
-      <HouseholdSettings />
 
       <PartnerSettings settings={settings} onSaveSettings={onSaveSettings} />
 

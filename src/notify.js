@@ -108,6 +108,13 @@ async function showOne(n) {
   try { new Notification(n.title, opts); } catch { /* ignore */ }
 }
 
+/* Разовое уведомление на устройстве (если оно включено в настройках). */
+export async function showDeviceNotice(n) {
+  if (!notifyEnabled()) return false;
+  await showOne(n);
+  return true;
+}
+
 /* Показывает ещё не показанные сегодня уведомления. Возвращает те, что показал. */
 export async function showNotices(notices, today) {
   if (!notifyEnabled()) return [];

@@ -22,7 +22,8 @@ import { buildRecurringExpense, markPosted } from "./recurring.js";
 import { removeReceipt, saveReceipt } from "./receipts.js";
 import { buildRepay } from "./loans.js";
 import { ReceiptContext, ReceiptModal } from "./ReceiptViewer.jsx";
-import { buildNotices, deliverNotes, showNotices } from "./notify.js";
+import { buildNotices, deliverNotes, showDeviceNotice, showNotices } from "./notify.js";
+import { planPartnerNotices, readFeedState, writeFeedState } from "./partnerFeed.js";
 import { computeAllInsights } from "./insights.js";
 import { AppStyles } from "./AppStyles.jsx";
 import { AnalysisView } from "./AnalysisView.jsx";
@@ -89,6 +90,10 @@ export default function App() {
   const readOnly = space === "partner" && pageIndex !== 4; // на странице «Настройки» всегда мои данные
   const readOnlyRef = useRef(false);
   readOnlyRef.current = readOnly;
+  const spaceRef = useRef("me");
+  spaceRef.current = space;
+  const partnerInfoRef = useRef(null);
+  partnerInfoRef.current = partnerInfo;
   const spaceNames = spaceNamesOf(settings);
 
   // Картинки трёх страниц (Нужды/Желания/Подушка) и значки банков — в кэш браузера сразу,
@@ -201,11 +206,69 @@ export default function App() {
 
   // «Общая» книга: загружаем, как только известно, что аккаунты привязаны.
   useEffect(() => {
+    if (partnerInfo?.partner) loadShared();
+  }, [partnerInfo?.partner?.id]);
+
+  // Уведомления о тратах партнёра: что нового с прошлого раза (первый запуск молчит). Если уведомления
+  // выключены в настройках, «увиденное» всё равно запоминаем, чтобы при включении не пришёл поток старого.
+  const feedCfgRef = useRef({});
+  feedCfgRef.current = {
+    uid: authUser?.id,
+    partnerId: partnerInfo?.partner?.id,
+    names: spaceNames,
+    enabled: settings.partnerNotify !== false,
+    cats: sharedData.cats,
+  };
+
+  function feedDeliver(personal, sharedList) {
+    const cfg = feedCfgRef.current;
+    if (!cfg.uid || !cfg.partnerId) return;
+    const catNameOf = (id) => sharedCatsOf(cfg.cats).find((c) => c.id === id)?.name || "Без категории";
+    const { lines, extra, state } = planPartnerNotices({
+      state: readFeedState(cfg.uid, cfg.partnerId),
+      personal,
+      shared: sharedList,
+      partnerId: cfg.partnerId,
+      names: cfg.names,
+      catNameOf,
+      today: todayStr(),
+    });
+    writeFeedState(cfg.uid, cfg.partnerId, state);
+    if (!cfg.enabled || !lines.length) return;
+    const total = lines.length + extra;
+    showToast(total === 1 ? lines[0] : `${lines[0]} и ещё ${total - 1}`, { ms: 6000 });
+    showDeviceNotice({ key: `partner:${Date.now()}`, title: "Совместный бюджет", body: lines.join("\n") + (extra ? `\nи ещё ${extra}` : "") });
+  }
+
+  // Общая книга: новые траты партнёра.
+  useEffect(() => {
+    if (sharedState === "ready") feedDeliver(null, sharedData.items);
+  }, [sharedData.items, sharedState]);
+
+  // Раз в полминуты, пока приложение открыто (и при возвращении в него): связь, личные траты партнёра, общая книга.
+  useEffect(() => {
     if (!partnerInfo?.partner) return undefined;
-    loadShared();
-    function onVisible() { if (document.visibilityState === "visible") loadShared(true); }
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+    let alive = true;
+    async function tick() {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const info = await partner.info();
+        if (!alive || !info) return;
+        if (JSON.stringify(info) !== JSON.stringify(partnerInfoRef.current)) setPartnerInfo(info);
+        if (info.partner_shares) {
+          const d = await partner.loadData(info.partner.id);
+          let txs = null;
+          try { txs = d.transactions ? JSON.parse(d.transactions) : []; } catch { /* ignore */ }
+          if (alive && Array.isArray(txs)) feedDeliver(txs, null);
+          if (alive && spaceRef.current === "partner") loadPartnerData();
+        }
+        loadShared(true);
+      } catch { /* нет сети — попробуем в следующий раз */ }
+    }
+    tick();
+    const timer = setInterval(tick, 30000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { alive = false; clearInterval(timer); document.removeEventListener("visibilitychange", tick); };
   }, [partnerInfo?.partner?.id]);
 
   async function loadShared(silent) {
