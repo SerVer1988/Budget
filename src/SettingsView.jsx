@@ -169,14 +169,19 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
 
   const [draft, setDraft] = useState(settings);
   const [daysText, setDaysText] = useState((settings.reminderDays || []).join(", "));
-  const [saved, setSaved] = useState(false);
   const [banksOpen, setBanksOpen] = useState(false); // «Банки бюджета» по умолчанию свёрнуты
   const [ruleOpen, setRuleOpen] = useState(false); // «Правило распределения» свёрнуто
   const [needsOpen, setNeedsOpen] = useState(false);
   const [wantsOpen, setWantsOpen] = useState(false);
   const [openCatKey, setOpenCatKey] = useState(null);
 
+  // Настройки сохраняются сами через долю секунды после правки. Собственное эхо сохранения не затирает поля,
+  // пока вы печатаете; изменения из других блоков (платежи, пара и т. д.) подтягиваются как обычно.
+  const lastSavedRef = useRef(null);
+  const saveTimerRef = useRef(null);
+
   useEffect(() => {
+    if (lastSavedRef.current && JSON.stringify(settings) === lastSavedRef.current) return;
     setDraft(settings);
     setDaysText((settings.reminderDays || []).join(", "));
   }, [settings]);
@@ -205,10 +210,26 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
       },
     };
 
+    const json = JSON.stringify(next);
+    if (json === JSON.stringify(settings)) return;
+    lastSavedRef.current = json;
     onSave(next);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1300);
   }
+
+  const saveRef = useRef(save);
+  saveRef.current = save;
+
+  useEffect(() => {
+    if (draft === settings && daysText === (settings.reminderDays || []).join(", ")) return undefined;
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => { saveTimerRef.current = null; saveRef.current(); }, 700);
+    return () => clearTimeout(saveTimerRef.current);
+  }, [draft, daysText]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ушли с экрана, не дождавшись паузы, — сохраняем сразу.
+  useEffect(() => () => {
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; saveRef.current(); }
+  }, []);
 
   function updateNeedCat(index, next) {
     setDraft((d) => {
@@ -225,15 +246,6 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
       return { ...d, wantCats: arr };
     });
   }
-
-  // «Сохранить» и «Очистить»: показываются и внизу экрана, и внутри раскрытых списков категорий
-  const actionButtons = (
-    <div className="button-row">
-      <button className="btn primary" type="button" onClick={save}>
-        {saved ? "Сохранено" : "Сохранить"}
-      </button>
-    </div>
-  );
 
   if (showProfile) {
     return (
@@ -459,8 +471,6 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
       <RecurringSettings settings={settings} onSaveSettings={onSaveSettings} />
 
       <InboxSettings />
-
-      {actionButtons}
 
       <SettingsExtras
         settings={settings}
