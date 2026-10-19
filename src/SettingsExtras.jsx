@@ -1,18 +1,43 @@
 import React, { useRef, useState } from "react";
-import { Share2 } from "lucide-react";
 import { C } from "./constants.js";
 import { exportCsv, exportJsonBackup } from "./backup.js";
 import { PartnerSettings } from "./spaces.jsx";
 import { Fold, SUPPORT_URL } from "./ProfileView.jsx";
+import supportIcon from "./assets/icon-support.png";
+import shareIcon from "./assets/icon-share.png";
+
+/* Чёрная картинка-маска, окрашенная цветом текста кнопки. */
+function MaskIcon({ src, size = 20 }) {
+  const url = `url(${src})`;
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: "inline-block",
+        flex: "0 0 auto",
+        width: size,
+        height: size,
+        background: "currentColor",
+        WebkitMaskImage: url,
+        maskImage: url,
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+      }}
+    />
+  );
+}
 
 /* Нижняя часть настроек: данные (копия, таблица, восстановление, удаление истории), совместный бюджет,
-   «Поделиться приложением» и «Поддержать проект». */
+   кнопки «Поддержать» и «Поделиться». */
 export function SettingsExtras({ settings, transactions, onImport, onSaveSettings, onWipeAll }) {
   const importInputRef = useRef(null);
   const [importMsg, setImportMsg] = useState("");
-  const [shareMsg, setShareMsg] = useState("");
+  const [flash, setFlash] = useState(""); // короткая подпись на кнопке после нажатия
   const [dataOpen, setDataOpen] = useState(false);
-  const [supportOpen, setSupportOpen] = useState(false);
 
   async function handleImportFile(e) {
     const file = e.target.files?.[0];
@@ -35,8 +60,12 @@ export function SettingsExtras({ settings, transactions, onImport, onSaveSetting
     }
   }
 
+  function showFlash(text) {
+    setFlash(text);
+    setTimeout(() => setFlash(""), 1600);
+  }
+
   async function shareApp() {
-    setShareMsg("");
     const url = window.location.origin + window.location.pathname;
     const text = "Приложение для учёта бюджета по методу 50/30/20";
     if (navigator.share) {
@@ -49,14 +78,15 @@ export function SettingsExtras({ settings, transactions, onImport, onSaveSetting
     }
     try {
       await navigator.clipboard.writeText(url);
-      setShareMsg("Ссылка скопирована");
+      showFlash("share:Скопировано");
     } catch {
-      setShareMsg(url);
+      window.prompt("Скопируйте ссылку", url);
     }
   }
 
   function support() {
     if (SUPPORT_URL) window.open(SUPPORT_URL, "_blank", "noopener");
+    else showFlash("support:Скоро");
   }
 
   return (
@@ -92,25 +122,16 @@ export function SettingsExtras({ settings, transactions, onImport, onSaveSetting
 
       <PartnerSettings settings={settings} onSaveSettings={onSaveSettings} />
 
-      <div className="panel">
-        <button className="btn" type="button" style={{ width: "100%" }} onClick={shareApp}>
-          <Share2 size={15} style={{ verticalAlign: -2, marginRight: 8 }} />
-          Поделиться приложением
+      <div className="button-row" style={{ marginTop: 0 }}>
+        <button className="btn" type="button" onClick={support} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <MaskIcon src={supportIcon} />
+          {flash.startsWith("support:") ? flash.slice(8) : "Поддержать"}
         </button>
-        {shareMsg && <div className="muted" style={{ fontSize: 12, marginTop: 8, wordBreak: "break-all" }}>{shareMsg}</div>}
+        <button className="btn" type="button" onClick={shareApp} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <MaskIcon src={shareIcon} />
+          {flash.startsWith("share:") ? flash.slice(6) : "Поделиться"}
+        </button>
       </div>
-
-      <Fold title="Поддержать проект" open={supportOpen} onToggle={() => setSupportOpen((v) => !v)}>
-        <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>
-          Приложение делается для себя и для близких. Если оно вам полезно, можно поддержать его развитие.
-        </div>
-        <button className="btn primary" type="button" style={{ width: "100%" }} onClick={support} disabled={!SUPPORT_URL}>
-          Поддержать
-        </button>
-        {!SUPPORT_URL && (
-          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Ссылка для поддержки пока не добавлена.</div>
-        )}
-      </Fold>
     </>
   );
 }

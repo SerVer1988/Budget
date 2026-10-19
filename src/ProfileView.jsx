@@ -6,7 +6,7 @@ import { auth, profile } from "./storage.js";
 
 // Ссылка, куда ведёт кнопка «Поддержать проект» (страница доната, СБП-ссылка, Boosty и т. п.).
 // Пока пусто — кнопка покажет подсказку. Вставьте свою ссылку между кавычками.
-export const SUPPORT_URL = "";
+export const SUPPORT_URL = "https://messenger.sbrf.ru/sl/Y2DHDydkmrmCeCG3d";
 
 /* Квадратное фото 192×192 из выбранной картинки (обрезка по центру), JPEG — это ~10 КБ. */
 function resizeToAvatar(file, size = 192) {
