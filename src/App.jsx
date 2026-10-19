@@ -7,6 +7,11 @@ import cardNeedsImg from "./assets/card-needs.webp";
 import cardWantsImg from "./assets/card-wants.webp";
 import cardSavingsImg from "./assets/card-savings.webp";
 import bottomPlantsImg from "./assets/bottom-plants.webp";
+
+// Картинки шапок и нижней панели начинают грузиться сразу при запуске, а не когда дойдёт до экрана.
+if (typeof Image !== "undefined") {
+  [cardNeedsImg, cardWantsImg, cardSavingsImg, bottomPlantsImg].forEach((src) => { const im = new Image(); im.src = src; });
+}
 import badgeSberImg from "./assets/badge-sber.webp";
 import badgeAlfaImg from "./assets/badge-alfa.webp";
 import badgeOzonImg from "./assets/badge-ozon.webp";

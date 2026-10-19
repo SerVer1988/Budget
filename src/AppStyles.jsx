@@ -404,19 +404,61 @@ export function AppStyles() {
 
       /* Картинка — фон на всю ширину экрана; всё остальное лежит поверх неё
          абсолютным позиционированием в процентах от самой картинки. */
+      /* Высота шапки задана заранее (пропорции картинки 860×570): пока картинка грузится, цифры и подписи
+         лежат на своих местах и ничего не «слипается». Под картинкой — заглушка в цвет папки. */
       .folder-hero {
         position: relative;
         width: calc(100% + 24px);
         margin: 0 -12px;
         line-height: 0;
+        aspect-ratio: 860 / 570;
       }
 
       .folder-hero-img {
+        position: absolute;
+        inset: 0;
         width: 100%;
-        height: auto;
+        height: 100%;
         display: block;
+        opacity: 0;
+        transition: opacity 0.25s ease;
         user-select: none;
         -webkit-user-drag: none;
+      }
+
+      .folder-hero-img.loaded {
+        opacity: 1;
+      }
+
+      .folder-hero-ph {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .folder-hero-ph::before { /* тело папки */
+        content: "";
+        position: absolute;
+        left: 0.5%;
+        right: 0.5%;
+        top: 12%;
+        bottom: 6%;
+        border-radius: 7% / 10%;
+        background: var(--ph-body, #E6F1DB);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+      }
+
+      .folder-hero-ph::after { /* три вкладки */
+        content: "";
+        position: absolute;
+        left: 9%;
+        right: 11%;
+        top: 0;
+        height: 14%;
+        border-radius: 6% 6% 0 0 / 50% 50% 0 0;
+        background: linear-gradient(90deg, #FAFDF9 0 33.3%, #FEF4E8 33.3% 66.6%, #F2F7FA 66.6% 100%);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        border-bottom: 0;
       }
 
       .hero-tab-num {

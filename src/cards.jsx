@@ -1,4 +1,4 @@
-import React, { useContext } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { Paperclip, ReceiptContext } from "./ReceiptViewer.jsx";
 import {
   ChevronDown,
@@ -219,6 +219,9 @@ export function TxRow({ tx, settings, onDelete, onEdit }) {
   );
 }
 
+// Цвет «тела папки» на картинке каждой вкладки: показывается заглушкой, пока картинка не загрузилась.
+const HERO_PLACEHOLDER = { sber: "#E6F1DB", alfa: "#FDEBD1", ozon: "#D9EAF1" };
+
 export const HERO_TABS = [
   { card: "sber", left: "23%" },
   { card: "alfa", left: "49%" },
@@ -248,10 +251,27 @@ export function FolderHero({
   onAdd,
   addLabel,
 }) {
+  const [loadedArt, setLoadedArt] = useState(null);
+  const imgRef = useRef(null);
+  const loaded = loadedArt === art;
+  useEffect(() => {
+    // картинка уже в кэше браузера — onLoad мог сработать до подписки
+    const el = imgRef.current;
+    if (el && el.complete && el.naturalWidth) setLoadedArt(art);
+  }, [art]);
+
   return (
     <>
-      <div className="folder-hero">
-        <img src={art} alt="" className="folder-hero-img" draggable="false" />
+      <div className="folder-hero" style={{ "--ph-body": HERO_PLACEHOLDER[card] || HERO_PLACEHOLDER.sber }}>
+        {!loaded && <div className="folder-hero-ph" aria-hidden="true" />}
+        <img
+          ref={imgRef}
+          src={art}
+          alt=""
+          className={`folder-hero-img${loaded ? " loaded" : ""}`}
+          draggable="false"
+          onLoad={() => setLoadedArt(art)}
+        />
 
         {HERO_TABS.map((t, i) => (
           <button
