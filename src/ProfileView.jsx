@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Camera, ChevronDown, ChevronLeft, Trash2, User } from "lucide-react";
+import { Camera, ChevronDown, ChevronLeft, User } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
 import { auth, profile } from "./storage.js";
@@ -137,46 +137,74 @@ export function ProfileView({ user, avatar, onAvatarChange, userEmail, onSignOut
         <div className="profile-head-title">Профиль</div>
       </div>
 
-      <div className="panel" style={{ textAlign: "center" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginTop: 6 }}>
-          <Avatar src={avatar} size={92} />
-        </div>
-        <div className="button-row" style={{ marginTop: 12 }}>
-          <button className="btn" type="button" disabled={photoBusy} onClick={() => fileRef.current?.click()}>
-            <Camera size={15} style={{ verticalAlign: -2, marginRight: 6 }} />
-            {photoBusy ? "Подождите…" : avatar ? "Заменить фото" : "Загрузить фото"}
+      <div className="panel">
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <button
+            type="button"
+            disabled={photoBusy}
+            onClick={() => fileRef.current?.click()}
+            aria-label={avatar ? "Заменить фото" : "Загрузить фото"}
+            style={{ position: "relative", flex: "0 0 auto", border: 0, background: "transparent", padding: 0, cursor: "pointer", opacity: photoBusy ? 0.6 : 1 }}
+          >
+            <Avatar src={avatar} size={104} />
+            <span
+              style={{
+                position: "absolute",
+                right: 2,
+                bottom: 2,
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                background: C.surface,
+                border: `1px solid ${C.border}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: C.ink,
+              }}
+            >
+              <Camera size={15} />
+            </span>
           </button>
-          {avatar && (
-            <button className="btn" type="button" disabled={photoBusy} onClick={removePhoto} aria-label="Удалить фото" style={{ maxWidth: 52 }}>
-              <Trash2 size={15} style={{ verticalAlign: -2 }} />
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SectionTitle>Имя</SectionTitle>
+            <div className="field" style={{ marginBottom: 8 }}>
+              <input
+                type="text"
+                maxLength={40}
+                autoComplete="given-name"
+                placeholder="Как к вам обращаться"
+                value={name}
+                onChange={(e) => { setName(e.target.value); setNameMsg(""); }}
+              />
+            </div>
+            <button className="btn primary" type="button" style={{ width: "100%" }} disabled={nameBusy} onClick={saveName}>
+              {nameBusy ? "Подождите…" : "Сохранить"}
             </button>
-          )}
+          </div>
         </div>
         <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhoto} />
-        {photoMsg && <div className="small-note" style={{ marginTop: 8, color: C.danger, fontWeight: 700 }}>{photoMsg}</div>}
-      </div>
 
-      <div className="panel">
-        <SectionTitle>Имя</SectionTitle>
-        <div className="field" style={{ textAlign: "left" }}>
-          <input
-            type="text"
-            maxLength={40}
-            autoComplete="given-name"
-            placeholder="Как к вам обращаться"
-            value={name}
-            onChange={(e) => { setName(e.target.value); setNameMsg(""); }}
-          />
-        </div>
-        <button className="btn primary" type="button" style={{ width: "100%", marginTop: 8 }} disabled={nameBusy || !nameChanged} onClick={saveName}>
-          {nameBusy ? "Подождите…" : "Сохранить имя"}
-        </button>
+        {avatar && (
+          <button
+            type="button"
+            disabled={photoBusy}
+            onClick={removePhoto}
+            style={{ marginTop: 10, border: 0, background: "transparent", padding: 0, color: C.inkMuted, fontSize: 12, textDecoration: "underline", cursor: "pointer" }}
+          >
+            Убрать фото
+          </button>
+        )}
+        {photoMsg && <div className="small-note" style={{ marginTop: 8, color: C.danger, fontWeight: 700 }}>{photoMsg}</div>}
         {nameMsg && (
           <div className="small-note" style={{ marginTop: 8, fontWeight: 700, color: nameMsg === "Имя сохранено" ? C.sber : C.danger }}>
             {nameMsg}
           </div>
         )}
       </div>
+
+      <div style={{ height: 1, background: C.border, margin: "0 14px" }} />
 
       <div className="panel">
         <SectionTitle>Аккаунт</SectionTitle>
