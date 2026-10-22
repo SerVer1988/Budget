@@ -15,6 +15,18 @@ export const SHARED_CAT_COLORS = ["#1268C9", "#C97A1E", "#1E8E4F", "#D6559B", "#
 
 export const sharedCatsOf = (cats) => (Array.isArray(cats) && cats.length ? cats : DEFAULT_SHARED_CATS);
 
+/* Общая категория для расхода, который попал в «Общую» сам (с общей карты): совпадение по названию личной
+   категории, иначе «Прочее». */
+export function guessSharedCat(cats, category) {
+  const list = sharedCatsOf(cats);
+  const name = String(category || "").trim().toLowerCase();
+  if (name) {
+    const hit = list.find((c) => c.name.toLowerCase() === name) || list.find((c) => c.name.toLowerCase().includes(name) || name.includes(c.name.toLowerCase()));
+    if (hit) return hit.id;
+  }
+  return (list.find((c) => c.id === "other") || list[list.length - 1] || list[0]).id;
+}
+
 const num = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0);
 const isSettle = (i) => i && i.kind === "settle";
 const payerShare = (i) => {
@@ -26,6 +38,7 @@ const payerShare = (i) => {
 export function balanceFor(items, myId) {
   let net = 0;
   (items || []).forEach((i) => {
+    if (i.pool) return; // расход с общей карты: деньги общие, друг другу никто не должен
     const amount = num(i.amount);
     const mine = i.paidBy === myId;
     if (isSettle(i)) net += mine ? amount : -amount;
@@ -41,17 +54,19 @@ export const itemsOfMonth = (items, monthKey) => (items || []).filter((i) => Str
 
 /* Траты (без расчётов) за период: всего, кто сколько заплатил, по категориям. */
 export function monthSummary(items, myId) {
-  let total = 0, mine = 0, theirs = 0;
+  let total = 0, mine = 0, theirs = 0, pool = 0;
   const byCat = {};
   (items || []).forEach((i) => {
     if (isSettle(i)) return;
     const a = num(i.amount);
     total += a;
-    if (i.paidBy === myId) mine += a; else theirs += a;
+    if (i.pool) pool += a;
+    else if (i.paidBy === myId) mine += a;
+    else theirs += a;
     const k = i.catId || "other";
     byCat[k] = (byCat[k] || 0) + a;
   });
-  return { total, mine, theirs, byCat };
+  return { total, mine, theirs, pool, byCat };
 }
 
 export { isSettle };

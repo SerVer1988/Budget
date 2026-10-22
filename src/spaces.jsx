@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
-import { C } from "./constants.js";
+import { C, CARD_BUCKET } from "./constants.js";
+import { cardLabel } from "./format.js";
 import { household, partner } from "./storage.js";
 
 /* «Пространства» для пары: «Я», «Партнёр» (только просмотр) и «Общая» (будет позже).
@@ -306,6 +307,31 @@ export function PartnerSettings({ settings, onSaveSettings }) {
               </label>
               <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
                 Когда партнёр вносит расход (свой, если он открыл бюджет, или общую трату), вы увидите сообщение в приложении, а при включённых уведомлениях устройства ещё и системное. Оно приходит, пока приложение открыто или когда вы в него возвращаетесь.
+              </div>
+
+              <div className="field">
+                <label>Общие карты</label>
+                {Object.keys(CARD_BUCKET).map((card) => {
+                  const on = (settings.sharedCards || []).includes(card);
+                  return (
+                    <label key={card} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginTop: 6 }}>
+                      <input
+                        type="checkbox"
+                        style={{ width: "auto" }}
+                        checked={on}
+                        onChange={(e) => {
+                          const cur = settings.sharedCards || [];
+                          const next = e.target.checked ? [...cur.filter((c) => c !== card), card] : cur.filter((c) => c !== card);
+                          onSaveSettings({ ...settings, sharedCards: Object.keys(CARD_BUCKET).filter((c) => next.includes(c)) });
+                        }}
+                      />
+                      <span style={{ fontSize: 13, textTransform: "none", letterSpacing: 0 }}>{cardLabel(settings, card)}</span>
+                    </label>
+                  );
+                })}
+                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                  Расходы с отмеченных карт сами попадают в «{draft.shared || "Общая"}» и не создают долгов между вами.
+                </div>
               </div>
 
               <div className="field">

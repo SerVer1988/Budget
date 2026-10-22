@@ -8,6 +8,7 @@ import { ReceiptField } from "./ReceiptViewer.jsx";
 import { C, CARD_BUCKET } from "./constants.js";
 import { computeBalances } from "./finance.js";
 import { SpaceContext } from "./spaces.jsx";
+import { guessSharedCat } from "./shared.js";
 import { bucketName, bucketNameGen, bucketOf, cardLabel, catListOf, evalMoneyExpr, formatMoney, homeCardOf, moneyNum, todayStr, uid } from "./format.js";
 
 /* ============================================================ Add form */
@@ -216,6 +217,9 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
   const categories2 = catListOf(settings, bucket2);
 
   const isEdit = !!initial?.editId;
+  // Расход с общей карты («Совместный бюджет → Общие карты») сам попадает в «Общую»: выбираем только общую категорию.
+  const sharedForced = !isEdit && type === "expense" && !!spaceCtx?.sharedAvailable && (spaceCtx.sharedCards || []).includes(card);
+  const sharedCatValue = sharedCat || (spaceCtx?.sharedCats ? guessSharedCat(spaceCtx.sharedCats, category) : "");
 
   // Свайп влево/вправо по форме листает вкладки Трата → Доход → Перевод → Коррекция → Долги и обратно.
   const OPERATION_TAB_ORDER = ["expense", "income", "transfer", "adjustment", "loan"];
@@ -325,7 +329,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
           note: note.trim(),
           splitGroup: groupId,
         },
-      ], { receipt });
+      ], { receipt, ...(sharedForced ? { shared: { catId: sharedCatValue } } : {}) });
       return;
     }
 
@@ -349,7 +353,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
           category,
           note: note.trim(),
         },
-        { receipt, ...(sharedOn && spaceCtx?.sharedAvailable ? { shared: { catId: sharedCat || spaceCtx.sharedCats?.[0]?.id } } : {}) }
+        { receipt, ...(sharedForced || (sharedOn && spaceCtx?.sharedAvailable) ? { shared: { catId: sharedCatValue } } : {}) }
       );
     } else if (type === "transfer") {
       onSubmit(
@@ -503,7 +507,18 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
             </>
           )}
 
-          {!split && !isEdit && spaceCtx?.sharedAvailable && (
+          {sharedForced && (
+            <div className="field" style={{ marginTop: 11 }}>
+              <label>Общая категория · «{cardLabel(settings, card)}» — общая карта</label>
+              <select value={sharedCatValue} onChange={(e) => setSharedCat(e.target.value)}>
+                {(spaceCtx.sharedCats || []).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!sharedForced && !split && !isEdit && spaceCtx?.sharedAvailable && (
             <>
               <div className="field" style={{ marginTop: 11, marginBottom: sharedOn ? 11 : 0 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
@@ -514,7 +529,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
               {sharedOn && (
                 <div className="field">
                   <label>Общая категория</label>
-                  <select value={sharedCat || spaceCtx.sharedCats?.[0]?.id || ""} onChange={(e) => setSharedCat(e.target.value)}>
+                  <select value={sharedCatValue} onChange={(e) => setSharedCat(e.target.value)}>
                     {(spaceCtx.sharedCats || []).map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}

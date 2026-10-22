@@ -6,6 +6,7 @@ import { formatMoney, monthLabel, todayMonthKey, todayStr, uid } from "./format.
 import { SHARED_CAT_COLORS, balanceFor, isSettle, itemsOfMonth, monthSummary, sharedCatsOf } from "./shared.js";
 import { SpaceSwitch } from "./spaces.jsx";
 
+const POOL = "__pool"; // «платили с общей карты»
 const dayLabel = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }) : "");
 
 /* Экран пространства «Общая»: баланс «кто кому должен», траты месяца по категориям, список, форма добавления. */
@@ -84,7 +85,9 @@ export function SharedView({
             <div style={{ fontSize: 22, fontWeight: 800 }}>{formatMoney(sum.total)}</div>
             {sum.total > 0 && (
               <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                Заплатили: {names.me} {formatMoney(sum.mine)} · {names.partner} {formatMoney(sum.theirs)}
+                {sum.pool > 0 && `С общих карт: ${formatMoney(sum.pool)}`}
+                {sum.pool > 0 && (sum.mine > 0 || sum.theirs > 0) && " · "}
+                {(sum.mine > 0 || sum.theirs > 0) && `Заплатили: ${names.me} ${formatMoney(sum.mine)} · ${names.partner} ${formatMoney(sum.theirs)}`}
               </div>
             )}
             {catRows.length === 0 && <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>В этом месяце общих трат пока нет.</div>}
@@ -119,8 +122,8 @@ export function SharedView({
                       {i.note && !isSettle(i) ? ` · ${i.note}` : ""}
                     </div>
                     <div className="muted" style={{ fontSize: 12 }}>
-                      {dayLabel(i.date)} · {isSettle(i) ? `${payerName(i.paidBy)} отдал(а)` : `платил(а) ${payerName(i.paidBy)}`}
-                      {!isSettle(i) && Number(i.split ?? 50) !== 50 ? ` · доля платившего ${Math.round(Number(i.split ?? 50))}%` : ""}
+                      {dayLabel(i.date)} · {isSettle(i) ? `${payerName(i.paidBy)} отдал(а)` : i.pool ? `с общей карты · ${payerName(i.paidBy)}` : `платил(а) ${payerName(i.paidBy)}`}
+                      {!isSettle(i) && !i.pool && Number(i.split ?? 50) !== 50 ? ` · доля платившего ${Math.round(Number(i.split ?? 50))}%` : ""}
                     </div>
                   </div>
                   <div style={{ fontWeight: 800, fontSize: 14, fontVariantNumeric: "tabular-nums", color: isSettle(i) ? C.ozon : C.ink }}>
@@ -179,9 +182,21 @@ function SharedForm({ cats, names, myId, partnerId, defaultMonth, onCancel, onAd
     e.preventDefault();
     const a = Number(String(amount).replace(/\s/g, "").replace(",", "."));
     if (!Number.isFinite(a) || a <= 0) { window.alert("Введите сумму больше 0"); return; }
+    const pool = paidBy === POOL;
     const sp = Number(String(split).replace(",", "."));
-    if (!Number.isFinite(sp) || sp < 0 || sp > 100) { window.alert("Доля платившего: от 0 до 100 %"); return; }
-    onSubmit({ id: uid(), kind: "expense", date, amount: Math.round(a * 100) / 100, catId, note: note.trim(), paidBy, split: sp, createdBy: myId });
+    if (!pool && (!Number.isFinite(sp) || sp < 0 || sp > 100)) { window.alert("Доля платившего: от 0 до 100 %"); return; }
+    onSubmit({
+      id: uid(),
+      kind: "expense",
+      date,
+      amount: Math.round(a * 100) / 100,
+      catId,
+      note: note.trim(),
+      paidBy: pool ? myId : paidBy,
+      split: pool ? 50 : sp,
+      ...(pool ? { pool: true } : {}),
+      createdBy: myId,
+    });
   }
 
   return (
@@ -207,12 +222,15 @@ function SharedForm({ cats, names, myId, partnerId, defaultMonth, onCancel, onAd
         <select value={paidBy} onChange={(e) => setPaidBy(e.target.value)}>
           <option value={myId}>{names.me}</option>
           <option value={partnerId}>{names.partner}</option>
+          <option value={POOL}>Общая карта</option>
         </select>
       </div>
-      <div className="field">
-        <label>Доля платившего, % (50 — пополам)</label>
-        <input type="text" inputMode="decimal" value={split} onChange={(e) => setSplit(e.target.value)} />
-      </div>
+      {paidBy !== POOL && (
+        <div className="field">
+          <label>Доля платившего, % (50 — пополам)</label>
+          <input type="text" inputMode="decimal" value={split} onChange={(e) => setSplit(e.target.value)} />
+        </div>
+      )}
       <div className="field">
         <label>Заметка</label>
         <input type="text" value={note} onChange={(e) => setNote(e.target.value)} />

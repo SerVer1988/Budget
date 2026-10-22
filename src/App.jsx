@@ -36,7 +36,7 @@ import { AuthScreen } from "./AuthScreen.jsx";
 import { SettingsView } from "./SettingsView.jsx";
 import { SpaceContext, SpaceSwitch, spaceNamesOf } from "./spaces.jsx";
 import { SharedView } from "./SharedView.jsx";
-import { sharedCatsOf } from "./shared.js";
+import { guessSharedCat, sharedCatsOf } from "./shared.js";
 
 /* ============================================================ App */
 export default function App() {
@@ -533,12 +533,45 @@ export default function App() {
   // meta.asDebt — галочка «Считать долгом» у перевода. Долг за трату «чужой» картой
   // создаётся автоматически (см. debtSpecFor), для остальных типов операций долг не нужен.
   function addTransactions(newTxs, meta) {
-    const withIds = newTxs.map((tx) => ({ ...tx, id: tx.id || uid() }));
+    // «Общая» книга: расход, помеченный галочкой «Общая трата» (meta.shared), и любой расход с общей карты
+    // попадает туда сам. Деньги с общей карты общие — долгов между вами это не создаёт (pool).
+    const poolCards = partnerInfo ? settings.sharedCards || [] : [];
+    const sharedToAdd = [];
+    let notShared = false;
+    const withIds = newTxs.map((tx) => {
+      const base = { ...tx, id: tx.id || uid() };
+      if (base.type !== "expense" || base.sharedId || base.hidden) return base;
+      const pool = poolCards.includes(base.card);
+      if (!pool && !meta?.shared) return base;
+      if (sharedState !== "ready") { notShared = true; return base; }
+      const sid = uid();
+      sharedToAdd.push({
+        id: sid,
+        kind: "expense",
+        date: base.date,
+        amount: base.amount,
+        catId: meta?.shared?.catId || guessSharedCat(sharedData.cats, base.category),
+        note: base.note || "",
+        paidBy: authUser.id,
+        split: 50,
+        ...(pool ? { pool: true } : {}),
+        createdBy: authUser.id,
+      });
+      return { ...base, sharedId: sid };
+    });
+    if (sharedToAdd.length) {
+      sharedMutate("shared-items", (arr) => [...arr, ...sharedToAdd.filter((n) => !arr.some((i) => i.id === n.id))]);
+    }
     let next = [...transactions, ...withIds];
     withIds.forEach((tx) => { next = syncLinkedDebt(next, tx, meta?.asDebt); });
     const prevT = transactions;
     persistTransactions(next);
-    showToast(`Добавлено: ${describeTxs(withIds)}`, { undo: () => persistTransactions(prevT) });
+    showToast(`Добавлено: ${describeTxs(withIds)}${notShared ? " · в «Общую» не попало: нет связи" : ""}`, {
+      undo: () => {
+        if (sharedToAdd.length) sharedMutate("shared-items", (arr) => arr.filter((i) => !sharedToAdd.some((n) => n.id === i.id)));
+        persistTransactions(prevT);
+      },
+    });
   }
 
   function addTransaction(tx, meta) {
@@ -739,7 +772,7 @@ export default function App() {
       if (formInitial?.editId) {
         updateTransactionAsSplit(formInitial.editId, tx);
       } else {
-        addTransactions(tx);
+        addTransactions(tx, meta);
         finishPending(tx[0]);
       }
       closeForm();
@@ -752,15 +785,8 @@ export default function App() {
       return;
     }
 
-    let txOut = tx;
-    if (metaIn?.shared?.catId && tx.type === "expense") {
-      // Общая трата (вариант А): остаётся вашим расходом и дополнительно записывается в «Общую».
-      const sid = uid();
-      txOut = { ...tx, sharedId: sid };
-      addSharedItem({ id: sid, kind: "expense", date: tx.date, amount: tx.amount, catId: metaIn.shared.catId, note: tx.note || "", paidBy: authUser.id, split: 50, createdBy: authUser.id });
-    }
-    addTransaction(txOut, meta);
-    finishPending(txOut);
+    addTransaction(tx, meta);
+    finishPending(tx);
     // Если это доход — показываем модалку автоматического распределения
     if (tx.type === "income" && !tx.excludeIncome) {
       setNewIncomeTx(tx);
@@ -895,6 +921,7 @@ export default function App() {
         partnerShares: !!partnerInfo.partner_shares,
         onSelect: selectSpace,
         sharedAvailable: sharedState === "ready",
+        sharedCards: settings.sharedCards || [],
         sharedCats: sharedCatsOf(sharedData.cats),
       }
     : null;
