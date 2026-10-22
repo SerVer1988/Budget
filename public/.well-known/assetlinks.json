@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "ru.server88.budget",
+    "sha256_cert_fingerprints": ["2A:E7:19:0F:30:62:13:EC:02:3F:E9:BC:19:E9:69:92:23:29:1B:8E:F4:D1:0B:70:83:42:A7:C8:97:59:5F:4F"]
+  }
+}]
