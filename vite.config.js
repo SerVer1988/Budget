@@ -38,6 +38,8 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webp,ttf,woff2}"],
         cleanupOutdatedCaches: true,
+        // Статические страницы (политика конфиденциальности) и служебные файлы не подменяются страницей приложения.
+        navigateFallbackDenylist: [/privacy\.html$/, /^\/\.well-known\//],
       },
     }),
   ],
