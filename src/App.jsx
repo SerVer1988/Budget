@@ -12,9 +12,9 @@ import bottomPlantsImg from "./assets/bottom-plants.webp";
 if (typeof Image !== "undefined") {
   [cardNeedsImg, cardWantsImg, cardSavingsImg, bottomPlantsImg].forEach((src) => { const im = new Image(); im.src = src; });
 }
-import badgeSberImg from "./assets/badge-sber.webp";
-import badgeAlfaImg from "./assets/badge-alfa.webp";
-import badgeOzonImg from "./assets/badge-ozon.webp";
+import badgeNeedsImg from "./assets/badge-needs.webp";
+import badgeWantsImg from "./assets/badge-wants.webp";
+import badgeSavingsImg from "./assets/badge-savings.webp";
 import { TabBar } from "./TabBar.jsx";
 import { AddPageContent, FullAddForm, deriveFormInitialFromTx } from "./form.jsx";
 import { IncomeDistributionModal } from "./panels.jsx";
@@ -104,7 +104,7 @@ export default function App() {
   // Картинки трёх страниц (Нужды/Желания/Подушка) и значки банков — в кэш браузера сразу,
   // ещё до первого свайпа, иначе при переключении страниц был бы короткий мерцающий момент.
   useEffect(() => {
-    [cardNeedsImg, cardWantsImg, cardSavingsImg, bottomPlantsImg, badgeSberImg, badgeAlfaImg, badgeOzonImg].forEach(
+    [cardNeedsImg, cardWantsImg, cardSavingsImg, bottomPlantsImg, badgeNeedsImg, badgeWantsImg, badgeSavingsImg].forEach(
       (src) => { const img = new Image(); img.src = src; }
     );
   }, []);

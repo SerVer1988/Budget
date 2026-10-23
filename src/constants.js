@@ -59,9 +59,9 @@ import {
 import cardNeedsImg from "./assets/card-needs.webp";
 import cardWantsImg from "./assets/card-wants.webp";
 import cardSavingsImg from "./assets/card-savings.webp";
-import badgeSberImg from "./assets/badge-sber.webp";
-import badgeAlfaImg from "./assets/badge-alfa.webp";
-import badgeOzonImg from "./assets/badge-ozon.webp";
+import badgeNeedsImg from "./assets/badge-needs.webp";
+import badgeWantsImg from "./assets/badge-wants.webp";
+import badgeSavingsImg from "./assets/badge-savings.webp";
 
 /* ============================================================ design tokens */
 export const C = {
@@ -209,7 +209,7 @@ export const FINANCE_TIPS = [
 ];
 
 /* ============================================================ Add carousel parts */
-export const BADGE_IMG = { sber: badgeSberImg, alfa: badgeAlfaImg, ozon: badgeOzonImg };
+export const BADGE_IMG = { sber: badgeNeedsImg, alfa: badgeWantsImg, ozon: badgeSavingsImg };
 
 /* ============================================================ Analysis */
 export const TX_TYPE_FILTERS = [
