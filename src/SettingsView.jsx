@@ -14,7 +14,7 @@ import badgeNeedsImg from "./assets/badge-needs.webp";
 import badgeWantsImg from "./assets/badge-wants.webp";
 import badgeSavingsImg from "./assets/badge-savings.webp";
 import { SectionTitle } from "./ui.jsx";
-import { BUCKET_LABEL, C, CATEGORY_COLORS, ICON_KEYS, ICON_MAP, getIcon } from "./constants.js";
+import { BUCKET_LABEL, C, CATEGORY_COLORS, ICON_GROUPS, ICON_MAP, getIcon, suggestIcon } from "./constants.js";
 import { bucketName, bucketNameGen } from "./format.js";
 
 /* ============================================================ Settings */
@@ -86,23 +86,30 @@ export function CategoryPickerPanel({ cat, onChange }) {
         style={{ background: `linear-gradient(to right, ${CATEGORY_COLORS.join(", ")})` }}
       />
 
-      <div className="icon-grid">
-        {ICON_KEYS.map((key) => {
-          const IconOpt = ICON_MAP[key];
-          const active = cat.icon === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              className={`icon-grid-btn${active ? " active" : ""}`}
-              style={active ? { background: cat.color + "22", borderColor: cat.color, color: cat.color } : undefined}
-              onClick={() => onChange({ ...cat, icon: key })}
-              aria-label={key}
-            >
-              <IconOpt size={18} />
-            </button>
-          );
-        })}
+      <div style={{ maxHeight: 300, overflowY: "auto", WebkitOverflowScrolling: "touch", paddingRight: 2 }}>
+        {ICON_GROUPS.map((group) => (
+          <div key={group.label} style={{ marginBottom: 10 }}>
+            <div className="small-note" style={{ marginBottom: 6, fontWeight: 700 }}>{group.label}</div>
+            <div className="icon-grid">
+              {group.keys.map((key) => {
+                const IconOpt = ICON_MAP[key];
+                const active = cat.icon === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`icon-grid-btn${active ? " active" : ""}`}
+                    style={active ? { background: cat.color + "22", borderColor: cat.color, color: cat.color } : undefined}
+                    onClick={() => onChange({ ...cat, icon: key, iconAuto: false })}
+                    aria-label={key}
+                  >
+                    <IconOpt size={18} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -127,7 +134,12 @@ export function CategoryRow({ cat, open, onToggleOpen, onChange, onDelete, showM
         <div className="tx-main">
           <input
             value={cat.name}
-            onChange={(e) => onChange({ ...cat, name: e.target.value })}
+            onChange={(e) => {
+              // у новой категории значок подбирается по названию, пока вы не выбрали его сами
+              const name = e.target.value;
+              const hint = cat.iconAuto ? suggestIcon(name) : null;
+              onChange({ ...cat, name, ...(hint ? { icon: hint } : {}) });
+            }}
             style={{
               width: "100%",
               height: 34,
@@ -409,7 +421,7 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
                   ...d,
                   needCats: [
                     ...d.needCats,
-                    { name: "Новая категория", icon: "HelpCircle", color: CATEGORY_COLORS[d.needCats.length % CATEGORY_COLORS.length] },
+                    { name: "Новая категория", icon: "HelpCircle", iconAuto: true, color: CATEGORY_COLORS[d.needCats.length % CATEGORY_COLORS.length] },
                   ],
                 }));
                 setOpenCatKey(`needs-${idx}`);
@@ -456,7 +468,7 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
                   ...d,
                   wantCats: [
                     ...d.wantCats,
-                    { name: "Новая категория", icon: "HelpCircle", color: CATEGORY_COLORS[d.wantCats.length % CATEGORY_COLORS.length] },
+                    { name: "Новая категория", icon: "HelpCircle", iconAuto: true, color: CATEGORY_COLORS[d.wantCats.length % CATEGORY_COLORS.length] },
                   ],
                 }));
                 setOpenCatKey(`wants-${idx}`);

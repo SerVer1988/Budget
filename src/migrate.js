@@ -17,6 +17,7 @@ export function migrateCategoryList(list, defaults) {
       icon: item.icon || defaults[i]?.icon || "HelpCircle",
       color: item.color || defaults[i]?.color || CATEGORY_COLORS[i % CATEGORY_COLORS.length],
       ...(typeof item.mandatory === "boolean" ? { mandatory: item.mandatory } : {}),
+      ...(typeof item.iconAuto === "boolean" ? { iconAuto: item.iconAuto } : {}),
     };
   });
 }
