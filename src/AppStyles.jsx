@@ -39,6 +39,18 @@ export function AppStyles() {
         touch-action: manipulation;
       }
 
+      /* Ширина колонки приложения: на телефоне 430px, на планшете чуть шире. Все «приклеенные» к ней блоки
+         (нижняя панель, плашки) берут ширину из этой же переменной. */
+      :root {
+        --app-max: 430px;
+      }
+
+      @media (min-width: 700px) {
+        :root {
+          --app-max: 560px;
+        }
+      }
+
       .app-viewport {
         width: 100%;
         min-height: 100svh;
@@ -49,7 +61,7 @@ export function AppStyles() {
 
       .app-shell {
         width: 100%;
-        max-width: 430px;
+        max-width: var(--app-max);
         min-height: 100svh;
         margin: 0 auto;
         display: flex;
@@ -1404,7 +1416,7 @@ export function AppStyles() {
         left: 50%;
         bottom: max(6px, env(safe-area-inset-bottom));
         transform: translateX(-50%);
-        width: min(calc(100vw - 8px), 430px);
+        width: min(calc(100vw - 8px), var(--app-max));
         z-index: 30;
         display: flex;
         justify-content: center;
@@ -1575,7 +1587,7 @@ export function AppStyles() {
         top: env(safe-area-inset-top, 0px);
         left: 0;
         right: 0;
-        max-width: 430px;
+        max-width: var(--app-max);
         margin: 0 auto;
         z-index: 300;
         display: flex;
@@ -1934,6 +1946,14 @@ export function AppStyles() {
         .nav-btn {
           height: 50px;
           font-size: 10px;
+        }
+      }
+
+      /* Телефон в горизонтальном положении: высоты мало, поэтому декоративные растения над нижней панелью
+         не рисуем: они закрывали бы половину экрана. */
+      @media (orientation: landscape) and (max-height: 520px) {
+        .bottom-nav-plants {
+          display: none;
         }
       }
 
