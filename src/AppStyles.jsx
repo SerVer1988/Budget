@@ -607,7 +607,15 @@ export function AppStyles() {
         min-width: 0;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        justify-content: center;
         gap: 9px;
+      }
+
+      /* Нечётная последняя плашка стоит по центру своей строки той же ширины, что и остальные. */
+      .quick-grid > .cat-tile:last-child:nth-child(odd) {
+        grid-column: 1 / -1;
+        justify-self: center;
+        width: calc(50% - 4.5px);
       }
 
       .cat-list {
@@ -618,10 +626,10 @@ export function AppStyles() {
         gap: 10px;
       }
 
+      /* Плашка занимает всю свою колонку (раньше была не шире 180px и прижималась влево). */
       .cat-tile {
         width: 100%;
-        max-width: 180px;
-        aspect-ratio: 180 / 84;
+        min-height: 84px;
         min-width: 0;
         display: flex;
         flex-direction: column;
@@ -1890,6 +1898,10 @@ export function AppStyles() {
 
         .quick-grid {
           gap: 7px;
+        }
+
+        .quick-grid > .cat-tile:last-child:nth-child(odd) {
+          width: calc(50% - 3.5px);
         }
 
         .quick-tile {
