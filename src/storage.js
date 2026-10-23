@@ -23,6 +23,7 @@ const SUPABASE_KEY = "sb_publishable_GkTAGx43CRVGgRZ5BkCSaA_kA87NuXk";
 const PREFIX = "budget-app:";
 const SESSION_KEY = PREFIX + "session";
 const MIGRATED_KEY = PREFIX + "legacy-migrated";
+import { VAPID_PUBLIC_KEY } from "./pushConfig.js";
 import { mergeValues } from "./merge.js";
 
 const TABLE = "app_data";
@@ -776,6 +777,67 @@ export const shared = {
       }
     }
     throw new Error("Не удалось сохранить: данные одновременно менял второй аккаунт. Попробуйте ещё раз");
+  },
+};
+
+/* ---------------------------------------------------------------- push-уведомления устройства */
+// Подписка устройства сохраняется в базе (supabase-push.sql); отправляет сообщения функция notify-partner,
+// когда вы вносите трату. Работает там, где есть браузерные push (Chrome с сервисами Google, iPhone с иконкой на экране).
+const b64ToBytes = (b64) => {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+};
+
+export const push = {
+  configured() { return !!VAPID_PUBLIC_KEY; },
+
+  supported() {
+    return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  },
+
+  permission() { return typeof Notification === "undefined" ? "unsupported" : Notification.permission; },
+
+  async isSubscribed() {
+    if (!this.supported()) return false;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    return !!sub;
+  },
+
+  async enable() {
+    if (!session) throw new Error("not signed in");
+    if (!this.configured()) throw new Error("Push-уведомления не настроены");
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") throw new Error("Разрешение на уведомления не выдано. Его можно включить в настройках телефона.");
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC_KEY) });
+    const j = sub.toJSON();
+    await rpc("save_push_subscription", { p_endpoint: j.endpoint, p_p256dh: j.keys?.p256dh, p_auth: j.keys?.auth, p_ua: navigator.userAgent }, "Не настроено: выполните supabase-push.sql в Supabase");
+  },
+
+  async disable() {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    if (!sub) return;
+    const endpoint = sub.endpoint;
+    await sub.unsubscribe();
+    if (session) { try { await rpc("remove_push_subscription", { p_endpoint: endpoint }); } catch { /* не страшно */ } }
+  },
+
+  // Сообщить партнёру о моей трате: { kind: "personal" | "shared", amount, category }. Ошибки не мешают работе.
+  async notifyPartner(payload) {
+    try {
+      if (!session || !this.configured()) return;
+      const token = await ensureToken();
+      fetch(`${SUPABASE_URL}/functions/v1/notify-partner`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      }).catch(() => {});
+    } catch { /* ignore */ }
   },
 };
 

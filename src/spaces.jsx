@@ -3,7 +3,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C, CARD_BUCKET } from "./constants.js";
 import { cardLabel } from "./format.js";
-import { household, partner } from "./storage.js";
+import { household, partner, push } from "./storage.js";
 
 /* «Пространства» для пары: «Я», «Партнёр» (только просмотр) и «Общая» (будет позже).
    У каждого свой аккаунт и свои данные; названия пространств каждый задаёт себе сам (settings.spaceNames). */
@@ -146,6 +146,45 @@ export function SpaceSwitch({ variant }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/* Включить push-уведомления на этом устройстве (приходят, даже когда приложение закрыто). */
+function DevicePush() {
+  const [on, setOn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    push.isSubscribed().then((v) => { if (alive) setOn(v); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  async function toggle(next) {
+    setBusy(true);
+    setMsg("");
+    try {
+      if (next) await push.enable(); else await push.disable();
+      setOn(next);
+    } catch (e) {
+      setMsg(e.message || "Не получилось");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", marginBottom: 6 }}>
+        <input type="checkbox" style={{ width: "auto", marginTop: 2 }} checked={on} disabled={busy} onChange={(e) => toggle(e.target.checked)} />
+        <span style={{ fontSize: 13 }}>Push-уведомления на этом устройстве</span>
+      </label>
+      <div className="muted" style={{ fontSize: 12 }}>
+        Сообщение приходит, даже когда приложение закрыто. Включать нужно на каждом устройстве отдельно.
+      </div>
+      {msg && <div style={{ color: C.danger, fontSize: 12, marginTop: 6 }}>{msg}</div>}
     </div>
   );
 }
@@ -308,6 +347,8 @@ export function PartnerSettings({ settings, onSaveSettings }) {
               <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
                 Когда партнёр вносит расход (свой, если он открыл бюджет, или общую трату), вы увидите сообщение в приложении, а при включённых уведомлениях устройства ещё и системное. Оно приходит, пока приложение открыто или когда вы в него возвращаетесь.
               </div>
+
+              {push.configured() && push.supported() && <DevicePush />}
 
               <div className="field">
                 <label>Общие карты</label>

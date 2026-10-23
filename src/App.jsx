@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { storage, auth, household, inbox, partner, shared } from "./storage.js";
+import { storage, auth, household, inbox, partner, push, shared } from "./storage.js";
 import { learnMerchant } from "./bankParse.js";
 import { rememberOp } from "./dedupe.js";
 import { receivedParts } from "./InboxPanel.jsx";
@@ -300,7 +300,17 @@ export default function App() {
       return false;
     }
   }
-  const addSharedItem = (item) => sharedMutate("shared-items", (arr) => (arr.some((i) => i.id === item.id) ? arr : [...arr, item]));
+  // Сообщаем партнёру push-уведомлением о моей новой общей трате (если уведомления настроены).
+  const notifySharedItem = (it) => {
+    if (!it || it.kind === "settle") return;
+    const catName = sharedCatsOf(sharedData.cats).find((c) => c.id === it.catId)?.name || "";
+    push.notifyPartner({ kind: "shared", amount: it.amount, category: catName });
+  };
+  const addSharedItem = async (item) => {
+    const ok = await sharedMutate("shared-items", (arr) => (arr.some((i) => i.id === item.id) ? arr : [...arr, item]));
+    if (ok) notifySharedItem(item);
+    return ok;
+  };
   const deleteSharedItem = (id) => sharedMutate("shared-items", (arr) => arr.filter((i) => i.id !== id));
   async function addSharedCat(cat) {
     await sharedMutate("shared-cats", (arr) => {
@@ -560,7 +570,15 @@ export default function App() {
       return { ...base, sharedId: sid };
     });
     if (sharedToAdd.length) {
-      sharedMutate("shared-items", (arr) => [...arr, ...sharedToAdd.filter((n) => !arr.some((i) => i.id === n.id))]);
+      sharedMutate("shared-items", (arr) => [...arr, ...sharedToAdd.filter((n) => !arr.some((i) => i.id === n.id))]).then((ok) => {
+        if (ok) sharedToAdd.forEach(notifySharedItem);
+      });
+    }
+    // Личные расходы (если я открыл бюджет партнёру): сообщаем только о тех, что не ушли в «Общую».
+    if (partnerInfo?.i_share) {
+      withIds.forEach((tx) => {
+        if (tx.type === "expense" && !tx.hidden && !tx.sharedId) push.notifyPartner({ kind: "personal", amount: tx.amount, category: tx.category || "" });
+      });
     }
     let next = [...transactions, ...withIds];
     withIds.forEach((tx) => { next = syncLinkedDebt(next, tx, meta?.asDebt); });
