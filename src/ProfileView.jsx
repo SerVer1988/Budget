@@ -1,8 +1,8 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Camera, ChevronDown, ChevronLeft, User } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
-import { auth, profile } from "./storage.js";
+import { account, auth, profile } from "./storage.js";
 
 // Ссылка, куда ведёт кнопка «Поддержать проект» (страница доната, СБП-ссылка, Boosty и т. п.).
 // Пока пусто — кнопка покажет подсказку. Вставьте свою ссылку между кавычками.
@@ -65,23 +65,54 @@ export function ProfileView({ user, avatar, onAvatarChange, userEmail, onSignOut
   const [photoMsg, setPhotoMsg] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
 
-  const nameChanged = name.trim() !== (user?.name || "");
+  // Имя сохраняется само: через паузу после ввода, при выходе из поля и при уходе с экрана.
+  const savedNameRef = useRef(user?.name || "");
+  const nameTimerRef = useRef(null);
 
-  async function saveName() {
-    setNameMsg("");
-    if (!name.trim()) {
-      setNameMsg("Имя не может быть пустым");
-      return;
-    }
+  async function saveName(value = name) {
+    const text = String(value).trim();
+    if (text === savedNameRef.current) return;
+    if (!text) { setNameMsg("Имя не может быть пустым"); return; }
     setNameBusy(true);
     try {
-      const clean = await auth.updateName(name);
-      setName(clean);
+      const clean = await auth.updateName(text);
+      savedNameRef.current = clean;
       setNameMsg("Имя сохранено");
+      setTimeout(() => setNameMsg((m) => (m === "Имя сохранено" ? "" : m)), 1600);
     } catch (e) {
       setNameMsg(e.message || "Не удалось сохранить имя");
     } finally {
       setNameBusy(false);
+    }
+  }
+
+  const saveNameRef = useRef(saveName);
+  saveNameRef.current = saveName;
+
+  useEffect(() => {
+    if (name.trim() === savedNameRef.current || !name.trim()) return undefined;
+    clearTimeout(nameTimerRef.current);
+    nameTimerRef.current = setTimeout(() => { nameTimerRef.current = null; saveNameRef.current(name); }, 900);
+    return () => clearTimeout(nameTimerRef.current);
+  }, [name]);
+
+  // Ушли с экрана, не дождавшись паузы, — сохраняем сразу.
+  const latestNameRef = useRef(name);
+  latestNameRef.current = name;
+  useEffect(() => () => {
+    if (latestNameRef.current.trim() && latestNameRef.current.trim() !== savedNameRef.current) saveNameRef.current(latestNameRef.current);
+  }, []);
+
+  async function deleteAccount() {
+    if (!window.confirm("Удалить аккаунт навсегда?\n\nБудут удалены все ваши операции, настройки, фото, привязка к партнёру и общая книга пары (она пропадёт и у партнёра). Отменить это нельзя. Перед удалением лучше сделать резервную копию.")) return;
+    const word = (window.prompt("Для подтверждения введите: удалить аккаунт") || "").trim().toLowerCase();
+    if (word !== "удалить аккаунт") { window.alert("Фраза не совпала — ничего не удалено."); return; }
+    try {
+      await account.deleteMe();
+      window.alert("Аккаунт удалён.");
+      window.location.reload();
+    } catch (e) {
+      window.alert(e.message || "Не получилось удалить аккаунт. Попробуйте ещё раз.");
     }
   }
 
@@ -177,11 +208,9 @@ export function ProfileView({ user, avatar, onAvatarChange, userEmail, onSignOut
                 placeholder="Как к вам обращаться"
                 value={name}
                 onChange={(e) => { setName(e.target.value); setNameMsg(""); }}
+                onBlur={() => saveName()}
               />
             </div>
-            <button className="btn primary" type="button" style={{ width: "100%" }} disabled={nameBusy} onClick={saveName}>
-              {nameBusy ? "Подождите…" : "Сохранить"}
-            </button>
           </div>
         </div>
         <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhoto} />
@@ -213,6 +242,9 @@ export function ProfileView({ user, avatar, onAvatarChange, userEmail, onSignOut
         </div>
         <button className="btn" type="button" style={{ width: "100%" }} onClick={onSignOut}>
           Выйти
+        </button>
+        <button className="btn" type="button" style={{ width: "100%", marginTop: 10, color: C.danger }} onClick={deleteAccount}>
+          Удалить аккаунт
         </button>
       </div>
     </div>
