@@ -16,7 +16,7 @@ export default defineConfig({
       includeAssets: ["favicon.ico", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png"],
       manifest: {
         id: "./",
-        name: "Бюджет — Сбер / Альфа / Озон",
+        name: "Бюджет — 50/30/20",
         short_name: "Бюджет",
         description: "Личный трекер бюджета по методу 50/30/20",
         lang: "ru",
