@@ -10,22 +10,22 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import badgeSberImg from "./assets/badge-sber.webp";
-import badgeAlfaImg from "./assets/badge-alfa.webp";
-import badgeOzonImg from "./assets/badge-ozon.webp";
+import badgeNeedsImg from "./assets/badge-needs.webp";
+import badgeWantsImg from "./assets/badge-wants.webp";
+import badgeSavingsImg from "./assets/badge-savings.webp";
 import { SectionTitle } from "./ui.jsx";
 import { BUCKET_LABEL, C, CATEGORY_COLORS, ICON_KEYS, ICON_MAP, getIcon } from "./constants.js";
 import { bucketName, bucketNameGen } from "./format.js";
 
 /* ============================================================ Settings */
-/* Выбор банка для одного из трёх бюджетов (50/30/20): три готовых логотипа
-   (Сбер/Альфа/Озон) плюс кнопка загрузки своей картинки. */
+/* Выбор значка для одного из трёх бюджетов (50/30/20): три готовых нейтральных значка
+   (дом, сердце, щит) плюс кнопка загрузки своей картинки. */
 export function BankIconPicker({ icon, onChange }) {
   const fileRef = useRef(null);
   const presets = [
-    { key: "sber", src: badgeSberImg },
-    { key: "alfa", src: badgeAlfaImg },
-    { key: "ozon", src: badgeOzonImg },
+    { key: "sber", src: badgeNeedsImg },
+    { key: "alfa", src: badgeWantsImg },
+    { key: "ozon", src: badgeSavingsImg },
   ];
 
   function handleFile(e) {
@@ -169,7 +169,7 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
 
   const [draft, setDraft] = useState(settings);
   const [daysText, setDaysText] = useState((settings.reminderDays || []).join(", "));
-  const [banksOpen, setBanksOpen] = useState(false); // «Банки бюджета» по умолчанию свёрнуты
+  const [banksOpen, setBanksOpen] = useState(false); // «Названия и значки бюджетов» по умолчанию свёрнуты
   const [ruleOpen, setRuleOpen] = useState(false); // «Правило распределения» свёрнуто
   const [needsOpen, setNeedsOpen] = useState(false);
   const [wantsOpen, setWantsOpen] = useState(false);
@@ -273,7 +273,7 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
 
       <div className="panel">
         <button type="button" className="section-title-toggle" onClick={() => setBanksOpen((v) => !v)}>
-          <SectionTitle>Банки бюджета (50/30/20)</SectionTitle>
+          <SectionTitle>Названия и значки бюджетов (50/30/20)</SectionTitle>
           <ChevronDown size={16} className={`section-chevron${banksOpen ? " open" : ""}`} />
         </button>
 
