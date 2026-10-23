@@ -780,6 +780,24 @@ export const shared = {
   },
 };
 
+/* ---------------------------------------------------------------- удаление аккаунта */
+// supabase-delete-account.sql: сервер удаляет все данные и аккаунт; здесь чистим локальное и выходим.
+export const account = {
+  async deleteMe() {
+    if (!session) throw new Error("not signed in");
+    const { id } = session.user;
+    try { await push.disable(); } catch { /* ignore */ }
+    await rpc("delete_my_account", {}, "Не настроено: выполните supabase-delete-account.sql в Supabase");
+    // Сервер всё удалил. Несохранённые локальные правки больше никуда не отправляем.
+    try { dirtyWrite([]); } catch { /* ignore */ }
+    clearUserCache(id);
+    try { Object.keys(localStorage).filter((k) => k.includes(id)).forEach((k) => localStorage.removeItem(k)); } catch { /* ignore */ }
+    hh = null;
+    saveSession(null);
+    emitAuth(null);
+  },
+};
+
 /* ---------------------------------------------------------------- push-уведомления устройства */
 // Подписка устройства сохраняется в базе (supabase-push.sql); отправляет сообщения функция notify-partner,
 // когда вы вносите трату. Работает там, где есть браузерные push (Chrome с сервисами Google, iPhone с иконкой на экране).

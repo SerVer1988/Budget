@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import { C } from "./constants.js";
 import { exportCsv, exportJsonBackup } from "./backup.js";
 import { PartnerSettings } from "./spaces.jsx";
+import { account } from "./storage.js";
 import { Fold, SUPPORT_URL } from "./ProfileView.jsx";
 import supportIcon from "./assets/icon-support.png";
 import shareIcon from "./assets/icon-share.png";
@@ -57,6 +58,19 @@ export function SettingsExtras({ settings, transactions, onImport, onSaveSetting
       setImportMsg(`Восстановлено: операций ${data.transactions.length}.`);
     } catch {
       setImportMsg("Не удалось прочитать файл.");
+    }
+  }
+
+  async function deleteAccount() {
+    if (!window.confirm("Удалить аккаунт навсегда?\n\nБудут удалены все ваши операции, настройки, фото, привязка к партнёру и общая книга пары (она пропадёт и у партнёра). Отменить это нельзя. Перед удалением лучше сделать резервную копию.")) return;
+    const word = (window.prompt("Для подтверждения введите: удалить аккаунт") || "").trim().toLowerCase();
+    if (word !== "удалить аккаунт") { window.alert("Фраза не совпала — ничего не удалено."); return; }
+    try {
+      await account.deleteMe();
+      window.alert("Аккаунт удалён.");
+      window.location.reload();
+    } catch (e) {
+      window.alert(e.message || "Не получилось удалить аккаунт. Попробуйте ещё раз.");
     }
   }
 
@@ -117,6 +131,14 @@ export function SettingsExtras({ settings, transactions, onImport, onSaveSetting
           }}
         >
           Удалить историю (стереть данные)
+        </button>
+        <button
+          className="btn"
+          type="button"
+          style={{ width: "100%", marginTop: 10, color: C.danger }}
+          onClick={deleteAccount}
+        >
+          Удалить аккаунт
         </button>
       </Fold>
 
