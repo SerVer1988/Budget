@@ -86,6 +86,8 @@ export default function App() {
   // Пространства пары: «me» — мой бюджет, «partner» — бюджет партнёра (только просмотр).
   // Пришли по ссылке «Восстановление пароля» из письма: показываем экран нового пароля.
   const [recovery, setRecovery] = useState(() => auth.takeRecoveryFromUrl());
+  const [loadFailed, setLoadFailed] = useState(false); // данные не удалось прочитать при запуске
+  const retryNowRef = useRef(null);
   const [partnerInfo, setPartnerInfo] = useState(null); // { partner: { id, email }, i_share, partner_shares } | null
   const [space, setSpace] = useState("me");
   const [partnerData, setPartnerData] = useState(null); // { settings, transactions } партнёра, только чтение
@@ -148,20 +150,30 @@ export default function App() {
   useEffect(() => {
     if (!authUser) return undefined;
     let alive = true;
+    let retryTimer = null;
     setLoaded(false);
     setStale(false);
+    setLoadFailed(false);
 
-    (async () => {
-      const { s, t } = await loadAll();
-
-      if (alive) {
-        setSettings(s);
-        setTransactions(t);
-        setLoaded(true);
+    // Если данные не прочитались (нет связи, сервер просыпается), приложение НЕ открывается пустым:
+    // иначе можно было бы случайно записать поверх настоящих данных. Пробуем снова, пока не получится.
+    async function attempt() {
+      const { s, t, failed } = await loadAll();
+      if (!alive) return;
+      if (failed) {
+        setLoadFailed(true);
+        retryTimer = setTimeout(attempt, 4000);
+        return;
       }
-    })();
+      setLoadFailed(false);
+      setSettings(s);
+      setTransactions(t);
+      setLoaded(true);
+    }
+    attempt();
+    retryNowRef.current = () => { clearTimeout(retryTimer); attempt(); };
 
-    return () => { alive = false; };
+    return () => { alive = false; clearTimeout(retryTimer); };
   }, [authUser?.id]);
 
   // Уведомления: при запуске и при возвращении в приложение (один раз за день на каждый сигнал).
@@ -936,7 +948,19 @@ export default function App() {
         <AppStyles />
         <div className="app-viewport">
           <div className="app-shell" style={{ alignItems: "center", justifyContent: "center" }}>
-            <div style={{ color: C.inkMuted, fontSize: 14 }}>Загрузка…</div>
+            {loadFailed ? (
+              <div style={{ textAlign: "center", padding: "0 24px" }}>
+                <div style={{ color: C.ink, fontWeight: 800, fontSize: 15, marginBottom: 6 }}>Не получается загрузить данные</div>
+                <div style={{ color: C.inkMuted, fontSize: 13, marginBottom: 14 }}>
+                  Ваши данные на месте. Проверьте соединение: мы будем пробовать снова сами.
+                </div>
+                <button type="button" className="btn" style={{ padding: "0 18px" }} onClick={() => retryNowRef.current && retryNowRef.current()}>
+                  Повторить сейчас
+                </button>
+              </div>
+            ) : (
+              <div style={{ color: C.inkMuted, fontSize: 14 }}>Загрузка…</div>
+            )}
           </div>
         </div>
       </>
