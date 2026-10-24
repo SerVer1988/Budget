@@ -1,11 +1,22 @@
 import { knownPeople } from "./loans.js";
 import React, { useState, useEffect, useMemo, useRef, useContext } from "react";
 import {
+  ArrowLeftRight,
+  Banknote,
+  CalendarClock,
+  HandCoins,
+  Pencil,
+  SlidersHorizontal,
+  Split,
+  User,
+  Users,
+  Wallet,
   X,
 } from "lucide-react";
 import { CategoryPanel, OzonPanel } from "./panels.jsx";
 import { ReceiptField } from "./ReceiptViewer.jsx";
-import { C, CARD_BUCKET } from "./constants.js";
+import { C, CARD_BUCKET, getIcon } from "./constants.js";
+import { OpChips, OpDate, OpGroup, OpSelect, OpTabs, OpText, OpToggle, RoundIcon } from "./OpUi.jsx";
 import { computeBalances } from "./finance.js";
 import { SpaceContext } from "./spaces.jsx";
 import { guessSharedCat } from "./shared.js";
@@ -71,62 +82,49 @@ export function bucketOptions(settings) {
   ];
 }
 
-export function AmountField({ label, value, onChange, big, withSave }) {
+/* Сумма. Вычисления прямо в строке работают как раньше («1200+350» → 1 550), отдельных кнопок со знаками нет. */
+export function AmountField({ label, value, onChange, big }) {
   const evaluated = evalMoneyExpr(value);
   const stripped = String(value ?? "").trim().replace(/^-/, "");
   const hasOp = /[+\-*/]/.test(stripped);
   const showPreview = String(value ?? "") !== "" && hasOp && Number.isFinite(evaluated);
 
-  const input = (
-    <input
-      className={big ? "amount-input mono" : "mono"}
-      inputMode="decimal"
-      type="text"
-      placeholder="0"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  );
+  if (big) {
+    return (
+      <>
+        <div className="op-amount-line">
+          <input
+            className="op-amount mono"
+            inputMode="decimal"
+            type="text"
+            placeholder="0"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            aria-label={label}
+          />
+          <span className="op-amount-cur">₽</span>
+        </div>
+        <div className="op-amount-hint">
+          {label}
+          {showPreview ? ` · = ${formatMoney(evaluated)}` : ""}
+        </div>
+      </>
+    );
+  }
 
   return (
-    <div className="field">
-      <label>{label}</label>
-      {withSave ? (
-        <div className="amount-row">
-          {input}
-          <button type="submit" className="btn primary amount-save">Сохранить</button>
-        </div>
-      ) : (
-        input
-      )}
-      <div className="calc-row">
-        {[["+", "+"], ["−", "-"], ["×", "*"], ["÷", "/"]].map(([shown, op]) => (
-          <button
-            key={op}
-            type="button"
-            className="calc-key"
-            aria-label={`Знак ${shown}`}
-            onPointerDown={(e) => e.preventDefault()}
-            onClick={() => {
-              const cur = String(value ?? "");
-              // два знака подряд не нужны: последний заменяет предыдущий
-              onChange(/[+\-*/]$/.test(cur) && cur.length > 1 ? cur.slice(0, -1) + op : cur + op);
-            }}
-          >
-            {shown}
-          </button>
-        ))}
-        <button
-          type="button"
-          className="calc-key calc-eq"
-          aria-label="Посчитать"
-          disabled={!(hasOp && Number.isFinite(evaluated))}
-          onPointerDown={(e) => e.preventDefault()}
-          onClick={() => onChange(String(Math.round(evaluated * 100) / 100))}
-        >
-          =
-        </button>
-        {showPreview && <span className="calc-result mono">= {formatMoney(evaluated)}</span>}
+    <div className="op-row">
+      <RoundIcon icon={Banknote} color="#5B6B62" />
+      <div className="op-body">
+        <div className="op-label">{label}{showPreview ? ` · = ${formatMoney(evaluated)}` : ""}</div>
+        <input
+          className="op-input mono"
+          inputMode="decimal"
+          type="text"
+          placeholder="0"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
       </div>
     </div>
   );
@@ -400,16 +398,23 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
     }
   }
 
+  const catObj = categories.find((c) => c.name === category);
+  const catObj2 = categories2.find((c) => c.name === splitCategory2);
+  const cardSelectOptions = cardOptions.map((c) => ({ value: c.id, label: c.label }));
+  const cardColor = cardOptions.find((c) => c.id === card)?.color || C.sber;
+  const catOptions = (list) => list.map((c) => ({ value: c.name, label: c.name }));
+  const grey = "#5B6B62";
+
   return (
-    <form className="form-card" onSubmit={submit} onTouchStart={handleFormTouchStart} onTouchEnd={handleFormTouchEnd}>
-      <div className="form-title-row">
+    <form className="form-card op-form" onSubmit={submit} onTouchStart={handleFormTouchStart} onTouchEnd={handleFormTouchEnd}>
+      <div className="op-head">
         <h2>{isEdit ? "Изменить операцию" : "Новая операция"}</h2>
-        <button type="button" onClick={onCancel} className="icon-button" aria-label="Закрыть">
-          <X size={18} />
+        <button type="button" onClick={onCancel} className="op-close" aria-label="Закрыть">
+          <X size={17} />
         </button>
       </div>
 
-      <OperationTabs value={type} onChange={setType} />
+      <OpTabs value={type} onChange={setType} />
 
       <AmountField
         label={
@@ -422,40 +427,26 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         value={amount}
         onChange={setAmount}
         big
-        withSave
       />
-
-      <div className="field">
-        <label>Дата</label>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      </div>
 
       {type === "expense" && (
         <>
-          <div className="field">
-            <label>{split ? "Категория бюджета (часть 1)" : "Категория бюджета"}</label>
-            <CardPicker options={bucketOptions(settings)} value={bucket} onChange={setBucket} />
-          </div>
-
-          <div className="field">
-            <label>{split ? "Категория (часть 1)" : "Категория"}</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)}>
-              {categories.map((c) => (
-                <option key={c.name} value={c.name}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="field">
-            <label>Карта списания</label>
-            <CardPicker options={cardOptions} value={card} onChange={setCard} />
-          </div>
+          <OpGroup>
+            <OpDate value={date} onChange={setDate} />
+            <OpChips label="Бюджет" options={bucketOptions(settings)} value={bucket} onChange={setBucket} />
+            <OpSelect
+              icon={getIcon(catObj?.icon)}
+              color={catObj?.color || C.sber}
+              label={split ? "Категория (часть 1)" : "Категория"}
+              options={catOptions(categories)}
+              value={category}
+              onChange={setCategory}
+            />
+            <OpSelect icon={Wallet} color={cardColor} label="С карты" options={cardSelectOptions} value={card} onChange={setCard} />
+          </OpGroup>
 
           {anomalyParts.length > 0 && (
-            <div
-              className="notice"
-              style={{ borderColor: C.amber, background: C.amberSoft, marginBottom: 11 }}
-            >
+            <div className="notice" style={{ borderColor: C.amber, background: C.amberSoft, marginBottom: 10 }}>
               ⚠️ Вы платите картой «{cardLabel(settings, card)}» за другой бюджет — это запишется как долг:
               {anomalyParts.map((p, i) => (
                 <div key={i} style={{ fontWeight: 700, marginTop: 3 }}>
@@ -466,185 +457,93 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
             </div>
           )}
 
-          <div className="field" style={{ marginBottom: split ? 11 : 0 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={split}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setSplit(checked);
-                  if (checked) setBucket2(bucket);
-                }}
-                style={{ width: "auto" }}
+          <OpGroup>
+            <OpToggle
+              icon={Split}
+              color="#2F6FD0"
+              label="Разделить на две категории"
+              checked={split}
+              onChange={(checked) => {
+                setSplit(checked);
+                if (checked) setBucket2(bucket);
+              }}
+            />
+            {split && (
+              <>
+                <AmountField label="Сумма (часть 2)" value={splitAmount2} onChange={setSplitAmount2} />
+                <OpChips label="Бюджет" options={bucketOptions(settings)} value={bucket2} onChange={setBucket2} />
+                <OpSelect
+                  icon={getIcon(catObj2?.icon)}
+                  color={catObj2?.color || C.sber}
+                  label="Категория (часть 2)"
+                  options={catOptions(categories2)}
+                  value={splitCategory2}
+                  onChange={setSplitCategory2}
+                />
+              </>
+            )}
+            {sharedForced && (
+              <OpSelect
+                icon={Users}
+                color="#7B5CC9"
+                label={`Общая категория · «${cardLabel(settings, card)}» — общая карта`}
+                options={(spaceCtx.sharedCats || []).map((c) => ({ value: c.id, label: c.name }))}
+                value={sharedCatValue}
+                onChange={setSharedCat}
               />
-              <span style={{ textTransform: "none", letterSpacing: 0 }}>Разделить</span>
-            </label>
-          </div>
+            )}
+            {!sharedForced && !split && !isEdit && spaceCtx?.sharedAvailable && (
+              <>
+                <OpToggle icon={Users} color="#7B5CC9" label={`Общая трата (${spaceCtx.names.shared})`} checked={sharedOn} onChange={setSharedOn} />
+                {sharedOn && (
+                  <OpSelect
+                    icon={Users}
+                    color="#7B5CC9"
+                    label="Общая категория"
+                    options={(spaceCtx.sharedCats || []).map((c) => ({ value: c.id, label: c.name }))}
+                    value={sharedCatValue}
+                    onChange={setSharedCat}
+                  />
+                )}
+              </>
+            )}
+          </OpGroup>
 
           {split && (
-            <>
-              <AmountField
-                label="Сумма (часть 2)"
-                value={splitAmount2}
-                onChange={setSplitAmount2}
-              />
-              <div className="field">
-                <label>Категория бюджета (часть 2)</label>
-                <CardPicker options={bucketOptions(settings)} value={bucket2} onChange={setBucket2} />
-              </div>
-              <div className="field">
-                <label>Категория (часть 2)</label>
-                <select value={splitCategory2} onChange={(e) => setSplitCategory2(e.target.value)}>
-                  {categories2.map((c) => (
-                    <option key={c.name} value={c.name}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="small-note" style={{ marginBottom: 11 }}>
-                Часть 1: {formatMoney(Math.max(0, part1Num))} · спишется с «{cardLabel(settings, card)}»: {formatMoney(amountNum)}
-              </div>
-            </>
-          )}
-
-          {sharedForced && (
-            <div className="field" style={{ marginTop: 11 }}>
-              <label>Общая категория · «{cardLabel(settings, card)}» — общая карта</label>
-              <select value={sharedCatValue} onChange={(e) => setSharedCat(e.target.value)}>
-                {(spaceCtx.sharedCats || []).map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+            <div className="op-note">
+              Часть 1: {formatMoney(Math.max(0, part1Num))} · спишется с «{cardLabel(settings, card)}»: {formatMoney(amountNum)}
             </div>
           )}
-
-          {!sharedForced && !split && !isEdit && spaceCtx?.sharedAvailable && (
-            <>
-              <div className="field" style={{ marginTop: 11, marginBottom: sharedOn ? 11 : 0 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-                  <input type="checkbox" checked={sharedOn} onChange={(e) => setSharedOn(e.target.checked)} style={{ width: "auto" }} />
-                  <span style={{ textTransform: "none", letterSpacing: 0 }}>Общая трата ({spaceCtx.names.shared})</span>
-                </label>
-              </div>
-              {sharedOn && (
-                <div className="field">
-                  <label>Общая категория</label>
-                  <select value={sharedCatValue} onChange={(e) => setSharedCat(e.target.value)}>
-                    {(spaceCtx.sharedCats || []).map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                  <div className="small-note" style={{ marginTop: 6 }}>Платили вы, расход делится пополам.</div>
-                </div>
-              )}
-            </>
+          {!sharedForced && !split && !isEdit && spaceCtx?.sharedAvailable && sharedOn && (
+            <div className="op-note">Платили вы, расход делится пополам.</div>
           )}
-        </>
-      )}
-
-      {type === "loan" && (
-        <>
-          <div className="operation-tabs" style={{ marginBottom: 10 }}>
-            <button type="button" className={loanDir === "lent" ? "active" : ""} onClick={() => setLoanDir("lent")}>
-              Вы дали в долг
-            </button>
-            <button type="button" className={loanDir === "borrowed" ? "active" : ""} onClick={() => setLoanDir("borrowed")}>
-              Вам дали в долг
-            </button>
-          </div>
-          <div className="field">
-            <label>{loanDir === "lent" ? "Кто вам должен" : "Кому вы должны"}</label>
-            <input
-              type="text"
-              list="loan-people"
-              value={person}
-              placeholder="Имя"
-              onChange={(e) => setPerson(e.target.value)}
-            />
-            <datalist id="loan-people">
-              {knownPeople(transactions || []).map((n) => (
-                <option key={n} value={n} />
-              ))}
-            </datalist>
-          </div>
-          <div className="field">
-            <label>{loanDir === "lent" ? "С какой карты дали" : "На какую карту пришли деньги"}</label>
-            <CardPicker options={cardOptions} value={card} onChange={setCard} />
-          </div>
-          <div className="field">
-            <label>{loanDir === "lent" ? "Когда вам вернут (необязательно)" : "Когда вы вернёте (необязательно)"}</label>
-            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          </div>
         </>
       )}
 
       {type === "income" && (
-        <div className="field">
-          <label>Куда пришёл доход</label>
-          <CardPicker options={cardOptions} value={card} onChange={setCard} />
-          <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, cursor: "pointer" }}>
-            <input type="checkbox" checked={notEarned} onChange={(e) => setNotEarned(e.target.checked)} style={{ width: "auto" }} />
-            <span style={{ textTransform: "none", letterSpacing: 0 }}>Не заработок</span>
-          </label>
-        </div>
+        <OpGroup>
+          <OpDate value={date} onChange={setDate} />
+          <OpSelect icon={Wallet} color={cardColor} label="Куда пришёл доход" options={cardSelectOptions} value={card} onChange={setCard} />
+          <OpToggle icon={Banknote} color={grey} label="Не заработок" checked={notEarned} onChange={setNotEarned} />
+        </OpGroup>
       )}
 
       {type === "transfer" && (
-        <div className="form-grid-2">
-          <div className="field">
-            <label>Откуда</label>
-            <select value={fromCard} onChange={(e) => setFromCard(e.target.value)}>
-              {cardOptions.map((c) => (
-                <option key={c.id} value={c.id}>{c.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>Куда</label>
-            <select value={toCard} onChange={(e) => setToCard(e.target.value)}>
-              {cardOptions.map((c) => (
-                <option key={c.id} value={c.id}>{c.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      )}
-
-      {type === "transfer" && (
-        <>
-          <div className="field" style={{ marginBottom: transferDebtActive ? 6 : 11 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={asDebt}
-                onChange={(e) => setAsDebt(e.target.checked)}
-                style={{ width: "auto", height: "auto" }}
-              />
-              <span style={{ textTransform: "none", letterSpacing: 0 }}>Считать долгом</span>
-            </label>
-          </div>
-
-        </>
+        <OpGroup>
+          <OpDate value={date} onChange={setDate} />
+          <OpSelect icon={ArrowLeftRight} color="#2F6FD0" label="Откуда" options={cardSelectOptions} value={fromCard} onChange={setFromCard} />
+          <OpSelect icon={Wallet} color={cardOptions.find((c) => c.id === toCard)?.color || C.sber} label="Куда" options={cardSelectOptions} value={toCard} onChange={setToCard} />
+          <OpToggle icon={HandCoins} color={grey} label="Считать долгом" checked={asDebt} onChange={setAsDebt} />
+        </OpGroup>
       )}
 
       {type === "adjustment" && (
         <>
-          <div className="field">
-            <label>Карта</label>
-            <CardPicker options={cardOptions} value={card} onChange={setCard} />
-          </div>
-
-          <div className="field" style={{ marginBottom: 11 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={showInHistory}
-                onChange={(e) => setShowInHistory(e.target.checked)}
-                style={{ width: "auto", height: "auto" }}
-              />
-              <span style={{ textTransform: "none", letterSpacing: 0 }}>Отображать в операциях</span>
-            </label>
-          </div>
+          <OpGroup>
+            <OpDate value={date} onChange={setDate} />
+            <OpSelect icon={Wallet} color={cardColor} label="Карта" options={cardSelectOptions} value={card} onChange={setCard} />
+            <OpToggle icon={SlidersHorizontal} color={grey} label="Отображать в операциях" checked={showInHistory} onChange={setShowInHistory} />
+          </OpGroup>
 
           {!isEdit && (
             <div
@@ -682,14 +581,57 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         </>
       )}
 
-      <div className="field">
-        <label>Заметка</label>
-        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Необязательно" />
-      </div>
-
-      {type === "expense" && (
-        <ReceiptField had={!!initial?.receipt} txId={initial?.editId} receipt={receipt} onChange={setReceipt} />
+      {type === "loan" && (
+        <OpGroup>
+          <OpDate value={date} onChange={setDate} />
+          <OpChips
+            options={[
+              { id: "lent", label: "Вы дали в долг", color: "#7B5CC9" },
+              { id: "borrowed", label: "Вам дали в долг", color: "#7B5CC9" },
+            ]}
+            value={loanDir}
+            onChange={setLoanDir}
+          />
+          <OpText
+            icon={User}
+            color="#7B5CC9"
+            label={loanDir === "lent" ? "Кто вам должен" : "Кому вы должны"}
+            value={person}
+            onChange={setPerson}
+            placeholder="Имя"
+            list="loan-people"
+          />
+          <datalist id="loan-people">
+            {knownPeople(transactions || []).map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
+          <OpSelect
+            icon={Wallet}
+            color={cardColor}
+            label={loanDir === "lent" ? "С какой карты дали" : "На какую карту пришли деньги"}
+            options={cardSelectOptions}
+            value={card}
+            onChange={setCard}
+          />
+          <OpDate
+            icon={CalendarClock}
+            color="#7B5CC9"
+            label={loanDir === "lent" ? "Когда вам вернут (необязательно)" : "Когда вы вернёте (необязательно)"}
+            value={dueDate}
+            onChange={setDueDate}
+          />
+        </OpGroup>
       )}
+
+      <OpGroup>
+        <OpText icon={Pencil} color={grey} label="Заметка" value={note} onChange={setNote} placeholder="Необязательно" />
+        {type === "expense" && (
+          <ReceiptField had={!!initial?.receipt} txId={initial?.editId} receipt={receipt} onChange={setReceipt} />
+        )}
+      </OpGroup>
+
+      <button type="submit" className="op-save">Сохранить</button>
     </form>
   );
 }

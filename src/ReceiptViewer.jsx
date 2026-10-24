@@ -1,6 +1,7 @@
 import React, { createContext, useEffect, useRef, useState } from "react";
 import { Camera, Paperclip, X } from "lucide-react";
 import { C } from "./constants.js";
+import { RoundIcon } from "./OpUi.jsx";
 import { compressImage, loadReceipt } from "./receipts.js";
 
 /* Контекст: любой ряд операции может открыть просмотр чека, не пробрасывая обработчик через все экраны. */
@@ -73,21 +74,20 @@ export function ReceiptField({ had, receipt, onChange, txId }) {
   const has = !!receipt.data || (had && !receipt.remove);
 
   return (
-    <div className="field">
-      <label>Чек</label>
-      <input ref={inputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={pick} />
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {preview && <img src={preview} alt="Чек" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 8, border: `1px solid ${C.border}` }} />}
-        <button type="button" className="btn" disabled={busy} onClick={() => inputRef.current?.click()} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <Camera size={15} /> {busy ? "Обработка…" : has ? "Заменить фото" : "Добавить фото"}
-        </button>
-        {has && (
-          <button type="button" className="btn" onClick={() => onChange({ data: null, remove: true })}>
-            Убрать
-          </button>
-        )}
+    <div className="op-row" style={{ cursor: "pointer" }} onClick={() => { if (!busy) inputRef.current?.click(); }}>
+      <input ref={inputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={pick} onClick={(e) => e.stopPropagation()} />
+      <RoundIcon icon={Camera} color="#5B6B62" />
+      <div className="op-body">
+        <div className="op-label">Фото чека</div>
+        <div className="op-value op-value-sm">{busy ? "Обработка…" : has ? "Заменить фото" : "Добавить"}</div>
+        {error && <div style={{ fontSize: 12, color: C.danger, marginTop: 2 }}>{error}</div>}
       </div>
-      {error && <div style={{ fontSize: 12, color: C.danger, marginTop: 6 }}>{error}</div>}
+      {preview && <img className="op-thumb" src={preview} alt="Чек" />}
+      {has && (
+        <button type="button" className="op-link" onClick={(e) => { e.stopPropagation(); onChange({ data: null, remove: true }); }}>
+          Убрать
+        </button>
+      )}
     </div>
   );
 }

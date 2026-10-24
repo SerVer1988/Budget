@@ -979,6 +979,339 @@ export function AppStyles() {
         gap: 9px;
       }
 
+      /* ===== Компактная форма «Новая операция» ===== */
+      .op-form {
+        padding: 12px;
+      }
+
+      .op-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .op-head h2 {
+        margin: 0;
+        font-size: 17px;
+        line-height: 1.2;
+        font-weight: 800;
+      }
+
+      .op-close {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        border: 1px solid ${C.border};
+        background: ${C.surface2};
+        color: ${C.inkMuted};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+
+      .op-tabs {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 10px;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+
+      .op-tabs::-webkit-scrollbar {
+        display: none;
+      }
+
+      .op-tab {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 32px;
+        padding: 0 11px;
+        border-radius: 999px;
+        border: 1px solid ${C.border};
+        background: ${C.surface2};
+        color: ${C.inkMuted};
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      .op-tab.active {
+        background: var(--tab-color);
+        border-color: var(--tab-color);
+        color: #fff;
+      }
+
+      .op-amount-line {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        margin: 4px 4px 2px;
+      }
+
+      .op-amount {
+        flex: 1;
+        min-width: 0;
+        width: 100%;
+        height: 56px;
+        padding: 0;
+        border: 0;
+        outline: none;
+        background: transparent;
+        color: ${C.ink};
+        font-size: 40px;
+        line-height: 1;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .op-amount::placeholder {
+        color: ${C.border};
+      }
+
+      .op-amount-cur {
+        font-size: 26px;
+        font-weight: 800;
+        color: ${C.inkMuted};
+      }
+
+      .op-amount-hint {
+        margin: 0 4px 8px;
+        min-height: 14px;
+        font-size: 12px;
+        color: ${C.inkMuted};
+      }
+
+      .op-amount-sm {
+        font-size: 17px;
+        font-weight: 700;
+        height: 28px;
+      }
+
+      .op-group {
+        border: 1px solid ${C.border};
+        background: ${C.surface};
+        border-radius: 18px;
+        overflow: hidden;
+        margin-bottom: 10px;
+      }
+
+      .op-row {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        min-height: 54px;
+        border-top: 1px solid ${C.border};
+      }
+
+      .op-group > :first-child {
+        border-top: 0;
+      }
+
+      .op-ic {
+        flex: 0 0 auto;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .op-body {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .op-label {
+        font-size: 11px;
+        line-height: 1.1;
+        font-weight: 600;
+        color: ${C.inkMuted};
+        text-transform: none;
+        letter-spacing: 0;
+      }
+
+      .op-value {
+        margin-top: 2px;
+        font-size: 15px;
+        line-height: 1.25;
+        font-weight: 700;
+        color: ${C.ink};
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .op-value-sm {
+        margin-top: 0;
+        font-size: 14px;
+      }
+
+      .op-chev {
+        flex: 0 0 auto;
+        color: ${C.inkMuted};
+      }
+
+      .op-overlay {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        border: 0;
+        padding: 0;
+        font-size: 16px;
+        cursor: pointer;
+        background: transparent;
+      }
+
+      .op-input {
+        display: block;
+        width: 100%;
+        margin-top: 2px;
+        padding: 0;
+        border: 0;
+        outline: none;
+        background: transparent;
+        color: ${C.ink};
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .op-input::placeholder {
+        color: ${C.inkMuted};
+        font-weight: 500;
+      }
+
+      .op-chips-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-top: 1px solid ${C.border};
+      }
+
+      .op-chips-row .op-label {
+        flex: 0 0 auto;
+        min-width: 44px;
+      }
+
+      .op-chips {
+        flex: 1;
+        display: flex;
+        gap: 6px;
+      }
+
+      .op-chip {
+        flex: 1;
+        min-width: 0;
+        height: 32px;
+        border-radius: 999px;
+        border: 1px solid ${C.border};
+        background: ${C.surface2};
+        color: ${C.inkMuted};
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+      }
+
+      .op-chip.active {
+        border-color: var(--chip-color);
+        background: var(--chip-soft);
+        color: var(--chip-color);
+      }
+
+      .op-toggle {
+        cursor: pointer;
+      }
+
+      .op-switch-input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .op-switch {
+        flex: 0 0 auto;
+        position: relative;
+        width: 40px;
+        height: 24px;
+        border-radius: 999px;
+        background: ${C.border};
+        transition: background 0.15s;
+      }
+
+      .op-switch::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+        transition: transform 0.15s;
+      }
+
+      .op-switch-input:checked + .op-switch {
+        background: ${C.sber};
+      }
+
+      .op-switch-input:checked + .op-switch::after {
+        transform: translateX(16px);
+      }
+
+      .op-note {
+        margin: 0 4px 10px;
+        font-size: 12px;
+        line-height: 1.35;
+        color: ${C.inkMuted};
+      }
+
+      .op-save {
+        width: 100%;
+        height: 50px;
+        border: 0;
+        border-radius: 16px;
+        background: ${C.sber};
+        color: #fff;
+        font-size: 16px;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      .op-save:disabled {
+        opacity: 0.6;
+      }
+
+      .op-thumb {
+        flex: 0 0 auto;
+        width: 44px;
+        height: 44px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid ${C.border};
+      }
+
+      .op-link {
+        flex: 0 0 auto;
+        border: 0;
+        background: transparent;
+        color: ${C.inkMuted};
+        font-size: 12px;
+        text-decoration: underline;
+        cursor: pointer;
+        padding: 6px;
+      }
+
       .card-picker {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
