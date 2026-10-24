@@ -1013,29 +1013,24 @@ export function AppStyles() {
       }
 
       .op-tabs {
-        display: flex;
-        gap: 6px;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 5px;
         margin-bottom: 10px;
-        overflow-x: auto;
-        scrollbar-width: none;
-      }
-
-      .op-tabs::-webkit-scrollbar {
-        display: none;
       }
 
       .op-tab {
-        flex: 1 1 auto;
         min-width: 0;
         height: 32px;
-        padding: 0 11px;
+        padding: 0 2px;
         border-radius: 999px;
         border: 1px solid ${C.border};
         background: ${C.surface2};
         color: ${C.inkMuted};
-        font-size: 12px;
+        font-size: clamp(11px, 3.1vw, 12.5px);
         font-weight: 700;
         white-space: nowrap;
+        text-align: center;
         cursor: pointer;
       }
 
@@ -1047,22 +1042,22 @@ export function AppStyles() {
 
       .op-amount-line {
         display: flex;
-        align-items: baseline;
-        gap: 6px;
-        margin: 4px 4px 2px;
+        align-items: center;
+        gap: 8px;
+        margin: 2px 0 2px;
       }
 
       .op-amount {
         flex: 1;
         min-width: 0;
         width: 100%;
-        height: 56px;
+        height: 52px;
         padding: 0;
         border: 0;
         outline: none;
         background: transparent;
         color: ${C.ink};
-        font-size: 40px;
+        font-size: clamp(24px, 8.2vw, 34px);
         line-height: 1;
         font-weight: 800;
         font-variant-numeric: tabular-nums;
@@ -1073,9 +1068,65 @@ export function AppStyles() {
       }
 
       .op-amount-cur {
-        font-size: 26px;
+        flex: 0 0 auto;
+        font-size: 20px;
         font-weight: 800;
         color: ${C.inkMuted};
+      }
+
+      .op-split-btn {
+        flex: 0 0 auto;
+        width: 36px;
+        height: 44px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: ${C.inkMuted};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+
+      .op-split-btn.active {
+        color: #2F6FD0;
+      }
+
+      .op-save-inline {
+        flex: 0 0 auto;
+        height: 48px;
+        padding: 0 16px;
+        border: 0;
+        border-radius: 14px;
+        background: ${C.sber};
+        color: #fff;
+        font-size: 15px;
+        font-weight: 800;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      .op-pair {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        border-top: 1px solid ${C.border};
+      }
+
+      .op-pair > .op-row {
+        border-top: 0;
+      }
+
+      .op-pair > .op-row + .op-row {
+        border-left: 1px solid ${C.border};
+      }
+
+      .op-row-compact {
+        gap: 8px;
+        padding: 8px 10px;
+      }
+
+      .op-row-compact .op-value {
+        font-size: 14px;
       }
 
       .op-amount-hint {

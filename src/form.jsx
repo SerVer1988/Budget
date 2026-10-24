@@ -16,7 +16,7 @@ import {
 import { CategoryPanel, OzonPanel } from "./panels.jsx";
 import { ReceiptField } from "./ReceiptViewer.jsx";
 import { C, CARD_BUCKET, getIcon } from "./constants.js";
-import { OpChips, OpDate, OpGroup, OpSelect, OpTabs, OpText, OpToggle, RoundIcon } from "./OpUi.jsx";
+import { OpChips, OpDate, OpGroup, OpPair, OpSelect, OpTabs, OpText, OpToggle, RoundIcon } from "./OpUi.jsx";
 import { computeBalances } from "./finance.js";
 import { SpaceContext } from "./spaces.jsx";
 import { guessSharedCat } from "./shared.js";
@@ -83,7 +83,7 @@ export function bucketOptions(settings) {
 }
 
 /* Сумма. Вычисления прямо в строке работают как раньше («1200+350» → 1 550), отдельных кнопок со знаками нет. */
-export function AmountField({ label, value, onChange, big }) {
+export function AmountField({ label, value, onChange, big, left, right }) {
   const evaluated = evalMoneyExpr(value);
   const stripped = String(value ?? "").trim().replace(/^-/, "");
   const hasOp = /[+\-*/]/.test(stripped);
@@ -93,6 +93,7 @@ export function AmountField({ label, value, onChange, big }) {
     return (
       <>
         <div className="op-amount-line">
+          {left}
           <input
             className="op-amount mono"
             inputMode="decimal"
@@ -103,6 +104,7 @@ export function AmountField({ label, value, onChange, big }) {
             aria-label={label}
           />
           <span className="op-amount-cur">₽</span>
+          {right}
         </div>
         <div className="op-amount-hint">
           {label}
@@ -427,6 +429,24 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         value={amount}
         onChange={setAmount}
         big
+        left={
+          type === "expense" ? (
+            <button
+              type="button"
+              className={`op-split-btn${split ? " active" : ""}`}
+              aria-label="Разделить сумму на две категории"
+              aria-pressed={split}
+              onClick={() => {
+                const next = !split;
+                setSplit(next);
+                if (next) setBucket2(bucket);
+              }}
+            >
+              <Split size={25} strokeWidth={2.2} />
+            </button>
+          ) : null
+        }
+        right={<button type="submit" className="op-save-inline">Сохранить</button>}
       />
 
       {type === "expense" && (
@@ -434,15 +454,18 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
           <OpGroup>
             <OpDate value={date} onChange={setDate} />
             <OpChips label="Бюджет" options={bucketOptions(settings)} value={bucket} onChange={setBucket} />
-            <OpSelect
-              icon={getIcon(catObj?.icon)}
-              color={catObj?.color || C.sber}
-              label={split ? "Категория (часть 1)" : "Категория"}
-              options={catOptions(categories)}
-              value={category}
-              onChange={setCategory}
-            />
-            <OpSelect icon={Wallet} color={cardColor} label="С карты" options={cardSelectOptions} value={card} onChange={setCard} />
+            <OpPair>
+              <OpSelect
+                compact
+                icon={getIcon(catObj?.icon)}
+                color={catObj?.color || C.sber}
+                label={split ? "Категория (ч. 1)" : "Категория"}
+                options={catOptions(categories)}
+                value={category}
+                onChange={setCategory}
+              />
+              <OpSelect compact icon={Wallet} color={cardColor} label="С карты" options={cardSelectOptions} value={card} onChange={setCard} />
+            </OpPair>
           </OpGroup>
 
           {anomalyParts.length > 0 && (
@@ -457,62 +480,53 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
             </div>
           )}
 
-          <OpGroup>
-            <OpToggle
-              icon={Split}
-              color="#2F6FD0"
-              label="Разделить на две категории"
-              checked={split}
-              onChange={(checked) => {
-                setSplit(checked);
-                if (checked) setBucket2(bucket);
-              }}
-            />
-            {split && (
-              <>
-                <AmountField label="Сумма (часть 2)" value={splitAmount2} onChange={setSplitAmount2} />
-                <OpChips label="Бюджет" options={bucketOptions(settings)} value={bucket2} onChange={setBucket2} />
-                <OpSelect
-                  icon={getIcon(catObj2?.icon)}
-                  color={catObj2?.color || C.sber}
-                  label="Категория (часть 2)"
-                  options={catOptions(categories2)}
-                  value={splitCategory2}
-                  onChange={setSplitCategory2}
-                />
-              </>
-            )}
-            {sharedForced && (
+          {split && (
+            <OpGroup>
+              <AmountField label="Сумма (часть 2)" value={splitAmount2} onChange={setSplitAmount2} />
+              <OpChips label="Бюджет" options={bucketOptions(settings)} value={bucket2} onChange={setBucket2} />
               <OpSelect
-                icon={Users}
-                color="#7B5CC9"
-                label={`Общая категория · «${cardLabel(settings, card)}» — общая карта`}
-                options={(spaceCtx.sharedCats || []).map((c) => ({ value: c.id, label: c.name }))}
-                value={sharedCatValue}
-                onChange={setSharedCat}
+                icon={getIcon(catObj2?.icon)}
+                color={catObj2?.color || C.sber}
+                label="Категория (часть 2)"
+                options={catOptions(categories2)}
+                value={splitCategory2}
+                onChange={setSplitCategory2}
               />
-            )}
-            {!sharedForced && !split && !isEdit && spaceCtx?.sharedAvailable && (
-              <>
-                <OpToggle icon={Users} color="#7B5CC9" label={`Общая трата (${spaceCtx.names.shared})`} checked={sharedOn} onChange={setSharedOn} />
-                {sharedOn && (
-                  <OpSelect
-                    icon={Users}
-                    color="#7B5CC9"
-                    label="Общая категория"
-                    options={(spaceCtx.sharedCats || []).map((c) => ({ value: c.id, label: c.name }))}
-                    value={sharedCatValue}
-                    onChange={setSharedCat}
-                  />
-                )}
-              </>
-            )}
-          </OpGroup>
+            </OpGroup>
+          )}
 
           {split && (
             <div className="op-note">
               Часть 1: {formatMoney(Math.max(0, part1Num))} · спишется с «{cardLabel(settings, card)}»: {formatMoney(amountNum)}
             </div>
+          )}
+          {(sharedForced || (!split && !isEdit && spaceCtx?.sharedAvailable)) && (
+            <OpGroup>
+              {sharedForced ? (
+                <OpSelect
+                  icon={Users}
+                  color="#7B5CC9"
+                  label="Общая категория (общая карта)"
+                  options={(spaceCtx.sharedCats || []).map((c) => ({ value: c.id, label: c.name }))}
+                  value={sharedCatValue}
+                  onChange={setSharedCat}
+                />
+              ) : (
+                <>
+                  <OpToggle icon={Users} color="#7B5CC9" label={`Общая трата (${spaceCtx.names.shared})`} checked={sharedOn} onChange={setSharedOn} />
+                  {sharedOn && (
+                    <OpSelect
+                      icon={Users}
+                      color="#7B5CC9"
+                      label="Общая категория"
+                      options={(spaceCtx.sharedCats || []).map((c) => ({ value: c.id, label: c.name }))}
+                      value={sharedCatValue}
+                      onChange={setSharedCat}
+                    />
+                  )}
+                </>
+              )}
+            </OpGroup>
           )}
           {!sharedForced && !split && !isEdit && spaceCtx?.sharedAvailable && sharedOn && (
             <div className="op-note">Платили вы, расход делится пополам.</div>
@@ -631,7 +645,6 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         )}
       </OpGroup>
 
-      <button type="submit" className="op-save">Сохранить</button>
     </form>
   );
 }

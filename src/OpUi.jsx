@@ -18,7 +18,7 @@ const OP_TABS = [
   { id: "expense", label: "Трата" },
   { id: "income", label: "Доход" },
   { id: "transfer", label: "Перевод" },
-  { id: "adjustment", label: "Коррекция" },
+  { id: "adjustment", label: "Баланс" },
   { id: "loan", label: "Долги" },
 ];
 
@@ -54,25 +54,30 @@ export function OpGroup({ children }) {
 }
 
 /* Строка: значок слева, мелкая подпись и значение, справа стрелка. Для выбора поверх кладётся прозрачный список. */
-export function OpRow({ icon, color, label, value, chevron = true, children }) {
+export function OpRow({ icon, color, label, value, chevron = true, compact = false, children }) {
   return (
-    <div className="op-row">
-      <RoundIcon icon={icon} color={color} />
+    <div className={`op-row${compact ? " op-row-compact" : ""}`}>
+      <RoundIcon icon={icon} color={color} size={compact ? 30 : 36} />
       <div className="op-body">
         {label && <div className="op-label">{label}</div>}
         {value !== undefined && <div className="op-value">{value}</div>}
       </div>
-      {chevron && <ChevronRight size={17} className="op-chev" />}
+      {chevron && !compact && <ChevronRight size={17} className="op-chev" />}
       {children}
     </div>
   );
 }
 
+/* Две компактные ячейки в одной строке (например, «Категория» и «С карты»). */
+export function OpPair({ children }) {
+  return <div className="op-pair">{children}</div>;
+}
+
 /* Выбор из списка в виде строки. options: [{ value, label }] */
-export function OpSelect({ icon, color, label, options, value, onChange }) {
+export function OpSelect({ icon, color, label, options, value, onChange, compact = false }) {
   const current = options.find((o) => o.value === value);
   return (
-    <OpRow icon={icon} color={color} label={label} value={current ? current.label : "—"}>
+    <OpRow icon={icon} color={color} label={label} value={current ? current.label : "—"} compact={compact}>
       <select className="op-overlay" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
