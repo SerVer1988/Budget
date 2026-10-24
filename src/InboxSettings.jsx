@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
 import { inbox } from "./storage.js";
+import { bucketName } from "./format.js";
 
 function CopyLine({ label, value }) {
   const [done, setDone] = useState(false);
@@ -29,13 +30,16 @@ function CopyLine({ label, value }) {
 }
 
 /* Настройка приёма банковских уведомлений: ключ + инструкция для приложения-автоматизации на телефоне. */
-export function InboxSettings() {
+export function InboxSettings({ settings, userEmail }) {
   const [open, setOpen] = useState(false); // по умолчанию свёрнуто
   const [info, setInfo] = useState(undefined); // undefined — загрузка
   const [token, setToken] = useState(null);    // показывается только сразу после создания
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [testMsg, setTestMsg] = useState("");
+  const [adv, setAdv] = useState(false);       // «для опытных»: ручная настройка через MacroDroid
+  const [appMsg, setAppMsg] = useState("");
+  const isAndroid = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
   const ep = inbox.endpoint();
 
   async function load() {
@@ -49,6 +53,28 @@ export function InboxSettings() {
     setBusy(true); setError(""); setTestMsg("");
     try { setToken(await inbox.createToken()); await load(); }
     catch (e) { setError(e.message); }
+    setBusy(false);
+  }
+
+  // Подключение приложения «Бюджет» для Android: выпускаем ключ и передаём его приложению ссылкой,
+  // дальше всё настраивается на экране приложения (доступ к уведомлениям, банки, карты).
+  async function connectApp() {
+    if (info?.has && !window.confirm("Будет выпущен новый ключ: старый (например, в MacroDroid) перестанет работать. Продолжить?")) return;
+    setBusy(true); setError(""); setAppMsg("");
+    try {
+      const t = await inbox.createToken();
+      await load();
+      const names = {
+        sber: bucketName(settings || {}, "needs"),
+        alfa: bucketName(settings || {}, "wants"),
+        ozon: bucketName(settings || {}, "savings"),
+      };
+      const q = new URLSearchParams({ u: ep.rawUrl, k: ep.apikey, t, e: userEmail || "", n: JSON.stringify(names) }).toString();
+      setAppMsg("Открываю приложение… Если ничего не произошло, обновите приложение «Бюджет» до версии 2.0 из RuStore.");
+      window.location.href = `intent://setup?${q}#Intent;scheme=budgetnotify;package=ru.server88.budget;end`;
+    } catch (e) {
+      setError(e.message);
+    }
     setBusy(false);
   }
 
@@ -79,21 +105,54 @@ export function InboxSettings() {
       {info === undefined && <div className="muted" style={{ fontSize: 12 }}>Загрузка…</div>}
 
       {info && !info.unavailable && (
-        <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-          {info.has ? "Ключ приёма создан." : "Ключа ещё нет."} Уведомления банков попадают в «Лист ожидания», где вы подтверждаете расход.
+        <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+          Уведомления банков попадают в «Лист ожидания» на экране «Анализ», где вы одним нажатием подтверждаете расход.
         </div>
+      )}
+
+      {info && !info.unavailable && isAndroid && (
+        <div style={{ marginBottom: 12 }}>
+          <button type="button" className="btn primary" style={{ width: "100%" }} disabled={busy} onClick={connectApp}>
+            Настроить на этом телефоне
+          </button>
+          <div className="fc-sub" style={{ marginTop: 6 }}>
+            Приложение «Бюджет» само читает уведомления выбранных банков: ни макросов, ни ключей вручную. Нужна версия 2.0.
+          </div>
+          {appMsg && <div className="fc-sub" style={{ marginTop: 6, color: C.sber, fontWeight: 700 }}>{appMsg}</div>}
+        </div>
+      )}
+
+      {info && !info.unavailable && !isAndroid && (
+        <div className="fc-sub" style={{ marginBottom: 10 }}>
+          Автоматический приём уведомлений работает в приложении «Бюджет» для Android. Откройте эти настройки на телефоне.
+        </div>
+      )}
+
+      {info && !info.unavailable && info.has && (
+        <button type="button" className="btn" style={{ width: "100%", marginBottom: 10 }} disabled={busy} onClick={revoke}>
+          Отключить приём уведомлений
+        </button>
       )}
 
       {info && !info.unavailable && (
-        <div className="button-row" style={{ marginTop: 0 }}>
+        <button
+          type="button"
+          onClick={() => setAdv((v) => !v)}
+          style={{ border: 0, background: "transparent", padding: 0, color: C.inkMuted, fontSize: 12, textDecoration: "underline", cursor: "pointer" }}
+        >
+          {adv ? "Скрыть ручную настройку" : "Для опытных: ручная настройка (MacroDroid)"}
+        </button>
+      )}
+
+      {adv && info && !info.unavailable && (
+        <div className="button-row" style={{ marginTop: 10 }}>
           <button type="button" className="btn primary" disabled={busy} onClick={create}>
-            {info.has ? "Выпустить новый ключ" : "Создать ключ"}
+            {info.has ? "Новый ключ" : "Создать ключ"}
           </button>
-          {info.has && <button type="button" className="btn" disabled={busy} onClick={revoke}>Отключить</button>}
         </div>
       )}
 
-      {token && (
+      {adv && token && (
         <div style={{ marginTop: 12 }}>
           <div style={{ fontSize: 12, color: C.danger, marginBottom: 8 }}>
             Ключ показан один раз: скопируйте его сейчас. Он умеет только добавлять записи в ваш лист ожидания.

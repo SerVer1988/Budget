@@ -482,7 +482,7 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
 
       <RecurringSettings settings={settings} onSaveSettings={onSaveSettings} />
 
-      <InboxSettings />
+      <InboxSettings settings={settings} userEmail={userEmail} />
 
       <SettingsExtras
         settings={settings}
