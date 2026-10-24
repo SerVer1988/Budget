@@ -10,7 +10,6 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
   ResponsiveContainer,
   Legend,
   LabelList,
@@ -31,15 +30,24 @@ import { SpaceSwitch } from "./spaces.jsx";
 import { aggregateMonth, computeBalances, txCardsOf, txImpactFor, txNetImpact, txSearchText } from "./finance.js";
 import { bucketIconSrc, bucketName, cardLabel, dayOfMonth, daysInMonth, endOfMonthStr, formatMoney, monthLabel, shiftMonth, todayMonthKey, todayStr } from "./format.js";
 
-/* Сумма белым мелким шрифтом по центру столбца (на очень низких столбцах не пишем, чтобы не вылезала). */
-function renderBarLabel({ x, y, width, height, value }) {
-  if (!value || height < 18) return null;
+/* Сумма на столбце: в центре белым, а на низком столбце (белый текст не виден) — над столбцом цветом самого столбца. */
+const makeBarLabel = (rows) => function BarLabel({ x, y, width, height, value, index }) {
+  if (value === undefined || value === null) return null;
+  const inside = height >= 18;
   return (
-    <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="central" fill="#fff" fontSize={11} fontWeight={700}>
+    <text
+      x={x + width / 2}
+      y={inside ? y + height / 2 : y - 6}
+      textAnchor="middle"
+      dominantBaseline={inside ? "central" : "auto"}
+      fill={inside ? "#fff" : rows[index]?.fill || "#333"}
+      fontSize={11}
+      fontWeight={700}
+    >
       {formatMoney(value)}
     </text>
   );
-}
+};
 
 export function AnalysisView({
   readOnly,
@@ -349,10 +357,9 @@ export function AnalysisView({
                     <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
                     <XAxis dataKey="name" tick={{ fontSize: 11, fill: C.inkMuted }} />
                     <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} width={42} />
-                    <Tooltip formatter={(v) => formatMoney(v)} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     <Bar dataKey="value" name="Сумма" radius={[8, 8, 0, 0]}>
-                      <LabelList dataKey="value" position="center" content={renderBarLabel} />
+                      <LabelList dataKey="value" position="center" content={makeBarLabel(chartData)} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>

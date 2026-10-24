@@ -1609,6 +1609,18 @@ export function AppStyles() {
         color: ${C.inkMuted};
       }
 
+      /* На графиках нет рамок выделения и серых вспышек при касании. */
+      .recharts-wrapper,
+      .recharts-wrapper * {
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .recharts-wrapper :focus,
+      .recharts-wrapper :focus-visible,
+      .recharts-surface:focus {
+        outline: none !important;
+      }
+
       .chart-box {
         width: 100%;
         height: 170px;

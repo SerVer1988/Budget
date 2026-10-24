@@ -41,6 +41,7 @@ const RAD = Math.PI / 180;
 const PIE_PAD = 2;
 const PIE_HEIGHT = 250;
 const LABEL_GAP = 22; // минимальный шаг между подписями по вертикали
+const MAX_STEP = 40; // и максимальный: подписи не разъезжаются слишком далеко
 
 function pieLabelLayout(rows, cx, cy, R, H) {
   const n = rows.length;
@@ -54,18 +55,22 @@ function pieLabelLayout(rows, cx, cy, R, H) {
     const mid = (start + end) / 2;
     const cos = Math.cos(-mid * RAD);
     const sin = Math.sin(-mid * RAD);
-    return { i, side: cos >= 0 ? 1 : -1, x0: cx + (R + 2) * cos, y0: cy + (R + 2) * sin, cos, sin, ty: cy + (R + 16) * sin };
+    return { i, side: cos >= 0 ? 1 : -1, x0: cx + (R + 2) * cos, y0: cy + (R + 2) * sin, ty: 0 };
   });
+  // Подписи каждой стороны выстраиваются в колонку с равными промежутками (порядок сверху вниз сохраняется,
+  // поэтому линии не пересекаются). Колонка центрируется около «естественного» положения кусочков.
   [1, -1].forEach((side) => {
-    const list = items.filter((it) => it.side === side).sort((a, b) => a.ty - b.ty);
-    for (let k = 0; k < list.length; k++) {
-      const lo = k ? list[k - 1].ty + LABEL_GAP : 14;
-      if (list[k].ty < lo) list[k].ty = lo;
-    }
-    for (let k = list.length - 1; k >= 0; k--) {
-      const hi = k < list.length - 1 ? list[k + 1].ty - LABEL_GAP : H - 12;
-      if (list[k].ty > hi) list[k].ty = hi;
-    }
+    const list = items.filter((it) => it.side === side).sort((a, b) => a.y0 - b.y0);
+    const k = list.length;
+    if (!k) return;
+    const room = H - 28;
+    let step = k > 1 ? Math.min(MAX_STEP, (2 * (R + 24)) / (k - 1)) : 0;
+    step = Math.max(step, k > 1 ? Math.min(LABEL_GAP, room / (k - 1)) : 0);
+    if (step * (k - 1) > room) step = room / (k - 1);
+    const span = step * (k - 1);
+    const mean = list.reduce((sum, it) => sum + it.y0, 0) / k;
+    const top = Math.min(Math.max(mean - span / 2, 14), H - 14 - span);
+    list.forEach((it, idx) => { it.ty = top + idx * step; });
   });
   return items;
 }
@@ -78,9 +83,9 @@ function makePieLabel(rows, H) {
     if (!it) return null;
     const row = rows[index];
     const sx = it.side;
-    const elbowX = cx + sx * (outerRadius + 14);
-    const textX = cx + sx * (outerRadius + 24);
-    const room = Math.max(40, cx - (outerRadius + 28)); // сколько места под текст до края диаграммы
+    const elbowX = cx + sx * (outerRadius + 8);
+    const textX = cx + sx * (outerRadius + 14);
+    const room = Math.max(40, cx - (outerRadius + 18)); // сколько места под текст до края диаграммы
     const maxChars = Math.floor(room / 4.9);
     return (
       <g>
@@ -148,8 +153,8 @@ export function CategoryDonut({ categories, totals, bucketLabel, transactions, b
               data={data}
               dataKey="value"
               nameKey="name"
-              innerRadius={38}
-              outerRadius={60}
+              innerRadius={50}
+              outerRadius={80}
               paddingAngle={PIE_PAD}
               stroke="none"
               label={makePieLabel(data, PIE_HEIGHT)}
@@ -159,7 +164,6 @@ export function CategoryDonut({ categories, totals, bucketLabel, transactions, b
                 <Cell key={d.name} fill={d.color} />
               ))}
             </Pie>
-            <Tooltip formatter={(v) => formatMoney(v)} />
           </PieChart>
         </ResponsiveContainer>
 
