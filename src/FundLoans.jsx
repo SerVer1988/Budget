@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
+import { User } from "lucide-react";
+import { ReceiptContext } from "./ReceiptViewer.jsx";
 import { C } from "./constants.js";
 import { cardLabel, formatMoney } from "./format.js";
 import { shortDate } from "./forecast.js";
@@ -11,6 +13,7 @@ const CARDS = ["sber", "alfa", "ozon"];
    деньги вернулись (на какую карту) или долг прощён (деньги не двигаются). */
 export function FundLoans({ loans, settings, onRepay }) {
   const [settling, setSettling] = useState(null); // { id, card }
+  const openReceipt = useContext(ReceiptContext);
   const today = todayStr();
 
   return (
@@ -21,6 +24,32 @@ export function FundLoans({ loans, settings, onRepay }) {
         return (
           <React.Fragment key={l.id}>
             <div className="tx-row debt-row">
+              <button
+                type="button"
+                aria-label={l.receipt ? `Фото: ${l.person}` : l.person}
+                onClick={() => { if (l.receipt) openReceipt(l.id); }}
+                style={{
+                  flex: "0 0 auto",
+                  width: 38,
+                  height: 38,
+                  borderRadius: "50%",
+                  border: `1px solid ${C.border}`,
+                  background: `${C.amber}22`,
+                  color: C.amber,
+                  padding: 0,
+                  overflow: "hidden",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: l.receipt ? "pointer" : "default",
+                }}
+              >
+                {l.thumb ? (
+                  <img src={l.thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <User size={18} />
+                )}
+              </button>
               <div className="debt-main" style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
                 <span style={{ fontSize: 14, fontWeight: 800 }}>
                   {lent ? "Вам должен " : "Вы должны: "}

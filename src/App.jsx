@@ -796,7 +796,14 @@ export default function App() {
         keepFlag = true;
       }
     }
-    const tagFirst = (t) => (t === first && keepFlag ? { ...t, receipt: true, ...(receiptId && !editId ? { id: receiptId } : {}) } : t);
+    // У долга рядом с фото хранится крошечная копия: она показывается значком в «Фонде».
+    const editedTx = editId ? transactions.find((t) => t.id === editId) : null;
+    const thumbFor = (t) => {
+      if (t.type !== "loan") return {};
+      const th = rec?.data ? rec.thumb : editedTx?.thumb;
+      return th ? { thumb: th } : {};
+    };
+    const tagFirst = (t) => (t === first && keepFlag ? { ...t, receipt: true, ...thumbFor(t), ...(receiptId && !editId ? { id: receiptId } : {}) } : t);
     const tx = Array.isArray(txIn) ? txIn.map(tagFirst) : tagFirst(txIn);
     const meta = metaIn && { ...metaIn, receipt: undefined };
 

@@ -635,7 +635,13 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
             value={dueDate}
             onChange={setDueDate}
           />
-          <ReceiptField had={!!initial?.receipt} txId={initial?.editId} receipt={receipt} onChange={setReceipt} />
+          <ReceiptField
+            label={loanDir === "lent" ? "Фото должника" : "Фото того, кто дал в долг"}
+            had={!!initial?.receipt}
+            txId={initial?.editId}
+            receipt={receipt}
+            onChange={setReceipt}
+          />
         </OpGroup>
       )}
 

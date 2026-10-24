@@ -35,13 +35,13 @@ export function ReceiptModal({ txId, onClose }) {
       </button>
       {state.loading && <div style={{ color: "#fff" }}>Загрузка…</div>}
       {state.error && <div style={{ color: "#fff", textAlign: "center" }}>{state.error}</div>}
-      {state.src && <img src={state.src} alt="Чек" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} onClick={(e) => e.stopPropagation()} />}
+      {state.src && <img src={state.src} alt="Фото" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }} onClick={(e) => e.stopPropagation()} />}
     </div>
   );
 }
 
 /* Поле «Чек» в форме операции. receipt = { data, remove }; had — у операции уже есть сохранённое фото. */
-export function ReceiptField({ had, receipt, onChange, txId }) {
+export function ReceiptField({ had, receipt, onChange, txId, label = "Фото чека" }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -62,7 +62,10 @@ export function ReceiptField({ had, receipt, onChange, txId }) {
     setBusy(true);
     setError("");
     try {
-      onChange({ data: await compressImage(file), remove: false });
+      // Основное фото и крошечная копия для значка в «Фонде» (хранится прямо в записи, грузится мгновенно).
+      const data = await compressImage(file);
+      const thumb = await compressImage(file, 120, 0.7);
+      onChange({ data, thumb, remove: false });
     } catch (err) {
       setError(err.message || "Не удалось обработать фото");
     } finally {
@@ -78,7 +81,7 @@ export function ReceiptField({ had, receipt, onChange, txId }) {
       <input ref={inputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={pick} onClick={(e) => e.stopPropagation()} />
       <RoundIcon icon={Camera} color="#5B6B62" />
       <div className="op-body">
-        <div className="op-label">Фото чека</div>
+        <div className="op-label">{label}</div>
         <div className="op-value op-value-sm">{busy ? "Обработка…" : has ? "Заменить фото" : "Добавить"}</div>
         {error && <div style={{ fontSize: 12, color: C.danger, marginTop: 2 }}>{error}</div>}
       </div>
