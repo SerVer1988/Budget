@@ -34,6 +34,68 @@ function compactAxis(v) {
   return String(Math.round(v));
 }
 
+/* Выноски круговой диаграммы: линия от кусочка к подписи «категория / сумма» мелким шрифтом.
+   Углы считаются так же, как внутри recharts (старт с 3 часов против часовой, зазор между кусочками), поэтому
+   подписи можно заранее раздвинуть, чтобы они не наезжали друг на друга. */
+const RAD = Math.PI / 180;
+const PIE_PAD = 2;
+const PIE_HEIGHT = 250;
+const LABEL_GAP = 22; // минимальный шаг между подписями по вертикали
+
+function pieLabelLayout(rows, cx, cy, R, H) {
+  const n = rows.length;
+  const total = rows.reduce((s, r) => s + r.value, 0) || 1;
+  const real = 360 - n * PIE_PAD;
+  let prevEnd = 0;
+  const items = rows.map((r, i) => {
+    const start = i ? prevEnd + PIE_PAD : 0;
+    const end = start + (r.value / total) * real;
+    prevEnd = end;
+    const mid = (start + end) / 2;
+    const cos = Math.cos(-mid * RAD);
+    const sin = Math.sin(-mid * RAD);
+    return { i, side: cos >= 0 ? 1 : -1, x0: cx + (R + 2) * cos, y0: cy + (R + 2) * sin, cos, sin, ty: cy + (R + 16) * sin };
+  });
+  [1, -1].forEach((side) => {
+    const list = items.filter((it) => it.side === side).sort((a, b) => a.ty - b.ty);
+    for (let k = 0; k < list.length; k++) {
+      const lo = k ? list[k - 1].ty + LABEL_GAP : 14;
+      if (list[k].ty < lo) list[k].ty = lo;
+    }
+    for (let k = list.length - 1; k >= 0; k--) {
+      const hi = k < list.length - 1 ? list[k + 1].ty - LABEL_GAP : H - 12;
+      if (list[k].ty > hi) list[k].ty = hi;
+    }
+  });
+  return items;
+}
+
+const clip = (text, max) => (text.length > max ? `${text.slice(0, Math.max(1, max - 1))}…` : text);
+
+function makePieLabel(rows, H) {
+  return function PieLabel({ cx, cy, outerRadius, index }) {
+    const it = pieLabelLayout(rows, cx, cy, outerRadius, H)[index];
+    if (!it) return null;
+    const row = rows[index];
+    const sx = it.side;
+    const elbowX = cx + sx * (outerRadius + 14);
+    const textX = cx + sx * (outerRadius + 24);
+    const room = Math.max(40, cx - (outerRadius + 28)); // сколько места под текст до края диаграммы
+    const maxChars = Math.floor(room / 4.9);
+    return (
+      <g>
+        <polyline points={`${it.x0},${it.y0} ${elbowX},${it.ty} ${textX},${it.ty}`} fill="none" stroke="#CBD3CE" strokeWidth={0.7} />
+        <text x={textX + sx * 3} y={it.ty - 1} textAnchor={sx > 0 ? "start" : "end"} fontSize={8.5} fontWeight={600} fill={C.ink}>
+          {clip(row.name, maxChars)}
+        </text>
+        <text x={textX + sx * 3} y={it.ty + 8.5} textAnchor={sx > 0 ? "start" : "end"} fontSize={8.5} fill={C.inkMuted}>
+          {formatMoney(row.value)}
+        </text>
+      </g>
+    );
+  };
+}
+
 export function CategoryDonut({ categories, totals, bucketLabel, transactions, bucket, settings, onDeleteTx, onEditTx }) {
   const [expandedCat, setExpandedCat] = useState(null);
 
@@ -79,17 +141,19 @@ export function CategoryDonut({ categories, totals, bucketLabel, transactions, b
   return (
     <div className="soft-card" style={{ padding: 14, marginTop: 12 }}>
       <div className="section-title" style={{ margin: "0 0 8px" }}>Структура расходов за месяц</div>
-      <div className="chart-box" style={{ height: 190, position: "relative" }}>
+      <div className="chart-box" style={{ height: PIE_HEIGHT, position: "relative" }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={data}
               dataKey="value"
               nameKey="name"
-              innerRadius={48}
-              outerRadius={78}
-              paddingAngle={2}
+              innerRadius={38}
+              outerRadius={60}
+              paddingAngle={PIE_PAD}
               stroke="none"
+              label={makePieLabel(data, PIE_HEIGHT)}
+              labelLine={false}
             >
               {data.map((d) => (
                 <Cell key={d.name} fill={d.color} />
@@ -110,9 +174,9 @@ export function CategoryDonut({ categories, totals, bucketLabel, transactions, b
           }}
         >
           {bucketLabel && (
-            <div style={{ fontSize: 11, color: C.inkMuted, marginBottom: 2 }}>{bucketLabel}</div>
+            <div style={{ fontSize: 10, color: C.inkMuted, marginBottom: 2 }}>{bucketLabel}</div>
           )}
-          <div className="mono" style={{ fontSize: 16, fontWeight: 900, color: C.ink, lineHeight: 1.1 }}>
+          <div className="mono" style={{ fontSize: 13, fontWeight: 900, color: C.ink, lineHeight: 1.1 }}>
             {formatMoney(total)}
           </div>
         </div>
