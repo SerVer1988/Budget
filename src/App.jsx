@@ -780,7 +780,7 @@ export default function App() {
     const first = Array.isArray(txIn) ? txIn[0] : txIn;
     let receiptId = null;
     let keepFlag = false;
-    if (first.type === "expense" && rec) {
+    if ((first.type === "expense" || first.type === "loan") && rec) {
       if (rec.data) {
         receiptId = editId || uid();
         try {

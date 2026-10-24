@@ -294,7 +294,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         date,
         dueDate: dueDate || "",
         note: note.trim(),
-      });
+      }, { receipt });
       return;
     }
 
@@ -635,6 +635,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
             value={dueDate}
             onChange={setDueDate}
           />
+          <ReceiptField had={!!initial?.receipt} txId={initial?.editId} receipt={receipt} onChange={setReceipt} />
         </OpGroup>
       )}
 
