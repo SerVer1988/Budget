@@ -32,7 +32,7 @@ import { planPartnerNotices, readFeedState, writeFeedState } from "./partnerFeed
 import { computeAllInsights } from "./insights.js";
 import { AppStyles } from "./AppStyles.jsx";
 import { AnalysisView } from "./AnalysisView.jsx";
-import { AuthScreen } from "./AuthScreen.jsx";
+import { AuthScreen, RecoveryScreen } from "./AuthScreen.jsx";
 import { SettingsView } from "./SettingsView.jsx";
 import { SpaceContext, SpaceSwitch, spaceNamesOf } from "./spaces.jsx";
 import { SharedView } from "./SharedView.jsx";
@@ -84,6 +84,8 @@ export default function App() {
   const [stale, setStale] = useState(false); // на другом устройстве данные уже изменились
 
   // Пространства пары: «me» — мой бюджет, «partner» — бюджет партнёра (только просмотр).
+  // Пришли по ссылке «Восстановление пароля» из письма: показываем экран нового пароля.
+  const [recovery, setRecovery] = useState(() => auth.takeRecoveryFromUrl());
   const [partnerInfo, setPartnerInfo] = useState(null); // { partner: { id, email }, i_share, partner_shares } | null
   const [space, setSpace] = useState("me");
   const [partnerData, setPartnerData] = useState(null); // { settings, transactions } партнёра, только чтение
@@ -896,6 +898,21 @@ export default function App() {
     if (Math.abs(dx) < Math.abs(dy) * 1.3) return; // скорее вертикальный скролл
 
     goPage(dx < 0 ? 1 : -1);
+  }
+
+  if (recovery) {
+    return (
+      <>
+        <AppStyles />
+        <div className="app-viewport">
+          <div className="app-shell">
+            <main className="app-main">
+              <RecoveryScreen tokens={recovery} onDone={() => setRecovery(null)} />
+            </main>
+          </div>
+        </div>
+      </>
+    );
   }
 
   if (authUser === null) {

@@ -1,21 +1,117 @@
 import React, { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { auth } from "./storage.js";
 import { C } from "./constants.js";
 
+/* Поле пароля с «глазиком» справа: показать / скрыть введённое. */
+function PasswordField({ label = "Пароль", value, onChange, autoComplete }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <div style={{ position: "relative" }}>
+        <input
+          type={shown ? "text" : "password"}
+          autoComplete={autoComplete}
+          autoCapitalize="none"
+          spellCheck={false}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ paddingRight: 46 }}
+        />
+        <button
+          type="button"
+          aria-label={shown ? "Скрыть пароль" : "Показать пароль"}
+          onClick={() => setShown((v) => !v)}
+          style={{
+            position: "absolute",
+            right: 4,
+            top: "50%",
+            transform: "translateY(-50%)",
+            width: 38,
+            height: 38,
+            border: 0,
+            background: "transparent",
+            color: C.inkMuted,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          {shown ? <EyeOff size={19} /> : <Eye size={19} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const linkStyle = {
+  display: "block",
+  margin: "14px auto 0",
+  border: 0,
+  background: "transparent",
+  padding: 0,
+  color: C.inkMuted,
+  fontSize: 12,
+  textDecoration: "underline",
+  cursor: "pointer",
+};
+
 /* ============================================================ Вход */
 export function AuthScreen() {
-  const [mode, setMode] = useState("login"); // login | signup
+  const [mode, setMode] = useState("login"); // login | signup | forgot | reset
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+
+  function go(next) {
+    setMode(next);
+    setError("");
+    setInfo("");
+  }
 
   async function submit(e) {
     e.preventDefault();
     setError("");
     setInfo("");
+
+    if (mode === "forgot") {
+      if (!email.trim()) { setError("Введите почту"); return; }
+      setBusy(true);
+      try {
+        await auth.requestPasswordReset(email.trim());
+        setMode("reset");
+        setPassword("");
+        setCode("");
+        setInfo("Если такая почта зарегистрирована, мы отправили письмо. Нажмите ссылку в письме или введите код из него ниже. Проверьте и «Спам».");
+      } catch (err) {
+        setError(err.message || "Не удалось отправить письмо");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (mode === "reset") {
+      if (!email.trim()) { setError("Введите почту"); return; }
+      if (code.replace(/\s/g, "").length < 6) { setError("Введите код из письма"); return; }
+      if (password.length < 6) { setError("Новый пароль — минимум 6 символов"); return; }
+      setBusy(true);
+      try {
+        await auth.resetWithCode(email.trim(), code, password);
+      } catch (err) {
+        setError(err.message || "Не удалось сменить пароль");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     if (mode === "signup" && !name.trim()) {
       setError("Введите имя");
       return;
@@ -39,10 +135,14 @@ export function AuthScreen() {
     }
   }
 
+  const title = mode === "login" ? "Вход" : mode === "signup" ? "Регистрация" : "Восстановление пароля";
+  const submitLabel =
+    mode === "login" ? "Войти" : mode === "signup" ? "Создать аккаунт" : mode === "forgot" ? "Отправить письмо" : "Сменить пароль и войти";
+
   return (
     <form className="form-card" onSubmit={submit} style={{ marginTop: 40 }}>
       <div className="form-title-row">
-        <h2>{mode === "login" ? "Вход" : "Регистрация"}</h2>
+        <h2>{title}</h2>
       </div>
 
       {mode === "signup" && (
@@ -59,40 +159,126 @@ export function AuthScreen() {
         </div>
       )}
 
+      {mode === "forgot" && (
+        <div className="small-note" style={{ marginBottom: 10 }}>
+          Укажите почту, с которой вы регистрировались: мы отправим на неё письмо для создания нового пароля.
+        </div>
+      )}
+
       <div className="field">
         <label>Почта</label>
         <input
           type="email"
           inputMode="email"
           autoComplete="email"
+          autoCapitalize="none"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
       </div>
 
-      <div className="field">
-        <label>Пароль</label>
-        <input
-          type="password"
+      {mode === "reset" && (
+        <div className="field">
+          <label>Код из письма</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="Если в письме есть код"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+          />
+        </div>
+      )}
+
+      {mode !== "forgot" && (
+        <PasswordField
+          label={mode === "reset" ? "Новый пароль" : "Пароль"}
           autoComplete={mode === "login" ? "current-password" : "new-password"}
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={setPassword}
         />
-      </div>
+      )}
 
       {error && <div className="small-note" style={{ color: C.danger, fontWeight: 700 }}>{error}</div>}
       {info && <div className="small-note" style={{ color: C.sber, fontWeight: 700 }}>{info}</div>}
 
       <button className="btn primary" type="submit" disabled={busy} style={{ width: "100%", marginTop: 8 }}>
-        {busy ? "Подождите…" : mode === "login" ? "Войти" : "Создать аккаунт"}
+        {busy ? "Подождите…" : submitLabel}
       </button>
-      <button
-        className="btn"
-        type="button"
-        style={{ width: "100%", marginTop: 8 }}
-        onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); setInfo(""); }}
-      >
-        {mode === "login" ? "Создать аккаунт" : "У меня уже есть аккаунт"}
+
+      {(mode === "login" || mode === "signup") && (
+        <button
+          className="btn"
+          type="button"
+          style={{ width: "100%", marginTop: 8 }}
+          onClick={() => go(mode === "login" ? "signup" : "login")}
+        >
+          {mode === "login" ? "Создать аккаунт" : "У меня уже есть аккаунт"}
+        </button>
+      )}
+
+      {mode === "login" && (
+        <button type="button" style={linkStyle} onClick={() => go("forgot")}>
+          Если вы забыли пароль
+        </button>
+      )}
+
+      {(mode === "forgot" || mode === "reset") && (
+        <>
+          {mode === "reset" && (
+            <button type="button" style={linkStyle} onClick={() => go("forgot")}>
+              Отправить письмо ещё раз
+            </button>
+          )}
+          <button type="button" style={linkStyle} onClick={() => go("login")}>
+            Назад ко входу
+          </button>
+        </>
+      )}
+    </form>
+  );
+}
+
+/* ============================================================ Новый пароль по ссылке из письма */
+export function RecoveryScreen({ tokens, onDone }) {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    if (password.length < 6) { setError("Новый пароль — минимум 6 символов"); return; }
+    setBusy(true);
+    try {
+      await auth.setPasswordFromLink(tokens, password);
+      onDone();
+    } catch (err) {
+      setError(err.message || "Не удалось сменить пароль");
+      setBusy(false);
+    }
+  }
+
+  if (tokens.error) {
+    return (
+      <div className="form-card" style={{ marginTop: 40 }}>
+        <div className="form-title-row"><h2>Восстановление пароля</h2></div>
+        <div className="small-note" style={{ color: C.danger, fontWeight: 700 }}>{tokens.error}</div>
+        <button className="btn primary" type="button" style={{ width: "100%", marginTop: 12 }} onClick={onDone}>
+          К входу
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form className="form-card" onSubmit={submit} style={{ marginTop: 40 }}>
+      <div className="form-title-row"><h2>Новый пароль</h2></div>
+      <PasswordField label="Новый пароль" autoComplete="new-password" value={password} onChange={setPassword} />
+      {error && <div className="small-note" style={{ color: C.danger, fontWeight: 700 }}>{error}</div>}
+      <button className="btn primary" type="submit" disabled={busy} style={{ width: "100%", marginTop: 8 }}>
+        {busy ? "Подождите…" : "Сохранить и войти"}
       </button>
     </form>
   );

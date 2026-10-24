@@ -128,7 +128,9 @@ function authErrorText(r) {
   if (/weak_password|at least \d+ char|should be at least/i.test(raw + code)) return "Пароль слишком простой — минимум 6 символов";
   if (/email not confirmed|email_not_confirmed/i.test(raw + code)) return "Почта не подтверждена. Подтвердите письмо или отключите подтверждение в Supabase";
   if (/signup_disabled|signups not allowed|signup is disabled/i.test(raw + code)) return "Регистрация отключена";
-  if (/rate limit|over_email_send_rate_limit|too many/i.test(raw + code) || r.status === 429) return "Слишком много попыток — подождите немного";
+  if (/same_password|different from the old password/i.test(raw + code)) return "Новый пароль должен отличаться от старого";
+  if (/otp_expired|token has expired|invalid.*token|otp.*invalid/i.test(raw + code)) return "Код неверный или устарел. Запросите новый";
+  if (/rate limit|over_email_send_rate_limit|too many|only request this (?:after|once)/i.test(raw + code) || r.status === 429) return "Слишком много попыток — подождите минуту и попробуйте снова";
   if (/invalid.*email|validation_failed/i.test(raw + code)) return "Проверьте адрес почты";
   return raw || `Ошибка входа (${r.status})`;
 }
@@ -346,6 +348,28 @@ async function migrateLegacy() {
 }
 
 /* ---------------------------------------------------------------- публичное API */
+let recoveryTaken; // результат takeRecoveryFromUrl (считывается один раз)
+
+// Ставит новый пароль по временному ключу восстановления и входит в аккаунт.
+async function finishPasswordReset(tokens, password) {
+  let r;
+  try {
+    r = await http("/auth/v1/user", { method: "PUT", token: tokens.access_token, body: { password } });
+  } catch {
+    throw new Error("Нет соединения с сервером");
+  }
+  if (!r.ok) throw new Error(authErrorText(r));
+  saveSession(sessionFromResponse({
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    expires_in: tokens.expires_in || 3600,
+    user: r.data,
+  }));
+  await loadHousehold();
+  await migrateLegacy();
+  emitAuth(session.user);
+}
+
 export const auth = {
   // Вызывать при запуске приложения: восстанавливает сессию. Возвращает пользователя или null.
   async init() {
@@ -390,6 +414,52 @@ export const auth = {
   },
 
   getUser() { return session ? session.user : null; },
+
+  // ---- Восстановление пароля ----
+  // 1) Письмо: ссылка и (если в шаблоне письма есть {{ .Token }}) код. Сервер отвечает одинаково, есть такая почта или нет.
+  async requestPasswordReset(email) {
+    let r;
+    try {
+      const back = encodeURIComponent(`${window.location.origin}${window.location.pathname}`);
+      r = await http(`/auth/v1/recover?redirect_to=${back}`, { method: "POST", body: { email } });
+    } catch {
+      throw new Error("Нет соединения с сервером");
+    }
+    if (!r.ok) throw new Error(authErrorText(r));
+  },
+
+  // 2а) Код из письма + новый пароль: проверяем код, ставим пароль, входим.
+  async resetWithCode(email, code, password) {
+    let r;
+    try {
+      r = await http("/auth/v1/verify", { method: "POST", body: { type: "recovery", email, token: String(code).replace(/\s/g, "") } });
+    } catch {
+      throw new Error("Нет соединения с сервером");
+    }
+    if (!r.ok) throw new Error(authErrorText(r));
+    await finishPasswordReset(r.data, password);
+  },
+
+  // 2б) Пришли по ссылке из письма: в адресной строке лежит временный ключ (#access_token=…&type=recovery).
+  // Возвращает { access_token, refresh_token, expires_in } | { error } | null. Адрес очищается, результат запоминается.
+  takeRecoveryFromUrl() {
+    if (recoveryTaken !== undefined) return recoveryTaken;
+    recoveryTaken = null;
+    try {
+      const h = new URLSearchParams(String(window.location.hash || "").replace(/^#/, ""));
+      if (h.get("type") === "recovery" && h.get("access_token")) {
+        recoveryTaken = { access_token: h.get("access_token"), refresh_token: h.get("refresh_token") || "", expires_in: Number(h.get("expires_in")) || 3600 };
+      } else if (h.get("error") && /otp_expired|access_denied/.test(`${h.get("error_code")} ${h.get("error")}`)) {
+        recoveryTaken = { error: "Ссылка из письма устарела или уже использована. Запросите новое письмо." };
+      }
+      if (recoveryTaken) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    } catch { /* ignore */ }
+    return recoveryTaken;
+  },
+
+  async setPasswordFromLink(tokens, password) {
+    await finishPasswordReset({ ...tokens }, password);
+  },
 
   subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
 
