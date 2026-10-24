@@ -442,7 +442,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
                 if (next) setBucket2(bucket);
               }}
             >
-              <Split size={25} strokeWidth={2.2} />
+              <Split size={20} strokeWidth={2.1} />
             </button>
           ) : null
         }

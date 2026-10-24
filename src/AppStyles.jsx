@@ -1076,7 +1076,7 @@ export function AppStyles() {
 
       .op-split-btn {
         flex: 0 0 auto;
-        width: 36px;
+        width: 28px;
         height: 44px;
         padding: 0;
         border: 0;
@@ -1133,7 +1133,7 @@ export function AppStyles() {
         margin: 0 4px 8px;
         min-height: 14px;
         font-size: 12px;
-        color: ${C.inkMuted};
+        color: #8C9A92;
       }
 
       .op-amount-sm {
@@ -1180,8 +1180,8 @@ export function AppStyles() {
       .op-label {
         font-size: 11px;
         line-height: 1.1;
-        font-weight: 600;
-        color: ${C.inkMuted};
+        font-weight: 500;
+        color: #8C9A92;
         text-transform: none;
         letter-spacing: 0;
       }
@@ -1234,7 +1234,7 @@ export function AppStyles() {
       }
 
       .op-input::placeholder {
-        color: ${C.inkMuted};
+        color: #BAC4BE;
         font-weight: 500;
       }
 

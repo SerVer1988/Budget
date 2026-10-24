@@ -147,12 +147,14 @@ function loanLabel(tx) {
 
 export function TxRow({ tx, settings, onDelete, onEdit }) {
   const openReceipt = useContext(ReceiptContext);
-  const color = tx.type === "income" ? C.sber
-    : tx.type === "expense" ? (tx.card === "sber" ? C.sber : C.alfa)
+  // Цвет строки = цвет карты: Нужды — зелёный, Желания — красный, Подушка — синий (раньше Подушка рисовалась красным).
+  const cardColor = tx.card === "sber" ? C.sber : tx.card === "alfa" ? C.alfa : tx.card === "ozon" ? C.ozon : null;
+  const color = tx.type === "income" ? (cardColor || C.sber)
+    : tx.type === "expense" ? (cardColor || C.alfa)
     : tx.type === "transfer" ? C.amber
     : tx.type === "debt" ? C.amber
     : tx.type === "loan" ? C.amber
-    : (tx.card === "sber" ? C.sber : tx.card === "alfa" ? C.alfa : (tx.amount < 0 ? C.danger : C.ozon));
+    : (cardColor || (tx.amount < 0 ? C.danger : C.ozon));
 
   const sign = tx.type === "expense" ? "−"
     : tx.type === "transfer" ? ""
