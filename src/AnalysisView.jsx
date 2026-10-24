@@ -13,6 +13,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  LabelList,
 } from "recharts";
 import { BankCard, BankCardDetail, TotalBalanceCard, TxRow } from "./cards.jsx";
 import { RecurringPanel } from "./RecurringPanel.jsx";
@@ -29,6 +30,16 @@ import { aggregateOpenDebts } from "./debts.js";
 import { SpaceSwitch } from "./spaces.jsx";
 import { aggregateMonth, computeBalances, txCardsOf, txImpactFor, txNetImpact, txSearchText } from "./finance.js";
 import { bucketIconSrc, bucketName, cardLabel, dayOfMonth, daysInMonth, endOfMonthStr, formatMoney, monthLabel, shiftMonth, todayMonthKey, todayStr } from "./format.js";
+
+/* Сумма белым мелким шрифтом по центру столбца (на очень низких столбцах не пишем, чтобы не вылезала). */
+function renderBarLabel({ x, y, width, height, value }) {
+  if (!value || height < 18) return null;
+  return (
+    <text x={x + width / 2} y={y + height / 2} textAnchor="middle" dominantBaseline="central" fill="#fff" fontSize={11} fontWeight={700}>
+      {formatMoney(value)}
+    </text>
+  );
+}
 
 export function AnalysisView({
   readOnly,
@@ -149,8 +160,10 @@ export function AnalysisView({
 
   return (
     <div className="screen-stack">
-      <SpaceSwitch />
-      <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
+      <div className="month-row">
+        <MonthNav compact value={selectedMonth} onChange={setSelectedMonth} />
+        <SpaceSwitch variant="compact" />
+      </div>
       <NotifyNudge />
 
       {!readOnly && <InboxPanel
@@ -338,7 +351,9 @@ export function AnalysisView({
                     <YAxis tick={{ fontSize: 10, fill: C.inkMuted }} width={42} />
                     <Tooltip formatter={(v) => formatMoney(v)} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="value" name="Сумма" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="value" name="Сумма" radius={[8, 8, 0, 0]}>
+                      <LabelList dataKey="value" position="center" content={renderBarLabel} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>

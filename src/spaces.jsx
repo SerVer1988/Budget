@@ -40,9 +40,12 @@ export function SpaceSwitch({ variant }) {
     { id: "shared", name: names.shared, disabled: false, hint: "общие траты" },
   ];
 
+  const small = variant === "hero" || variant === "compact"; // одинаковый маленький размер в «Добавить» и «Анализе»
   const wrapStyle =
     variant === "hero"
       ? { position: "absolute", right: "1%", top: "2.4%", zIndex: 6, lineHeight: 1.25 }
+      : variant === "compact"
+      ? { position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", zIndex: 6, lineHeight: 1.25 }
       : { position: "relative", display: "flex", justifyContent: "flex-end", margin: "0 0 6px", lineHeight: 1.25 };
 
   return (
@@ -56,7 +59,7 @@ export function SpaceSwitch({ variant }) {
             display: "flex",
             alignItems: "center",
             gap: 1,
-            height: variant === "hero" ? 20 : 24,
+            height: small ? 20 : 24,
             padding: "0 3px 0 2px",
             borderRadius: 999,
             border: `1.5px solid ${color}`,
@@ -67,12 +70,12 @@ export function SpaceSwitch({ variant }) {
         >
           <span
             style={{
-              width: variant === "hero" ? 15 : 18,
-              height: variant === "hero" ? 15 : 18,
+              width: small ? 15 : 18,
+              height: small ? 15 : 18,
               borderRadius: "50%",
               background: color,
               color: "#fff",
-              fontSize: variant === "hero" ? 10 : 11,
+              fontSize: small ? 10 : 11,
               fontWeight: 800,
               display: "flex",
               alignItems: "center",
@@ -81,7 +84,7 @@ export function SpaceSwitch({ variant }) {
           >
             {initialOf(names[current])}
           </span>
-          <ChevronDown size={variant === "hero" ? 12 : 14} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+          <ChevronDown size={small ? 12 : 14} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
         </button>
 
         {open && (
@@ -97,7 +100,7 @@ export function SpaceSwitch({ variant }) {
               style={{
                 position: "absolute",
                 right: 0,
-                top: variant === "hero" ? 26 : 30,
+                top: small ? 26 : 30,
                 zIndex: 41,
                 minWidth: 188,
                 background: C.surface,

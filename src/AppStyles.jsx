@@ -375,6 +375,32 @@ export function AppStyles() {
         justify-content: center;
       }
 
+      /* Компактная строка месяца: маленькие стрелки рядом с названием, справа свободно для переключателя аккаунта. */
+      .month-row {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 34px;
+      }
+
+      .month-nav.compact {
+        display: flex;
+        justify-content: center;
+        width: auto;
+        gap: 4px;
+      }
+
+      .month-nav.compact button {
+        width: 30px;
+        height: 30px;
+        border-radius: 10px;
+      }
+
+      .month-nav.compact .month-label {
+        min-width: 124px;
+      }
+
       .month-label {
         text-align: center;
         font-size: 15px;
@@ -1763,11 +1789,11 @@ export function AppStyles() {
         height: 32px;
         flex: 0 0 auto;
         border-radius: 999px;
-        border: 2px dashed var(--debt-color, ${C.border});
+        border: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 2px;
+        padding: 0;
       }
 
       .debt-icon .bank-badge {

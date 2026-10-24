@@ -49,8 +49,10 @@ export function SharedView({
 
   return (
     <div className="screen-stack">
-      <SpaceSwitch />
-      <MonthNav value={selectedMonth} onChange={setSelectedMonth} />
+      <div className="month-row">
+        <MonthNav compact value={selectedMonth} onChange={setSelectedMonth} />
+        <SpaceSwitch variant="compact" />
+      </div>
 
       {state === "loading" && <div className="panel muted" style={{ textAlign: "center", fontSize: 13 }}>Загружаю общую книгу…</div>}
 

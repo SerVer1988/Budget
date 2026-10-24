@@ -14,15 +14,15 @@ export function SectionTitle({ children }) {
   return <div className="section-title">{children}</div>;
 }
 
-export function MonthNav({ value, onChange }) {
+export function MonthNav({ value, onChange, compact = false }) {
   return (
-    <div className="month-nav">
+    <div className={`month-nav${compact ? " compact" : ""}`}>
       <button onClick={() => onChange(shiftMonth(value, -1))} type="button">
-        <ChevronLeft size={17} />
+        <ChevronLeft size={compact ? 15 : 17} />
       </button>
       <div className="month-label">{monthLabel(value)}</div>
       <button onClick={() => onChange(shiftMonth(value, 1))} type="button">
-        <ChevronRight size={17} />
+        <ChevronRight size={compact ? 15 : 17} />
       </button>
     </div>
   );
