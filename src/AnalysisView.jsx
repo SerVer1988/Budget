@@ -27,6 +27,8 @@ import { BankBadge, EmptyState, MonthNav, SectionTitle, StatBox } from "./ui.jsx
 import { BUCKET_CARD, C, TX_TYPE_FILTERS } from "./constants.js";
 import { aggregateOpenDebts } from "./debts.js";
 import { SpaceSwitch } from "./spaces.jsx";
+import { EmptyAnalysis } from "./Onboarding.jsx";
+import { hasSample } from "./sampleData.js";
 import { aggregateMonth, computeBalances, txCardsOf, txImpactFor, txNetImpact, txSearchText } from "./finance.js";
 import { bucketIconSrc, bucketName, cardLabel, dayOfMonth, daysInMonth, endOfMonthStr, formatMoney, monthLabel, shiftMonth, todayMonthKey, todayStr } from "./format.js";
 
@@ -72,6 +74,8 @@ export function AnalysisView({
   onDismissTransfer,
   onRepayLoan,
   goToAdd,
+  onLoadSample,
+  onRemoveSample,
 }) {
   const agg = useMemo(() => aggregateMonth(selectedMonth, transactions, settings), [selectedMonth, transactions, settings]);
   const prevAgg = useMemo(
@@ -173,6 +177,16 @@ export function AnalysisView({
         <SpaceSwitch variant="compact" />
       </div>
       <NotifyNudge />
+
+      {!readOnly && transactions.length === 0 && <EmptyAnalysis onAdd={goToAdd} onSample={onLoadSample} />}
+
+      {!readOnly && hasSample(transactions) && (
+        <div className="notice" style={{ borderColor: C.ozon, background: C.ozonSoft, color: "#0F3E70" }}>
+          <div style={{ fontWeight: 800, marginBottom: 4 }}>Это пример данных</div>
+          <div style={{ marginBottom: 8 }}>Пробные операции показывают, как выглядит приложение. Ваши настоящие записи они не затрагивают.</div>
+          <button type="button" className="btn" onClick={onRemoveSample}>Удалить пример</button>
+        </div>
+      )}
 
       {!readOnly && <InboxPanel
         pending={pending || []}

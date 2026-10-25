@@ -169,7 +169,7 @@ export function CategoryRow({ cat, open, onToggleOpen, onChange, onDelete, showM
   );
 }
 
-export function SettingsView({ settings, transactions, onImport, onSaveSettings, onSave, onWipeAll, user, userEmail, onSignOut }) {
+export function SettingsView({ settings, transactions, onImport, onSaveSettings, onSave, onWipeAll, onShowWelcome, user, userEmail, onSignOut }) {
   const [showProfile, setShowProfile] = useState(false);
   const [avatar, setAvatar] = useState(() => profile.cachedAvatar());
 
@@ -490,6 +490,7 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
         onImport={onImport}
         onSaveSettings={onSaveSettings}
         onWipeAll={onWipeAll}
+        onShowWelcome={onShowWelcome}
       />
     </div>
   );

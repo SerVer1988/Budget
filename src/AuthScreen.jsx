@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { auth } from "./storage.js";
 import { C } from "./constants.js";
+import { PRIVACY_URL } from "./support.js";
 
 /* Поле пароля с «глазиком» справа: показать / скрыть введённое. */
 function PasswordField({ label = "Пароль", value, onChange, autoComplete }) {
@@ -68,6 +69,7 @@ export function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [agree, setAgree] = useState(false);
 
   function go(next) {
     setMode(next);
@@ -114,6 +116,10 @@ export function AuthScreen() {
 
     if (mode === "signup" && !name.trim()) {
       setError("Введите имя");
+      return;
+    }
+    if (mode === "signup" && !agree) {
+      setError("Для регистрации нужно согласие на обработку данных");
       return;
     }
     if (!email.trim() || !password) {
@@ -200,6 +206,17 @@ export function AuthScreen() {
         />
       )}
 
+      {mode === "signup" && (
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", margin: "4px 0 10px" }}>
+          <input type="checkbox" style={{ width: "auto", marginTop: 3 }} checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+          <span style={{ fontSize: 12.5, lineHeight: 1.4 }}>
+            Я прочитал(а){" "}
+            <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer" style={{ color: C.sber }}>политику конфиденциальности</a>{" "}
+            и согласен(на) на обработку моих данных для работы приложения.
+          </span>
+        </label>
+      )}
+
       {error && <div className="small-note" style={{ color: C.danger, fontWeight: 700 }}>{error}</div>}
       {info && <div className="small-note" style={{ color: C.sber, fontWeight: 700 }}>{info}</div>}
 
@@ -281,5 +298,41 @@ export function RecoveryScreen({ tokens, onDone }) {
         {busy ? "Подождите…" : "Сохранить и войти"}
       </button>
     </form>
+  );
+}
+
+/* ============================================================ Согласие на обработку данных (для тех, кто зарегистрировался раньше) */
+export function ConsentScreen({ onAccepted, onSignOut }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function accept() {
+    setBusy(true);
+    setError("");
+    try {
+      await auth.recordConsent();
+      onAccepted();
+    } catch (err) {
+      setError(err.message || "Не удалось сохранить согласие");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="form-card" style={{ marginTop: 40 }}>
+      <div className="form-title-row"><h2>Согласие на обработку данных</h2></div>
+      <div className="small-note" style={{ marginBottom: 10, lineHeight: 1.45 }}>
+        Мы обновили политику конфиденциальности: в ней описано, какие данные хранит приложение, кто их видит и как их удалить.
+        Чтобы продолжить, подтвердите, что вы прочитали её и согласны на обработку ваших данных для работы приложения.
+      </div>
+      <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer" style={{ display: "block", color: C.sber, fontWeight: 700, fontSize: 14, marginBottom: 12 }}>
+        Читать политику конфиденциальности
+      </a>
+      {error && <div className="small-note" style={{ color: C.danger, fontWeight: 700 }}>{error}</div>}
+      <button className="btn primary" type="button" disabled={busy} style={{ width: "100%", marginTop: 4 }} onClick={accept}>
+        {busy ? "Подождите…" : "Принимаю и продолжаю"}
+      </button>
+      <button type="button" style={linkStyle} onClick={onSignOut}>Выйти из аккаунта</button>
+    </div>
   );
 }

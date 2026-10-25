@@ -24,6 +24,7 @@ const PREFIX = "budget-app:";
 const SESSION_KEY = PREFIX + "session";
 const MIGRATED_KEY = PREFIX + "legacy-migrated";
 import { VAPID_PUBLIC_KEY } from "./pushConfig.js";
+import { CONSENT_VERSION } from "./support.js";
 import { mergeValues } from "./merge.js";
 
 const TABLE = "app_data";
@@ -415,6 +416,24 @@ export const auth = {
 
   getUser() { return session ? session.user : null; },
 
+  // ---- Согласие на обработку данных ----
+  // Нужен ли экран согласия: человек зарегистрировался до появления согласия или политика с тех пор менялась по существу.
+  needsConsent() {
+    return !!session && session.user?.user_metadata?.consent_version !== CONSENT_VERSION;
+  },
+
+  async recordConsent() {
+    if (!session) throw new Error("not signed in");
+    let r;
+    try {
+      r = await http("/auth/v1/user", { method: "PUT", token: session.access_token, body: { data: { consent_version: CONSENT_VERSION, consent_at: new Date().toISOString() } } });
+    } catch {
+      throw new Error("Нет соединения с сервером");
+    }
+    if (!r.ok) throw new Error(authErrorText(r));
+    saveSession({ ...session, user: { ...session.user, ...r.data } });
+  },
+
   // ---- Восстановление пароля ----
   // 1) Письмо: ссылка и (если в шаблоне письма есть {{ .Token }}) код. Сервер отвечает одинаково, есть такая почта или нет.
   async requestPasswordReset(email) {
@@ -481,7 +500,7 @@ export const auth = {
   async signUp(email, password, name) {
     let r;
     try {
-      r = await http("/auth/v1/signup", { method: "POST", body: { email, password, data: { name: String(name || "").trim().slice(0, 40) } } });
+      r = await http("/auth/v1/signup", { method: "POST", body: { email, password, data: { name: String(name || "").trim().slice(0, 40), consent_version: CONSENT_VERSION, consent_at: new Date().toISOString() } } });
     } catch {
       throw new Error("Нет соединения с сервером");
     }
@@ -847,6 +866,21 @@ export const shared = {
       }
     }
     throw new Error("Не удалось сохранить: данные одновременно менял второй аккаунт. Попробуйте ещё раз");
+  },
+};
+
+/* ---------------------------------------------------------------- отчёты о проблемах */
+// supabase-reports.sql: текст пользователя и технический журнал без финансовых данных.
+export const reports = {
+  async submit({ message, log, contact, app }) {
+    if (!session) throw new Error("not signed in");
+    await rpc("submit_problem_report", {
+      p_message: message,
+      p_log: log || null,
+      p_contact: contact || null,
+      p_app: app || null,
+      p_ua: typeof navigator !== "undefined" ? navigator.userAgent : null,
+    }, "Отправка отчётов не настроена: выполните supabase-reports.sql в Supabase");
   },
 };
 

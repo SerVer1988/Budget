@@ -7,8 +7,12 @@ import { VitePWA } from "vite-plugin-pwa";
 //
 // Установка как приложение: манифест и сервис-воркер создаёт плагин VitePWA, вручную их подключать не нужно
 // (manifest.json и sw.js в public/ больше не используются). Иконки лежат в public/ рядом с index.html.
+// Идентификатор сборки (дата и начало хэша коммита): показывается в отчётах о проблемах.
+const buildId = new Date().toISOString().slice(0, 10) + (process.env.GITHUB_SHA ? `-${process.env.GITHUB_SHA.slice(0, 7)}` : "");
+
 export default defineConfig({
   base: "./",
+  define: { __BUILD_ID__: JSON.stringify(buildId) },
   plugins: [
     react(),
     VitePWA({

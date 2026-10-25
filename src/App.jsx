@@ -32,10 +32,12 @@ import { planPartnerNotices, readFeedState, writeFeedState } from "./partnerFeed
 import { computeAllInsights } from "./insights.js";
 import { AppStyles } from "./AppStyles.jsx";
 import { AnalysisView } from "./AnalysisView.jsx";
-import { AuthScreen, RecoveryScreen } from "./AuthScreen.jsx";
+import { AuthScreen, ConsentScreen, RecoveryScreen } from "./AuthScreen.jsx";
 import { SettingsView } from "./SettingsView.jsx";
 import { SpaceContext, SpaceSwitch, spaceNamesOf } from "./spaces.jsx";
 import { SharedView } from "./SharedView.jsx";
+import { WelcomeSheet } from "./Onboarding.jsx";
+import { buildSampleData, hasSample, removeSample } from "./sampleData.js";
 import { guessSharedCat, sharedCatsOf } from "./shared.js";
 
 /* ============================================================ App */
@@ -86,6 +88,8 @@ export default function App() {
   // Пространства пары: «me» — мой бюджет, «partner» — бюджет партнёра (только просмотр).
   // Пришли по ссылке «Восстановление пароля» из письма: показываем экран нового пароля.
   const [recovery, setRecovery] = useState(() => auth.takeRecoveryFromUrl());
+  const [, setConsentTick] = useState(0); // перерисовка после принятия согласия
+  const [welcomeOpen, setWelcomeOpen] = useState(false); // приветствие при первом входе
   const [loadFailed, setLoadFailed] = useState(false); // данные не удалось прочитать при запуске
   const retryNowRef = useRef(null);
   const [partnerInfo, setPartnerInfo] = useState(null); // { partner: { id, email }, i_share, partner_shares } | null
@@ -190,6 +194,25 @@ export default function App() {
     document.addEventListener("visibilitychange", run);
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", run); };
   }, [loaded, transactions, settings]);
+
+  // Первый вход: пустой аккаунт видит приветствие. Тем, у кого уже есть операции, оно не нужно: помечаем один раз и не возвращаемся.
+  useEffect(() => {
+    if (!loaded || !authUser || space !== "me" || settings.onboarded) return;
+    if (transactions.length === 0) setWelcomeOpen(true);
+    else persistSettings({ ...settings, onboarded: true });
+  }, [loaded, authUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function finishWelcome(withSample) {
+    setWelcomeOpen(false);
+    if (!settings.onboarded) persistSettings({ ...settings, onboarded: true });
+    if (withSample && !hasSample(transactions)) persistTransactions([...transactions, ...buildSampleData(todayStr())]);
+  }
+
+  function removeSampleData() {
+    const prev = transactions;
+    persistTransactions(removeSample(transactions));
+    showToast("Пример данных удалён", { ms: 8000, undo: () => persistTransactions(prev) });
+  }
 
   // Привязанный партнёр: сведения о связи (если выполнен supabase-partner.sql и аккаунты привязаны).
   useEffect(() => {
@@ -934,6 +957,24 @@ export default function App() {
     );
   }
 
+  if (authUser && auth.needsConsent()) {
+    return (
+      <>
+        <AppStyles />
+        <div className="app-viewport">
+          <div className="app-shell">
+            <main className="app-main">
+              <ConsentScreen
+                onAccepted={() => setConsentTick((t) => t + 1)}
+                onSignOut={async () => { await auth.signOut(); window.location.reload(); }}
+              />
+            </main>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   if (authUser === null) {
     return (
       <>
@@ -998,6 +1039,9 @@ export default function App() {
     <SpaceContext.Provider value={spaceCtx}>
     <ReceiptContext.Provider value={openReceipt}>
       <AppStyles />
+      {welcomeOpen && !readOnly && (
+        <WelcomeSheet settings={settings} allowSample={transactions.length === 0} onFinish={finishWelcome} />
+      )}
 
       {receiptViewId && <ReceiptModal txId={receiptViewId} onClose={() => setReceiptViewId(null)} />}
 
@@ -1089,6 +1133,8 @@ export default function App() {
                 onCloseMonth={ro(closeMonth)}
                 onWriteOffDebtGroup={ro(writeOffDebtGroup)}
                 goToAdd={() => selectPage(1)}
+                onLoadSample={() => finishWelcome(true)}
+                onRemoveSample={ro(removeSampleData)}
               />
             ) : pageIndex >= 1 && pageIndex <= 3 ? (
               <AddPageContent
@@ -1113,6 +1159,7 @@ export default function App() {
                 onSaveSettings={persistSettings}
                 onSave={persistSettings}
                 onWipeAll={wipeHistory}
+                onShowWelcome={() => setWelcomeOpen(true)}
                 user={authUser}
                 userEmail={authUser?.email}
                 onSignOut={async () => {

@@ -44,7 +44,7 @@ export function planPartnerNotices({ state, personal, shared, partnerId, names, 
     } else {
       const seen = new Set(state.personal);
       personal
-        .filter((t) => t.id && !seen.has(t.id) && t.type === "expense" && !t.hidden && !t.sharedId && String(t.date || "") >= cutoff)
+        .filter((t) => t.id && !seen.has(t.id) && t.type === "expense" && !t.hidden && !t.sample && !t.sharedId && String(t.date || "") >= cutoff)
         .forEach((t) => lines.push(`${names.partner}: ${t.category || "Расход"} ${formatMoney(Math.abs(t.amount || 0))}`));
       next.personal = [...state.personal, ...allIds.filter((id) => !seen.has(id))].slice(-MAX_IDS);
     }
