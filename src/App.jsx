@@ -54,6 +54,11 @@ export default function App() {
   const [newIncomeTx, setNewIncomeTx] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(todayMonthKey());
   const [toast, setToast] = useState(null);
+  // «Общий баланс»: галочки карт в чужом бюджете — это настройка просмотра, она хранится только на этом устройстве
+  // и не меняет ни чужие данные, ни мои.
+  const [partnerInclude, setPartnerInclude] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("budget:partner-include") || "null"); } catch { return null; }
+  });
   const [confirmDel, setConfirmDel] = useState(null); // id операции, ожидающей подтверждения удаления
   const toastTimerRef = useRef(null);
 
@@ -791,6 +796,13 @@ export default function App() {
   }
 
   function toggleIncludeInTotal(key) {
+    if (readOnlyRef.current) {
+      const base = partnerInclude || partnerData?.settings?.includeInTotal || {};
+      const nextView = { ...base, [key]: !base[key] };
+      setPartnerInclude(nextView);
+      try { localStorage.setItem("budget:partner-include", JSON.stringify(nextView)); } catch { /* ignore */ }
+      return;
+    }
     const next = {
       ...settings,
       includeInTotal: {
@@ -1048,7 +1060,9 @@ export default function App() {
   const folderBucketKey = pageIndex === 1 ? "needs" : pageIndex === 2 ? "wants" : pageIndex === 3 ? "savings" : null;
   const heroBg = folderBucketKey ? BUCKET_STYLE[folderBucketKey].folderBg : undefined;
 
-  const viewSettings = readOnly && partnerData ? partnerData.settings : settings;
+  const viewSettings = readOnly && partnerData
+    ? { ...partnerData.settings, ...(partnerInclude ? { includeInTotal: partnerInclude } : {}) }
+    : settings;
   const viewTransactions = readOnly && partnerData ? partnerData.transactions : transactions;
   const spaceCtx = partnerInfo
     ? {
@@ -1159,7 +1173,7 @@ export default function App() {
                 setSelectedMonth={setSelectedMonth}
                 onDelete={ro(requestDelete)}
                 onEditTx={ro((tx) => openForm(deriveFormInitialFromTx(tx, transactions)))}
-                onToggleInclude={ro(toggleIncludeInTotal)}
+                onToggleInclude={toggleIncludeInTotal}
                 onCloseMonth={ro(closeMonth)}
                 onWriteOffDebtGroup={ro(writeOffDebtGroup)}
                 goToAdd={() => selectPage(1)}
