@@ -37,3 +37,14 @@ describe("общая книга пары", () => {
     expect(guessSharedCat([], "что-то непонятное")).toBe("other");
   });
 });
+
+import { isVkEmail, shownEmail } from "../src/support.js";
+
+describe("служебный адрес аккаунтов VK", () => {
+  it("узнаётся и заменяется понятной подписью", () => {
+    expect(isVkEmail("vk12345@vk.budget.invalid")).toBe(true);
+    expect(isVkEmail("anna@mail.ru")).toBe(false);
+    expect(shownEmail("vk12345@vk.budget.invalid")).toBe("аккаунт VK");
+    expect(shownEmail("anna@mail.ru")).toBe("anna@mail.ru");
+  });
+});

@@ -4,6 +4,7 @@ import { SectionTitle } from "./ui.jsx";
 import { C, CARD_BUCKET } from "./constants.js";
 import { cardLabel } from "./format.js";
 import { household, partner, push } from "./storage.js";
+import { shownEmail } from "./support.js";
 
 /* «Пространства» для пары: «Я», «Партнёр» (только просмотр) и «Общая» (будет позже).
    У каждого свой аккаунт и свои данные; названия пространств каждый задаёт себе сам (settings.spaceNames). */
@@ -321,7 +322,7 @@ export function PartnerSettings({ settings, onSaveSettings }) {
           {!inHousehold && linked && (
             <div>
               <div style={{ fontSize: 13, marginBottom: 10 }}>
-                Привязан: <b>{info.partner.email}</b>
+                Привязан: <b>{shownEmail(info.partner.email, "пользователь VK")}</b>
               </div>
 
               <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", marginBottom: 6 }}>

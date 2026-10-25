@@ -37,6 +37,7 @@ import { SettingsView } from "./SettingsView.jsx";
 import { SpaceContext, SpaceSwitch, spaceNamesOf } from "./spaces.jsx";
 import { SharedView } from "./SharedView.jsx";
 import { WelcomeSheet } from "./Onboarding.jsx";
+import { vk } from "./vk.js";
 import { buildSampleData, hasSample, removeSample } from "./sampleData.js";
 import { guessSharedCat, sharedCatsOf } from "./shared.js";
 
@@ -90,6 +91,8 @@ export default function App() {
   const [recovery, setRecovery] = useState(() => auth.takeRecoveryFromUrl());
   const [, setConsentTick] = useState(0); // перерисовка после принятия согласия
   const [welcomeOpen, setWelcomeOpen] = useState(false); // приветствие при первом входе
+  const [vkBusy, setVkBusy] = useState(() => !!vk.peekCallback()); // возвращаемся со страницы VK: завершаем вход
+  const [vkError, setVkError] = useState("");
   const [loadFailed, setLoadFailed] = useState(false); // данные не удалось прочитать при запуске
   const retryNowRef = useRef(null);
   const [partnerInfo, setPartnerInfo] = useState(null); // { partner: { id, email }, i_share, partner_shares } | null
@@ -194,6 +197,18 @@ export default function App() {
     document.addEventListener("visibilitychange", run);
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", run); };
   }, [loaded, transactions, settings]);
+
+  // Возврат со страницы VK: обмениваем код на вход (или привязываем VK к открытому аккаунту).
+  useEffect(() => {
+    if (authUser === undefined) return;
+    const cb = vk.takeCallback();
+    if (!cb) return;
+    setVkBusy(true);
+    vk.complete(cb)
+      .then((res) => { if (res.mode === "link") showToast("VK привязан к аккаунту"); })
+      .catch((e) => setVkError(e.message || "Не удалось войти через VK"))
+      .finally(() => setVkBusy(false));
+  }, [authUser === undefined]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Первый вход: пустой аккаунт видит приветствие. Тем, у кого уже есть операции, оно не нужно: помечаем один раз и не возвращаемся.
   useEffect(() => {
@@ -942,6 +957,21 @@ export default function App() {
     goPage(dx < 0 ? 1 : -1);
   }
 
+  if (vkBusy) {
+    return (
+      <>
+        <AppStyles />
+        <div className="app-viewport">
+          <div className="app-shell">
+            <main className="app-main">
+              <div className="panel" style={{ textAlign: "center", marginTop: 80 }}>Входим через VK…</div>
+            </main>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   if (recovery) {
     return (
       <>
@@ -982,7 +1012,7 @@ export default function App() {
         <div className="app-viewport">
           <div className="app-shell">
             <main className="app-main">
-              <AuthScreen />
+              <AuthScreen initialError={vkError} />
             </main>
           </div>
         </div>

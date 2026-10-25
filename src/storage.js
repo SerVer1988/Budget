@@ -304,6 +304,7 @@ function householdErrorText(r, notFound) {
   if (/invalid_code/.test(msg)) return "Неверный код приглашения";
   if (/household_full/.test(msg)) return "В этом бюджете уже двое участников";
   if (/already_linked/.test(msg)) return "Аккаунт уже привязан к партнёру";
+  if (/only_login_method/.test(msg)) return "Это единственный способ входа в аккаунт: отвязать VK нельзя";
   if (/own_code/.test(msg)) return "Это ваш собственный код: отправьте его партнёру";
   if (/not_owner/.test(msg)) return "Это может сделать только владелец";
   if (/not_authenticated/.test(msg)) return "Нужно войти в аккаунт";
@@ -476,6 +477,21 @@ export const auth = {
       if (recoveryTaken) window.history.replaceState(null, "", window.location.pathname + window.location.search);
     } catch { /* ignore */ }
     return recoveryTaken;
+  },
+
+  // Вход по одноразовому ключу от сервера (используется входом через VK: сервер проверил VK и выдал ключ).
+  async signInWithTokenHash(tokenHash) {
+    let r;
+    try {
+      r = await http("/auth/v1/verify", { method: "POST", body: { type: "magiclink", token_hash: tokenHash } });
+    } catch {
+      throw new Error("Нет соединения с сервером");
+    }
+    if (!r.ok) throw new Error(authErrorText(r));
+    saveSession(sessionFromResponse(r.data));
+    await loadHousehold();
+    await migrateLegacy();
+    emitAuth(session.user);
   },
 
   async setPasswordFromLink(tokens, password) {
@@ -869,6 +885,29 @@ export const shared = {
     }
     throw new Error("Не удалось сохранить: данные одновременно менял второй аккаунт. Попробуйте ещё раз");
   },
+};
+
+/* ---------------------------------------------------------------- вход через VK */
+// supabase-vk.sql + функция vk-login: обмен кода VK на вход в аккаунт и привязка VK к существующему аккаунту.
+export const vkApi = {
+  async exchange(body, withUser) {
+    const headers = { apikey: SUPABASE_KEY, "Content-Type": "application/json" };
+    if (withUser) headers.Authorization = `Bearer ${await ensureToken()}`;
+    let r;
+    try {
+      r = await fetch(`${SUPABASE_URL}/functions/v1/vk-login`, { method: "POST", headers, body: JSON.stringify(body) });
+    } catch {
+      throw new Error("Нет соединения с сервером");
+    }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const text = data.message || data.error || `ошибка ${r.status}`;
+      throw new Error(data.detail ? `${text} (${String(data.detail).slice(0, 160)})` : text);
+    }
+    return data;
+  },
+  async status() { return !!(await rpc("vk_link_status", {}, "VK не настроен")); },
+  async unlink() { await rpc("vk_unlink", {}, "VK не настроен"); },
 };
 
 /* ---------------------------------------------------------------- отчёты о проблемах */

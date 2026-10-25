@@ -3,6 +3,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { auth } from "./storage.js";
 import { C } from "./constants.js";
 import { PRIVACY_URL } from "./support.js";
+import { vk } from "./vk.js";
 
 /* Поле пароля с «глазиком» справа: показать / скрыть введённое. */
 function PasswordField({ label = "Пароль", value, onChange, autoComplete }) {
@@ -60,14 +61,14 @@ const linkStyle = {
 };
 
 /* ============================================================ Вход */
-export function AuthScreen() {
+export function AuthScreen({ initialError = "" }) {
   const [mode, setMode] = useState("login"); // login | signup | forgot | reset
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
   const [info, setInfo] = useState("");
   const [agree, setAgree] = useState(false);
 
@@ -233,6 +234,33 @@ export function AuthScreen() {
         >
           {mode === "login" ? "Создать аккаунт" : "У меня уже есть аккаунт"}
         </button>
+      )}
+
+      {(mode === "login" || mode === "signup") && vk.available() && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ textAlign: "center", fontSize: 12, color: C.inkMuted, marginBottom: 8 }}>или</div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              setError("");
+              setBusy(true);
+              try {
+                await vk.start("login");
+              } catch (e) {
+                setError(e.message || "Не получилось открыть VK");
+                setBusy(false);
+              }
+            }}
+            style={{ width: "100%", height: 44, border: 0, borderRadius: 14, background: "#0077FF", color: "#fff", fontSize: 15, fontWeight: 800, cursor: "pointer" }}
+          >
+            Войти через VK
+          </button>
+          <div style={{ textAlign: "center", fontSize: 11.5, color: C.inkMuted, marginTop: 6, lineHeight: 1.4 }}>
+            Продолжая, вы соглашаетесь с{" "}
+            <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer" style={{ color: C.sber }}>политикой конфиденциальности</a>
+          </div>
+        </div>
       )}
 
       {mode === "login" && (

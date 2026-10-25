@@ -5,3 +5,7 @@ export const PRIVACY_URL = "privacy.html";
 export const CONSENT_VERSION = "2026-10-25";
 // Идентификатор сборки сайта (дата и начало хэша коммита), подставляется при сборке; нужен в отчётах о проблемах.
 export const WEB_BUILD = typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "dev";
+
+// Аккаунты, созданные входом через VK, имеют служебный адрес почты: людям показываем понятную подпись.
+export const isVkEmail = (email) => /@vk\.budget\.invalid$/i.test(String(email || ""));
+export const shownEmail = (email, fallback = "аккаунт VK") => (isVkEmail(email) ? fallback : email);

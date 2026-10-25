@@ -3,6 +3,8 @@ import { Camera, ChevronDown, ChevronLeft, User } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
 import { account, auth, profile } from "./storage.js";
+import { VkLinkRow } from "./VkLinkRow.jsx";
+import { shownEmail } from "./support.js";
 
 // Ссылка, куда ведёт кнопка «Поддержать проект» (страница доната, СБП-ссылка, Boosty и т. п.).
 // Пока пусто — кнопка покажет подсказку. Вставьте свою ссылку между кавычками.
@@ -238,8 +240,9 @@ export function ProfileView({ user, avatar, onAvatarChange, userEmail, onSignOut
       <div className="panel">
         <SectionTitle>Аккаунт</SectionTitle>
         <div className="muted" style={{ fontSize: 12, marginBottom: 10, wordBreak: "break-all" }}>
-          {userEmail ? `Вы вошли как ${userEmail}.` : "Вы вошли."}
+          {userEmail ? `Вы вошли как ${shownEmail(userEmail, "пользователь VK")}.` : "Вы вошли."}
         </div>
+        <VkLinkRow />
         <button className="btn" type="button" style={{ width: "100%" }} onClick={onSignOut}>
           Выйти
         </button>
