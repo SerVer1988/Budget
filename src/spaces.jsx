@@ -159,6 +159,7 @@ function DevicePush() {
   const [on, setOn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const perm = push.permission();
 
   useEffect(() => {
     let alive = true;
@@ -188,6 +189,12 @@ function DevicePush() {
       <div className="muted" style={{ fontSize: 12 }}>
         Сообщение приходит, даже когда приложение закрыто. Включать нужно на каждом устройстве отдельно.
       </div>
+      {perm === "denied" && !msg && (
+        <div style={{ color: C.danger, fontSize: 12, marginTop: 6 }}>
+          Уведомления для приложения запрещены в настройках телефона. Откройте: Настройки → Приложения → «Бюджет» → Уведомления → разрешить, потом вернитесь сюда.
+        </div>
+      )}
+      {!push.supported() && <div style={{ color: C.danger, fontSize: 12, marginTop: 6 }}>Это устройство или браузер не поддерживает push-уведомления.</div>}
       {msg && <div style={{ color: C.danger, fontSize: 12, marginTop: 6 }}>{msg}</div>}
     </div>
   );

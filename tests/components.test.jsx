@@ -50,3 +50,24 @@ describe("экраны отрисовываются без ошибок", () => 
     expect(html).toContain("Помощь и поддержка");
   });
 });
+
+import { PayPlanCard } from "../src/PayPlanCard.jsx";
+import { buildSampleData } from "../src/sampleData.js";
+import { todayStr } from "../src/format.js";
+
+describe("«План до выплаты»", () => {
+  const settings = { ...DEFAULT_SETTINGS, reminderDays: [5], distMode: "payday", wantPct: 30, savePct: 20 };
+  const base = buildSampleData(todayStr());
+
+  it("без долгов между бюджетами деление идёт по правилу", () => {
+    const t = text(<PayPlanCard transactions={base} settings={settings} />);
+    expect(t).toContain("План до выплаты");
+    expect(t).not.toContain("Учтено погашение долгов");
+  });
+
+  it("при долгах между бюджетами показывает деление с учётом погашения", () => {
+    const debt = { id: "d1", type: "debt", repaid: false, fromBucket: "needs", toBucket: "wants", remainingAmount: 5820, date: todayStr() };
+    const t = text(<PayPlanCard transactions={[...base, debt]} settings={settings} />);
+    expect(t).toContain("Учтено погашение долгов между бюджетами");
+  });
+});

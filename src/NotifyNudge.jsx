@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { X } from "lucide-react";
 import { C } from "./constants.js";
-import { enableNotifications, notificationPermission, notifyEnabled, notificationsSupported } from "./notify.js";
+import { enableNotifications, notificationHelp, notificationPermission, notifyEnabled, notificationsSupported } from "./notify.js";
 
 const KEY_HIDE = "budget.notify.nudgeHidden";
 
@@ -11,8 +11,10 @@ export function NotifyNudge() {
     try { return localStorage.getItem(KEY_HIDE) === "1"; } catch { return false; }
   });
   const [on, setOn] = useState(() => notifyEnabled());
+  const [help, setHelp] = useState("");
 
-  if (!notificationsSupported() || on || hidden || notificationPermission() === "denied") return null;
+  if (!notificationsSupported() || on || hidden) return null;
+  if (notificationPermission() === "denied" && !help) return null;
 
   function hide() {
     try { localStorage.setItem(KEY_HIDE, "1"); } catch { /* ignore */ }
@@ -24,12 +26,19 @@ export function NotifyNudge() {
       className="soft-card"
       style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px 7px 12px", borderLeft: `3px solid ${C.amber}`, background: C.amberSoft }}
     >
-      <div style={{ flex: 1, fontSize: 12, lineHeight: 1.35 }}>Заметки и напоминания приходят уведомлениями</div>
+      <div style={{ flex: 1, fontSize: 12, lineHeight: 1.35 }}>
+        Заметки и напоминания приходят уведомлениями
+        {help && <div style={{ marginTop: 4, color: C.danger, fontWeight: 600 }}>{help}</div>}
+      </div>
       <button
         type="button"
         className="btn primary"
         style={{ height: 30, padding: "0 12px", fontSize: 12 }}
-        onClick={async () => { if ((await enableNotifications()) === "on") setOn(true); }}
+        onClick={async () => {
+          const r = await enableNotifications();
+          if (r === "on") setOn(true);
+          else setHelp(notificationHelp(r));
+        }}
       >
         Включить
       </button>

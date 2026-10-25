@@ -971,11 +971,23 @@ export const push = {
   async enable() {
     if (!session) throw new Error("not signed in");
     if (!this.configured()) throw new Error("Push-уведомления не настроены");
+    if (!this.supported()) throw new Error("Это устройство или браузер не поддерживает push. Откройте «Бюджет» в Chrome или в приложении из RuStore.");
     const perm = await Notification.requestPermission();
-    if (perm !== "granted") throw new Error("Разрешение на уведомления не выдано. Его можно включить в настройках телефона.");
-    const reg = await navigator.serviceWorker.ready;
+    if (perm === "denied") throw new Error("Уведомления запрещены в настройках телефона. Откройте: Настройки → Приложения → «Бюджет» → Уведомления → разрешить (или Chrome → Настройки сайтов → Уведомления → ser-ver88.ru → Разрешить), затем попробуйте снова.");
+    if (perm !== "granted") throw new Error("Разрешение не выдано. Нажмите ещё раз и в окне выберите «Разрешить».");
+    // Служба приложения должна быть запущена; без ограничения по времени переключатель мог бы «зависнуть».
+    const reg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Служба приложения не запустилась. Закройте «Бюджет» полностью, откройте снова и повторите.")), 10000)),
+    ]);
     let sub = await reg.pushManager.getSubscription();
-    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC_KEY) });
+    if (!sub) {
+      try {
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC_KEY) });
+      } catch (e) {
+        throw new Error(`Не удалось подключиться к службе push (${e?.name || "ошибка"}). Проверьте интернет и попробуйте ещё раз; на телефоне должны работать службы Google.`);
+      }
+    }
     const j = sub.toJSON();
     await rpc("save_push_subscription", { p_endpoint: j.endpoint, p_p256dh: j.keys?.p256dh, p_auth: j.keys?.auth, p_ua: navigator.userAgent }, "Не настроено: выполните supabase-push.sql в Supabase");
   },

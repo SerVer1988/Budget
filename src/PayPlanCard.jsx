@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { SectionTitle } from "./ui.jsx";
 import { C } from "./constants.js";
 import { computePayPlan } from "./payplan.js";
+import { computeIncomeSplitWithDebts } from "./debts.js";
 import { shortDate } from "./forecast.js";
 import { bucketName, formatMoney, ruPlural } from "./format.js";
 
@@ -67,6 +68,29 @@ export function PayPlanCard({ transactions, settings }) {
       : { needs: a.byRule.needs, wants: a.byRule.wants, savings: a.byRule.savings };
   }
 
+  // Внутренние долги между бюджетами (раздел «Фонд»): при поступлении дохода приложение само направляет часть доли
+  // «должника» кредитору, пока долг не погасится (не больше половины доли за раз). План показывает уже ЭТО деление.
+  let repay = null;
+  if (move) {
+    try {
+      const real = computeIncomeSplitWithDebts(a.expected, settings, transactions, { date: plan.next.date, today: plan.today, carry: a.carry });
+      if (real.repayments.length) {
+        const bucketByDebt = Object.fromEntries(transactions.filter((t) => t.type === "debt").map((t) => [t.id, t]));
+        const lines = real.repayments
+          .map((r) => ({ amount: Math.round(r.amount), debt: bucketByDebt[r.debtId] }))
+          .filter((r) => r.debt && r.amount > 0)
+          .map((r) => ({ amount: r.amount, from: r.debt.toBucket, to: r.debt.fromBucket }));
+        if (lines.length) {
+          repay = { lines, final: { needs: Math.round(real.toSber), wants: Math.round(real.toAlfa), savings: Math.round(real.toOzon) } };
+          move = repay.final;
+        }
+      }
+    } catch { /* без учёта долгов план остаётся прежним */ }
+  }
+  const bucketLabel = { needs: needs, wants: wants, savings: savings };
+  const needsAfterDebts = repay && a ? repay.final.needs : null;
+  const needsShort = repay && a && a.toNeeds != null && needsAfterDebts < a.toNeeds - 50;
+
   return (
     <div className="panel">
       {header}
@@ -87,6 +111,17 @@ export function PayPlanCard({ transactions, settings }) {
             <Row name={`В «${wants}»`} value={formatMoney(move.wants)} />
             <Row name={`В «${savings}»`} value={formatMoney(move.savings)} />
           </div>
+          {repay && (
+            <div className="small-note" style={{ marginTop: 6, lineHeight: 1.4 }}>
+              Учтено погашение долгов между бюджетами:{" "}
+              {repay.lines.map((l) => `из доли «${bucketLabel[l.from]}» в «${bucketLabel[l.to]}» ${formatMoney(l.amount)}`).join("; ")}.
+              {needsShort && (
+                <b style={{ color: C.danger }}>
+                  {" "}Из-за этого в «{needs}» попадёт на {formatMoney(Math.round(a.toNeeds - needsAfterDebts))} меньше, чем нужно до следующей выплаты (≈ {formatMoney(Math.round(a.toNeeds))}).
+                </b>
+              )}
+            </div>
+          )}
         </>
       )}
 

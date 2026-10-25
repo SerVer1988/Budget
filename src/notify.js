@@ -16,6 +16,15 @@ export function notificationPermission() {
   return notificationsSupported() ? Notification.permission : "unsupported";
 }
 
+/* Что человеку делать, если уведомления не включаются. state: "denied" | "default" | "unsupported" */
+export function notificationHelp(state) {
+  if (state === "denied") {
+    return "Уведомления для приложения запрещены в настройках телефона. Откройте: Настройки → Приложения → «Бюджет» → Уведомления → разрешить. (Если приложение установлено из Chrome: Chrome → ⋮ → Настройки → Настройки сайтов → Уведомления → ser-ver88.ru → Разрешить.) Потом вернитесь сюда и нажмите ещё раз.";
+  }
+  if (state === "unsupported") return "Это устройство или браузер не поддерживает уведомления. Откройте «Бюджет» в Chrome или в приложении из RuStore.";
+  return "Разрешение не выдано. Нажмите ещё раз и в окне выберите «Разрешить».";
+}
+
 export function notifyEnabled() {
   try {
     return notificationsSupported() && Notification.permission === "granted" && localStorage.getItem(KEY_ON) === "1";
