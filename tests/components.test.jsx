@@ -71,3 +71,26 @@ describe("«План до выплаты»", () => {
     expect(t).toContain("Учтено погашение долгов между бюджетами");
   });
 });
+
+import { FAQ } from "../src/SupportSection.jsx";
+import { OP_TABS } from "../src/OpUi.jsx";
+
+describe("помощь в приложении", () => {
+  it("вопросы не пустые и не повторяются", () => {
+    const qs = FAQ.map(([q]) => q);
+    expect(new Set(qs).size).toBe(qs.length);
+    FAQ.forEach(([q, a]) => {
+      expect(q.length).toBeGreaterThan(5);
+      expect(a.length).toBeGreaterThan(20);
+    });
+  });
+
+  it("ответ про внесение операции называет все вкладки формы (названия не расходятся с интерфейсом)", () => {
+    const answer = FAQ.find(([q]) => q.includes("внести операцию"))[1];
+    OP_TABS.forEach((t) => expect(answer).toContain(`«${t.label}»`));
+  });
+
+  it("в ответах нет устаревших названий", () => {
+    FAQ.forEach(([, a]) => expect(a).not.toMatch(/Коррекци/));
+  });
+});
