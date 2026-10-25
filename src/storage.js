@@ -82,12 +82,19 @@ function saveSession(s) {
   else lsDel(SESSION_KEY);
 }
 
-function sessionFromResponse(d) {
+// Из ответа сервера берём только нужное о пользователе. consentVersion — версия политики, с которой человек согласился:
+// раньше это поле терялось при каждом входе и обновлении сессии, и экран согласия показывался снова и снова.
+export function sessionFromResponse(d) {
   return {
     access_token: d.access_token,
     refresh_token: d.refresh_token,
     expires_at: d.expires_at ? d.expires_at * 1000 : Date.now() + (d.expires_in || 3600) * 1000,
-    user: { id: d.user.id, email: d.user.email, name: String(d.user.user_metadata?.name || "") },
+    user: {
+      id: d.user.id,
+      email: d.user.email,
+      name: String(d.user.user_metadata?.name || ""),
+      consentVersion: String(d.user.user_metadata?.consent_version || ""),
+    },
   };
 }
 
@@ -394,8 +401,9 @@ export const auth = {
       const r = await http("/auth/v1/user", { token });
       if (!r.ok || !r.data || !session) return;
       const name = String(r.data.user_metadata?.name || "");
-      if (name !== (session.user.name || "")) {
-        saveSession({ ...session, user: { ...session.user, name } });
+      const consentVersion = String(r.data.user_metadata?.consent_version || "");
+      if (name !== (session.user.name || "") || consentVersion !== (session.user.consentVersion || "")) {
+        saveSession({ ...session, user: { ...session.user, name, consentVersion } });
         emitAuth(session.user);
       }
     } catch { /* офлайн */ }
@@ -423,7 +431,7 @@ export const auth = {
   // ---- Согласие на обработку данных ----
   // Нужен ли экран согласия: человек зарегистрировался до появления согласия или политика с тех пор менялась по существу.
   needsConsent() {
-    return !!session && session.user?.user_metadata?.consent_version !== CONSENT_VERSION;
+    return !!session && session.user?.consentVersion !== CONSENT_VERSION;
   },
 
   async recordConsent() {
@@ -435,7 +443,8 @@ export const auth = {
       throw new Error("Нет соединения с сервером");
     }
     if (!r.ok) throw new Error(authErrorText(r));
-    saveSession({ ...session, user: { ...session.user, ...r.data } });
+    const saved = String(r.data?.user_metadata?.consent_version || CONSENT_VERSION);
+    saveSession({ ...session, user: { ...session.user, consentVersion: saved } });
   },
 
   // ---- Восстановление пароля ----

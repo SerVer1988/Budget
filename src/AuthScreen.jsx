@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { auth } from "./storage.js";
 import { C } from "./constants.js";
@@ -333,6 +333,13 @@ export function RecoveryScreen({ tokens, onDone }) {
 export function ConsentScreen({ onAccepted, onSignOut }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  // Если человек уже соглашался (сервер это помнит), а на этом устройстве запись потерялась, повторно не спрашиваем.
+  useEffect(() => {
+    let alive = true;
+    auth.refreshUser().then(() => { if (alive && !auth.needsConsent()) onAccepted(); });
+    return () => { alive = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function accept() {
     setBusy(true);
