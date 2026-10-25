@@ -25,6 +25,7 @@ const SESSION_KEY = PREFIX + "session";
 const MIGRATED_KEY = PREFIX + "legacy-migrated";
 import { VAPID_PUBLIC_KEY } from "./pushConfig.js";
 import { CONSENT_VERSION } from "./support.js";
+import { requestPermissionSafe } from "./permission.js";
 import { mergeValues } from "./merge.js";
 
 const TABLE = "app_data";
@@ -972,7 +973,8 @@ export const push = {
     if (!session) throw new Error("not signed in");
     if (!this.configured()) throw new Error("Push-уведомления не настроены");
     if (!this.supported()) throw new Error("Это устройство или браузер не поддерживает push. Откройте «Бюджет» в Chrome или в приложении из RuStore.");
-    const perm = await Notification.requestPermission();
+    const perm = await requestPermissionSafe();
+    if (perm === "timeout") throw new Error("Окно с запросом разрешения не появилось. Проверьте: Настройки → Приложения → «Бюджет» → Уведомления (должны быть включены), закройте и откройте «Бюджет» и повторите. Либо откройте Настройки → «Помощь и поддержка» → «Проверить уведомления».");
     if (perm === "denied") throw new Error("Уведомления запрещены в настройках телефона. Откройте: Настройки → Приложения → «Бюджет» → Уведомления → разрешить (или Chrome → Настройки сайтов → Уведомления → ser-ver88.ru → Разрешить), затем попробуйте снова.");
     if (perm !== "granted") throw new Error("Разрешение не выдано. Нажмите ещё раз и в окне выберите «Разрешить».");
     // Служба приложения должна быть запущена; без ограничения по времени переключатель мог бы «зависнуть».

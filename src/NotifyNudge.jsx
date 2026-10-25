@@ -35,9 +35,14 @@ export function NotifyNudge() {
         className="btn primary"
         style={{ height: 30, padding: "0 12px", fontSize: 12 }}
         onClick={async () => {
-          const r = await enableNotifications();
-          if (r === "on") setOn(true);
-          else setHelp(notificationHelp(r));
+          setHelp("");
+          try {
+            const r = await enableNotifications();
+            if (r === "on") setOn(true);
+            else setHelp(notificationHelp(r));
+          } catch (e) {
+            setHelp(`Не получилось включить: ${e?.name || ""} ${e?.message || ""}`.trim());
+          }
         }}
       >
         Включить

@@ -13,6 +13,7 @@ function techInfo() {
     `Устройство: ${typeof navigator !== "undefined" ? navigator.userAgent : "—"}`,
     `Экран: ${typeof window !== "undefined" ? `${window.innerWidth}×${window.innerHeight}` : "—"}`,
     `Язык: ${typeof navigator !== "undefined" ? navigator.language : "—"}`,
+    `Уведомления: ${typeof Notification !== "undefined" ? Notification.permission : "не поддерживаются"}`,
   ].join("\n");
 }
 

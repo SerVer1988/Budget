@@ -1,6 +1,7 @@
 import { computeRecurring } from "./recurring.js";
 import { daysUntilDue, openLoans } from "./loans.js";
 import { dayOfMonth, formatMoney, ruPlural } from "./format.js";
+import { requestPermissionSafe } from "./permission.js";
 
 /* Уведомления на устройстве. Они показываются, когда приложение открыто или свёрнуто в фоне:
    при запуске и при возвращении в приложение. Один и тот же сигнал за день приходит один раз. */
@@ -21,6 +22,8 @@ export function notificationHelp(state) {
   if (state === "denied") {
     return "Уведомления для приложения запрещены в настройках телефона. Откройте: Настройки → Приложения → «Бюджет» → Уведомления → разрешить. (Если приложение установлено из Chrome: Chrome → ⋮ → Настройки → Настройки сайтов → Уведомления → ser-ver88.ru → Разрешить.) Потом вернитесь сюда и нажмите ещё раз.";
   }
+  if (state === "timeout") return "Окно с запросом разрешения не появилось. Проверьте: Настройки → Приложения → «Бюджет» → Уведомления (должны быть включены), закройте и откройте «Бюджет» и повторите. Если не помогает, откройте Настройки → «Помощь и поддержка» → «Проверить уведомления» и пришлите результат.";
+  if (state === "error") return "Не получилось запросить разрешение. Откройте Настройки → «Помощь и поддержка» → «Проверить уведомления» и пришлите результат.";
   if (state === "unsupported") return "Это устройство или браузер не поддерживает уведомления. Откройте «Бюджет» в Chrome или в приложении из RuStore.";
   return "Разрешение не выдано. Нажмите ещё раз и в окне выберите «Разрешить».";
 }
@@ -36,12 +39,12 @@ export function notifyEnabled() {
 /* Возвращает "on" | "denied" | "off" | "unsupported". */
 export async function enableNotifications() {
   if (!notificationsSupported()) return "unsupported";
-  let p = Notification.permission;
-  if (p === "default") p = await Notification.requestPermission();
+  const p = await requestPermissionSafe();
   if (p === "granted") {
     try { localStorage.setItem(KEY_ON, "1"); } catch { /* ignore */ }
     return "on";
   }
+  if (p === "timeout" || p === "error") return p;
   return p === "denied" ? "denied" : "off";
 }
 

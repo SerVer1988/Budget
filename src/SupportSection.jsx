@@ -3,6 +3,7 @@ import { C } from "./constants.js";
 import { Fold } from "./ProfileView.jsx";
 import { ReportProblem } from "./ReportProblem.jsx";
 import { PRIVACY_URL, SUPPORT_EMAIL, WEB_BUILD } from "./support.js";
+import { runNotifyDiagnostics } from "./notifyDiag.js";
 
 const FAQ = [
   ["Как работают три бюджета?", "Доход делится на «Нужды», «Желания» и «Подушку» (по умолчанию 50/30/20). Каждый бюджет привязан к своей карте: так сразу видно, сколько осталось на каждую часть жизни. Проценты и названия меняются в настройках."],
@@ -16,6 +17,7 @@ const FAQ = [
 export function SupportSection({ onShowWelcome }) {
   const [open, setOpen] = useState(false);
   const [report, setReport] = useState(false);
+  const [diag, setDiag] = useState(null); // null — не запускали, "run" — идёт проверка, иначе список строк
   const mailto = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Бюджет: вопрос")}&body=${encodeURIComponent(`\n\n—\nСборка: ${WEB_BUILD}`)}`;
 
   return (
@@ -32,6 +34,28 @@ export function SupportSection({ onShowWelcome }) {
 
         <div style={{ display: "grid", gap: 8 }}>
           <button type="button" className="btn" style={{ width: "100%" }} onClick={onShowWelcome}>Показать приветствие</button>
+          <button
+            type="button"
+            className="btn"
+            style={{ width: "100%" }}
+            disabled={diag === "run"}
+            onClick={async () => {
+              setDiag("run");
+              try { setDiag(await runNotifyDiagnostics()); } catch (e) { setDiag([["Ошибка проверки", `${e?.name || ""} ${e?.message || ""}`.trim(), false]]); }
+            }}
+          >
+            {diag === "run" ? "Проверяем…" : "Проверить уведомления на этом устройстве"}
+          </button>
+          {Array.isArray(diag) && (
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: "8px 10px", background: C.surface2, fontSize: 12.5, lineHeight: 1.5 }}>
+              {diag.map(([label, value, ok]) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <span style={{ color: C.inkMuted }}>{label}</span>
+                  <b style={{ color: ok ? C.ink : C.danger, textAlign: "right" }}>{value}</b>
+                </div>
+              ))}
+            </div>
+          )}
           <button type="button" className="btn" style={{ width: "100%" }} onClick={() => setReport(true)}>Сообщить о проблеме</button>
           <a className="btn" href={mailto} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>
             Написать разработчику
