@@ -133,6 +133,8 @@ function authErrorText(r) {
   if (/otp_expired|token has expired|invalid.*token|otp.*invalid/i.test(raw + code)) return "Код неверный или устарел. Запросите новый";
   if (/rate limit|over_email_send_rate_limit|too many|only request this (?:after|once)/i.test(raw + code) || r.status === 429) return "Слишком много попыток — подождите минуту и попробуйте снова";
   if (/invalid.*email|validation_failed/i.test(raw + code)) return "Проверьте адрес почты";
+  // Сервер не смог отправить письмо (например, не настроена почта в Supabase): человеку нужен понятный текст, а не английский.
+  if (/error sending .*email|unexpected_failure/i.test(raw + code) || (r.status >= 500 && /email|smtp/i.test(raw))) return "Не получилось отправить письмо. Попробуйте позже или напишите в поддержку (адрес в разделе «Помощь» после входа)";
   return raw || `Ошибка входа (${r.status})`;
 }
 
