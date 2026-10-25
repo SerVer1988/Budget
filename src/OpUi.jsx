@@ -14,7 +14,7 @@ export const OP_TAB_COLORS = {
   loan: "#7B5CC9",
 };
 
-const OP_TABS = [
+export const OP_TABS = [
   { id: "expense", label: "Трата" },
   { id: "income", label: "Доход" },
   { id: "transfer", label: "Перевод" },
