@@ -94,3 +94,43 @@ describe("помощь в приложении", () => {
     FAQ.forEach(([, a]) => expect(a).not.toMatch(/Коррекци/));
   });
 });
+
+import { FullAddForm } from "../src/form.jsx";
+import { ReceiptScanner } from "../src/ReceiptScanner.jsx";
+
+describe("форма «Новая операция»: сканирование чека и места", () => {
+  const props = { settings: DEFAULT_SETTINGS, onSubmit: () => {}, onCancel: () => {} };
+  const spent = (note, date) => ({ id: note + date, type: "expense", amount: 100, date, card: "sber", bucket: "needs", category: "Продукты", note });
+
+  it("у траты есть кнопка сканирования чека, у дохода и перевода нет", () => {
+    expect(renderToString(<FullAddForm {...props} transactions={[]} initial={{ type: "expense" }} />)).toContain('aria-label="Сканировать чек"');
+    expect(renderToString(<FullAddForm {...props} transactions={[]} initial={{ type: "income" }} />)).not.toContain("Сканировать чек");
+    expect(renderToString(<FullAddForm {...props} transactions={[]} initial={{ type: "transfer" }} />)).not.toContain("Сканировать чек");
+  });
+
+  it("при редактировании существующей траты сканер не предлагается", () => {
+    const html = renderToString(<FullAddForm {...props} transactions={[]} initial={{ type: "expense", editId: "x", amount: 5 }} />);
+    expect(html).not.toContain("Сканировать чек");
+  });
+
+  it("поле места называется понятно, и показываются частые места", () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const html = renderToString(<FullAddForm {...props} transactions={[spent("Магнит", today), spent("Магнит", today), spent("Аптека", today)]} initial={{ type: "expense" }} />);
+    expect(html).toContain("Где купили или заметка");
+    expect(html).toContain("Частые места");
+    expect(html).toContain("Магнит");
+    expect(html).toContain("Аптека");
+  });
+
+  it("без истории покупок блок «Частые места» не показывается", () => {
+    const html = renderToString(<FullAddForm {...props} transactions={[]} initial={{ type: "expense" }} />);
+    expect(html).not.toContain("Частые места");
+  });
+
+  it("экран сканера: подсказка и запасной путь через фото", () => {
+    const t = text(<ReceiptScanner onResult={() => {}} onClose={() => {}} />);
+    expect(t).toContain("Сканировать чек");
+    expect(t).toContain("Загрузить фото чека");
+    expect(t).toContain("QR-код");
+  });
+});

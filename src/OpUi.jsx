@@ -156,3 +156,19 @@ export function OpChips({ label, options, value, onChange }) {
     </div>
   );
 }
+
+/* Быстрые кнопки с названиями (например, «Частые места»): в одну строку, с прокруткой вбок. */
+export function OpQuick({ label, items, onPick }) {
+  return (
+    <div className="op-chips-row" style={{ alignItems: "flex-start" }}>
+      {label && <div className="op-label" style={{ paddingTop: 9 }}>{label}</div>}
+      <div style={{ flex: 1, display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}>
+        {items.map((name) => (
+          <button key={name} type="button" className="op-chip" style={{ flex: "0 0 auto", maxWidth: 160, padding: "0 12px" }} onClick={() => onPick(name)}>
+            {name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}

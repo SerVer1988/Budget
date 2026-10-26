@@ -6,6 +6,7 @@ import {
   CalendarClock,
   HandCoins,
   Pencil,
+  ScanLine,
   SlidersHorizontal,
   Split,
   User,
@@ -15,8 +16,11 @@ import {
 } from "lucide-react";
 import { CategoryPanel, OzonPanel } from "./panels.jsx";
 import { ReceiptField } from "./ReceiptViewer.jsx";
+import { ReceiptScanner } from "./ReceiptScanner.jsx";
+import { suggestCategory } from "./bankParse.js";
+import { topPlaces } from "./places.js";
 import { C, CARD_BUCKET, getIcon } from "./constants.js";
-import { OpChips, OpDate, OpGroup, OpPair, OpSelect, OpTabs, OpText, OpToggle, RoundIcon } from "./OpUi.jsx";
+import { OpChips, OpDate, OpGroup, OpPair, OpQuick, OpSelect, OpTabs, OpText, OpToggle, RoundIcon } from "./OpUi.jsx";
 import { computeBalances } from "./finance.js";
 import { SpaceContext } from "./spaces.jsx";
 import { guessSharedCat } from "./shared.js";
@@ -132,7 +136,7 @@ export function AmountField({ label, value, onChange, big, left, right }) {
   );
 }
 
-export function FullAddForm({ settings, transactions, initial, onSubmit, onCancel }) {
+export function FullAddForm({ settings, transactions, initial, onSubmit, onCancel, findPending }) {
   const cardOptions = cardOptionsFor(settings);
   const defaultCategoryFor = (bucket) => catListOf(settings, bucket)[0]?.name || "";
   const initialBucket = initial?.bucket || bucketOf(initial?.card || "sber");
@@ -146,6 +150,15 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
   const [toCard, setToCard] = useState(initial?.toCard || "alfa");
   const [category, setCategory] = useState(initial?.category || defaultCategoryFor(initialBucket));
   const [note, setNote] = useState(initial?.note || "");
+  // Сканирование чека и подбор категории по названию места
+  const [scanOpen, setScanOpen] = useState(false);
+  const [rk, setRk] = useState("");               // ключ отсканированного чека (чтобы не внести его дважды)
+  const [scanInfo, setScanInfo] = useState("");
+  const [scanWarn, setScanWarn] = useState("");
+  const [catTouched, setCatTouched] = useState(!!initial?.category); // человек сам выбрал категорию: не переопределяем
+  const [autoHint, setAutoHint] = useState("");
+  const [pendingOffer, setPendingOffer] = useState(null); // найденное уведомление банка на сумму чека
+  const [pendingCtx, setPendingCtx] = useState(null);
   const [notEarned, setNotEarned] = useState(!!initial?.excludeIncome); // доход «не заработок»: не делится и не входит в статистику
   // Личные долги: кто и в какую сторону ("lent" — вы дали в долг, "borrowed" — вам дали).
   const [loanDir, setLoanDir] = useState(initial?.direction || "lent");
@@ -181,6 +194,8 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
     setToCard(initial?.toCard || "alfa");
     setCategory(initial?.category || defaultCategoryFor(b));
     setNote(initial?.note || "");
+    setScanOpen(false); setRk(""); setScanInfo(""); setScanWarn(""); setAutoHint(""); setPendingOffer(null); setPendingCtx(null);
+    setCatTouched(!!initial?.category);
     setNotEarned(!!initial?.excludeIncome);
     setLoanDir(initial?.direction || "lent");
     setPerson(initial?.person || "");
@@ -215,6 +230,53 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
   const part1Num = split ? amountNum - splitAmountNum : amountNum;
   const categories = catListOf(settings, bucket);
   const categories2 = catListOf(settings, bucket2);
+
+  const pickBucket = (b) => { setCatTouched(true); setAutoHint(""); setBucket(b); };
+  const pickCategory = (c) => { setCatTouched(true); setAutoHint(""); setCategory(c); };
+  const quickPlaces = useMemo(() => topPlaces(transactions || []), [transactions]);
+
+  // Пока человек пишет название места или заметку, подбираем категорию (по прошлым покупкам или по словарю),
+  // но только если он сам ещё не выбирал категорию.
+  useEffect(() => {
+    if (type !== "expense" || catTouched || split || !!initial?.editId) { return; }
+    const text = note.trim();
+    if (text.replace(/[^a-zа-яё]/gi, "").length < 3) { setAutoHint(""); return; }
+    const s = suggestCategory(text, settings);
+    if (!s) { setAutoHint(""); return; }
+    setBucket(s.bucket);
+    setCategory(s.category);
+    setAutoHint(`Категория подобрана ${s.learned ? "по прошлым покупкам" : "по названию"}: ${s.category}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note, type]);
+
+  // Результат сканирования: сумма, дата, защита от повторного внесения, поиск уведомления банка.
+  function onScanResult(p) {
+    setScanOpen(false);
+    setAmount(String(p.amount));
+    setDate(p.date);
+    setRk(p.key);
+    const dup = (transactions || []).find((t) => t.rk === p.key);
+    setScanWarn(dup ? `Этот чек уже внесён (${dup.date}, ${formatMoney(dup.amount)})` : "");
+    if (p.kind === "refund") {
+      setType("income");
+      setNote("Возврат по чеку");
+      setScanInfo(`Чек на возврат от ${p.date} ${p.time}: ${formatMoney(p.amount)}. Внесём как доход.`);
+      setPendingOffer(null);
+      return;
+    }
+    setScanInfo(`Чек от ${p.date} ${p.time}: ${formatMoney(p.amount)}. Укажите, где купили.`);
+    setPendingOffer(findPending ? findPending(p.amount, p.date) : null);
+  }
+
+  function usePending() {
+    const o = pendingOffer;
+    if (!o) return;
+    setPendingCtx(o.ctx);
+    setPendingOffer(null);
+    if (o.card) setCard(o.card);
+    if (o.bucket && o.category) { setCatTouched(true); setBucket(o.bucket); setCategory(o.category); setAutoHint(""); }
+    if (o.merchant) setNote(o.merchant);
+  }
 
   const isEdit = !!initial?.editId;
   // Расход с общей карты («Совместный бюджет → Общие карты») сам попадает в «Общую»: выбираем только общую категорию.
@@ -318,6 +380,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
           category,
           note: note.trim(),
           splitGroup: groupId,
+          ...(rk ? { rk } : {}),
         },
         {
           type: "expense",
@@ -329,7 +392,7 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
           note: note.trim(),
           splitGroup: groupId,
         },
-      ], { receipt, ...(sharedForced ? { shared: { catId: sharedCatValue } } : {}) });
+      ], { receipt, ...(pendingCtx ? { pending: pendingCtx } : {}), ...(sharedForced ? { shared: { catId: sharedCatValue } } : {}) });
       return;
     }
 
@@ -352,8 +415,9 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
           bucket,
           category,
           note: note.trim(),
+          ...(rk ? { rk } : {}),
         },
-        { receipt, ...(sharedForced || (sharedOn && spaceCtx?.sharedAvailable) ? { shared: { catId: sharedCatValue } } : {}) }
+        { receipt, ...(pendingCtx ? { pending: pendingCtx } : {}), ...(sharedForced || (sharedOn && spaceCtx?.sharedAvailable) ? { shared: { catId: sharedCatValue } } : {}) }
       );
     } else if (type === "transfer") {
       onSubmit(
@@ -431,29 +495,45 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         big
         left={
           type === "expense" ? (
-            <button
-              type="button"
-              className={`op-split-btn${split ? " active" : ""}`}
-              aria-label="Разделить сумму на две категории"
-              aria-pressed={split}
-              onClick={() => {
-                const next = !split;
-                setSplit(next);
-                if (next) setBucket2(bucket);
-              }}
-            >
-              <Split size={20} strokeWidth={2.1} />
-            </button>
+            <>
+              <button
+                type="button"
+                className={`op-split-btn${split ? " active" : ""}`}
+                aria-label="Разделить сумму на две категории"
+                aria-pressed={split}
+                onClick={() => {
+                  const next = !split;
+                  setSplit(next);
+                  if (next) setBucket2(bucket);
+                }}
+              >
+                <Split size={20} strokeWidth={2.1} />
+              </button>
+              {!isEdit && (
+                <button type="button" className="op-split-btn" aria-label="Сканировать чек" onClick={() => setScanOpen(true)}>
+                  <ScanLine size={21} strokeWidth={2.1} />
+                </button>
+              )}
+            </>
           ) : null
         }
         right={<button type="submit" className="op-save-inline">Сохранить</button>}
       />
 
+      {scanInfo && <div className="op-note" style={{ color: C.sber, fontWeight: 700 }}>{scanInfo}</div>}
+      {scanWarn && <div className="op-note" style={{ color: C.danger, fontWeight: 700 }}>{scanWarn}</div>}
+      {pendingOffer && !pendingCtx && (
+        <div className="notice" style={{ borderColor: C.ozon, background: C.ozonSoft, color: "#0F3E70", marginBottom: 10 }}>
+          Есть уведомление банка на эту сумму: <b>{pendingOffer.merchant || "без названия"}</b>.{" "}
+          <button type="button" className="btn" style={{ height: 30, padding: "0 12px", fontSize: 13 }} onClick={usePending}>Использовать</button>
+        </div>
+      )}
+
       {type === "expense" && (
         <>
           <OpGroup>
             <OpDate value={date} onChange={setDate} />
-            <OpChips label="Бюджет" options={bucketOptions(settings)} value={bucket} onChange={setBucket} />
+            <OpChips label="Бюджет" options={bucketOptions(settings)} value={bucket} onChange={pickBucket} />
             <OpPair>
               <OpSelect
                 compact
@@ -462,11 +542,12 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
                 label={split ? "Категория (ч. 1)" : "Категория"}
                 options={catOptions(categories)}
                 value={category}
-                onChange={setCategory}
+                onChange={pickCategory}
               />
               <OpSelect compact icon={Wallet} color={cardColor} label="С карты" options={cardSelectOptions} value={card} onChange={setCard} />
             </OpPair>
           </OpGroup>
+          {autoHint && <div className="op-note">{autoHint}</div>}
 
           {anomalyParts.length > 0 && (
             <div className="notice" style={{ borderColor: C.amber, background: C.amberSoft, marginBottom: 10 }}>
@@ -646,12 +727,16 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
       )}
 
       <OpGroup>
-        <OpText icon={Pencil} color={grey} label="Заметка" value={note} onChange={setNote} placeholder="Необязательно" />
+        <OpText icon={Pencil} color={grey} label={type === "expense" ? "Где купили или заметка" : "Заметка"} value={note} onChange={setNote} placeholder="Необязательно" />
+        {type === "expense" && !isEdit && !note.trim() && quickPlaces.length > 0 && (
+          <OpQuick label="Частые места" items={quickPlaces} onPick={(name) => setNote(name)} />
+        )}
         {type === "expense" && (
           <ReceiptField had={!!initial?.receipt} txId={initial?.editId} receipt={receipt} onChange={setReceipt} />
         )}
       </OpGroup>
 
+      {scanOpen && <ReceiptScanner onResult={onScanResult} onClose={() => setScanOpen(false)} />}
     </form>
   );
 }

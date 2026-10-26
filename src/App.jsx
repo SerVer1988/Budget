@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { storage, auth, household, inbox, partner, push, shared } from "./storage.js";
-import { learnMerchant } from "./bankParse.js";
+import { learnMerchant, parseBankText } from "./bankParse.js";
 import { rememberOp } from "./dedupe.js";
 import { receivedParts } from "./InboxPanel.jsx";
 import cardNeedsImg from "./assets/card-needs.webp";
@@ -556,15 +556,50 @@ export default function App() {
   }
 
   // После сохранения операции из листа ожидания: запомнить «место → категория» и убрать запись из листа.
-  function finishPending(tx) {
-    const pid = formInitial?.pendingId;
-    if (!pid || formInitial?.editId) return;
-    if (tx.type === "expense" && formInitial.merchant) {
-      const learned = learnMerchant(settings, formInitial.merchant, tx.bucket, tx.category);
+  function finishPending(tx, meta) {
+    if (formInitial?.editId) return;
+    // Уведомление банка могло быть выбрано прямо в форме (после сканирования чека): тогда оно лежит в meta.pending.
+    const ctx = formInitial?.pendingId ? formInitial : meta?.pending;
+    const pid = ctx?.pendingId;
+    if (!pid) { learnFromNote(tx); return; }
+    if (tx.type === "expense" && ctx.merchant) {
+      const learned = learnMerchant(settings, ctx.merchant, tx.bucket, tx.category);
       if (learned !== settings) persistSettings(learned);
     }
-    (formInitial.opFps || (formInitial.opFp ? [formInitial.opFp] : [])).forEach((op) => rememberOp(op));
-    (formInitial.pendingIds || [pid]).forEach((id) => dropPending(id));
+    (ctx.opFps || (ctx.opFp ? [ctx.opFp] : [])).forEach((op) => rememberOp(op));
+    (ctx.pendingIds || [pid]).forEach((id) => dropPending(id));
+  }
+
+  // Трата, внесённая вручную: запоминаем «место из заметки → категория», чтобы в следующий раз подставить её самим.
+  function learnFromNote(tx) {
+    if (tx.type !== "expense" || !tx.note || tx.splitGroup) return;
+    const learned = learnMerchant(settings, tx.note, tx.bucket, tx.category);
+    if (learned !== settings) persistSettings(learned);
+  }
+
+  // После сканирования чека: ищем в листе ожидания уведомление банка на ту же сумму (в пределах суток), чтобы не вносить покупку дважды.
+  function findPendingMatch(amount, date) {
+    const cents = Math.round(Number(amount) * 100);
+    const day = (iso) => Date.parse(`${iso}T00:00:00Z`);
+    for (const row of pending) {
+      let parsed;
+      try { parsed = parseBankText(row.raw_text, row.source, settings); } catch { continue; }
+      if (!parsed.understood || parsed.type !== "expense" || Math.round((parsed.amount || 0) * 100) !== cents) continue;
+      if (Math.abs(day(receivedParts(row.received_at).date) - day(date)) > 86400000) continue;
+      const s = parsed.suggestion;
+      return {
+        merchant: parsed.merchant || "",
+        card: parsed.card || "",
+        bucket: s?.bucket,
+        category: s?.category,
+        ctx: {
+          pendingId: row.id,
+          merchant: parsed.merchant || "",
+          opFp: { source: row.source, type: "expense", amount: parsed.amount, balance: parsed.balance, receivedAt: row.received_at },
+        },
+      };
+    }
+    return null;
   }
 
   // ✎ «править»: открываем обычную форму с подставленными данными; после сохранения запись уйдёт из листа.
@@ -862,7 +897,7 @@ export default function App() {
         updateTransactionAsSplit(formInitial.editId, tx);
       } else {
         addTransactions(tx, meta);
-        finishPending(tx[0]);
+        finishPending(tx[0], metaIn);
       }
       closeForm();
       return;
@@ -875,7 +910,7 @@ export default function App() {
     }
 
     addTransaction(tx, meta);
-    finishPending(tx);
+    finishPending(tx, metaIn);
     // Если это доход — показываем модалку автоматического распределения
     if (tx.type === "income" && !tx.excludeIncome) {
       setNewIncomeTx(tx);
@@ -1133,6 +1168,7 @@ export default function App() {
                   initial={formInitial}
                   onSubmit={submitForm}
                   onCancel={closeForm}
+                  findPending={findPendingMatch}
                 />
               </div>
             ) : space === "shared" && pageIndex !== 4 ? (
