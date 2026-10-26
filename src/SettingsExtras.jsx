@@ -3,6 +3,7 @@ import { C } from "./constants.js";
 import { exportCsv, exportJsonBackup } from "./backup.js";
 import { PartnerSettings } from "./spaces.jsx";
 import { SupportSection } from "./SupportSection.jsx";
+import { WidgetSettings } from "./WidgetSettings.jsx";
 import { Fold, SUPPORT_URL } from "./ProfileView.jsx";
 import supportIcon from "./assets/icon-support.png";
 import shareIcon from "./assets/icon-share.png";
@@ -34,7 +35,7 @@ function MaskIcon({ src, size = 20 }) {
 
 /* Нижняя часть настроек: данные (копия, таблица, восстановление, удаление истории), совместный бюджет,
    кнопки «Поддержать» и «Поделиться». */
-export function SettingsExtras({ settings, transactions, onImport, onSaveSettings, onWipeAll, onShowWelcome }) {
+export function SettingsExtras({ settings, transactions, onImport, onSaveSettings, onWipeAll, onShowWelcome, userEmail }) {
   const importInputRef = useRef(null);
   const [importMsg, setImportMsg] = useState("");
   const [flash, setFlash] = useState(""); // короткая подпись на кнопке после нажатия
@@ -122,6 +123,8 @@ export function SettingsExtras({ settings, transactions, onImport, onSaveSetting
       </Fold>
 
       <PartnerSettings settings={settings} onSaveSettings={onSaveSettings} />
+
+      <WidgetSettings settings={settings} onSaveSettings={onSaveSettings} userEmail={userEmail} />
 
       <SupportSection onShowWelcome={onShowWelcome} />
 

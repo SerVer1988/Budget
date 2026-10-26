@@ -169,3 +169,12 @@ describe("доработки после проверки на телефоне",
     expect(html).toContain("display:block");
   });
 });
+
+import { WidgetSettings } from "../src/WidgetSettings.jsx";
+
+describe("виджет в настройках", () => {
+  it("на компьютере или в браузере объясняет, что виджет нужен на Android", () => {
+    const html = renderToString(<WidgetSettings settings={DEFAULT_SETTINGS} onSaveSettings={() => {}} userEmail="a@b.ru" />);
+    expect(html).toContain("Виджет на главный экран");
+  });
+});

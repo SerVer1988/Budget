@@ -491,6 +491,7 @@ export function SettingsView({ settings, transactions, onImport, onSaveSettings,
         onSaveSettings={onSaveSettings}
         onWipeAll={onWipeAll}
         onShowWelcome={onShowWelcome}
+        userEmail={userEmail}
       />
     </div>
   );

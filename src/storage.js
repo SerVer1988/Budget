@@ -897,6 +897,17 @@ export const shared = {
   },
 };
 
+/* ---------------------------------------------------------------- виджет на главном экране */
+// supabase-widget.sql: у виджета отдельный отзываемый ключ; приложение присылает короткую сводку, виджет её читает.
+export const widgetApi = {
+  async createToken() {
+    const t = await rpc("create_widget_token", {}, "Виджет не настроен: выполните supabase-widget.sql в Supabase");
+    return String(t || "");
+  },
+  async save(summary) { await rpc("save_widget_summary", { p_data: summary }, "Виджет не настроен"); },
+  async disable() { await rpc("widget_disable", {}, "Виджет не настроен"); },
+};
+
 /* ---------------------------------------------------------------- вход через VK */
 // supabase-vk.sql + функция vk-login: обмен кода VK на вход в аккаунт и привязка VK к существующему аккаунту.
 export const vkApi = {

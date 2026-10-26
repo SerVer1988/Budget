@@ -208,6 +208,11 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
+  // Запуск с кнопки «Чек» на виджете или ярлыка: сразу открываем сканер.
+  useEffect(() => {
+    if (initial?.autoScan) setScanOpen(true);
+  }, [initial]);
+
   useEffect(() => {
     if (type !== "expense") return;
     const list = catListOf(settings, bucket);

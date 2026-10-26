@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { storage, auth, household, inbox, partner, push, shared } from "./storage.js";
+import { storage, auth, household, inbox, partner, push, shared, widgetApi } from "./storage.js";
 import { learnMerchant, parseBankText } from "./bankParse.js";
 import { rememberOp } from "./dedupe.js";
 import { receivedParts } from "./InboxPanel.jsx";
@@ -38,6 +38,7 @@ import { SpaceContext, SpaceSwitch, spaceNamesOf } from "./spaces.jsx";
 import { SharedView } from "./SharedView.jsx";
 import { WelcomeSheet } from "./Onboarding.jsx";
 import { vk } from "./vk.js";
+import { buildWidgetSummary, parseLaunchAction, summarySignature } from "./widgetSummary.js";
 import { buildSampleData, hasSample, removeSample } from "./sampleData.js";
 import { guessSharedCat, sharedCatsOf } from "./shared.js";
 
@@ -214,6 +215,30 @@ export default function App() {
       .catch((e) => setVkError(e.message || "Не удалось войти через VK"))
       .finally(() => setVkBusy(false));
   }, [authUser === undefined]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ярлыки значка и кнопки виджета открывают сайт с «?add=expense | income | scan»: сразу показываем нужную форму.
+  const launchDone = useRef(false);
+  useEffect(() => {
+    if (!loaded || !authUser || launchDone.current) return;
+    launchDone.current = true;
+    const act = parseLaunchAction(window.location.search);
+    if (!act) return;
+    try { window.history.replaceState(null, "", window.location.pathname + window.location.hash); } catch { /* ignore */ }
+    if (space === "me" && !readOnlyRef.current) openForm(act);
+  }, [loaded, authUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Виджет подключён: присылаем на сервер короткую сводку (остатки и траты за сегодня), когда она меняется.
+  const widgetSigRef = useRef("");
+  useEffect(() => {
+    if (!loaded || !authUser || space !== "me" || !settings.widgetOn || readOnlyRef.current) return undefined;
+    const summary = buildWidgetSummary(transactions, settings);
+    const sig = summarySignature(summary);
+    if (sig === widgetSigRef.current) return undefined;
+    const timer = setTimeout(() => {
+      widgetApi.save(summary).then(() => { widgetSigRef.current = sig; }).catch(() => { /* повторим при следующем изменении */ });
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [loaded, authUser?.id, space, settings, transactions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Первый вход: пустой аккаунт видит приветствие. Тем, у кого уже есть операции, оно не нужно: помечаем один раз и не возвращаемся.
   useEffect(() => {
