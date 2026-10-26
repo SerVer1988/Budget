@@ -22,6 +22,8 @@ describe("сводка для виджета", () => {
     expect(s.income).toBe(90000);
     expect(s.spent).toBe(7000);
     expect(s.names).toEqual({ sber: "Нужды", alfa: "Желания", ozon: "Подушка" });
+    expect(s.av).toEqual({ sber: 45000, alfa: 27000 });   // поступило за месяц: доход минус переводы, плюс полученные переводы
+    expect(typeof s.goal).toBe("number");
     expect(s.at).toBe("2026-10-26T10:00:00.000Z");
   });
 

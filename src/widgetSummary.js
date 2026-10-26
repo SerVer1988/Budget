@@ -17,6 +17,9 @@ export function buildWidgetSummary(transactions, settings, today = todayStr(), n
     at: now.toISOString(),
     names: { sber: bucketName(settings, "needs"), alfa: bucketName(settings, "wants"), ozon: bucketName(settings, "savings") },
     bal: { sber: rub(b.sber), alfa: rub(b.alfa), ozon: rub(b.ozon) },
+    // «из …» на виджете: сколько поступило на карты «Нужд» и «Желаний» за месяц, и цель накоплений для «Подушки»
+    av: { sber: rub(m.sberAvail), alfa: rub(m.alfaAvail) },
+    goal: rub(settings.goal),
     today: rub(spentToday),
     income: rub(m.incomeTotal),
     spent: rub(m.sberSpent + m.alfaSpent + m.ozonSpent),
