@@ -134,3 +134,38 @@ describe("форма «Новая операция»: сканирование �
     expect(t).toContain("QR-код");
   });
 });
+
+import { OpQuick } from "../src/OpUi.jsx";
+
+describe("доработки после проверки на телефоне", () => {
+  const props = { settings: DEFAULT_SETTINGS, onSubmit: () => {}, onCancel: () => {} };
+
+  it("в новой трате нет строки «Фото чека»", () => {
+    expect(renderToString(<FullAddForm {...props} transactions={[]} initial={{ type: "expense" }} />)).not.toContain("Фото чека");
+  });
+
+  it("у сохранённой траты с чеком фото можно посмотреть и заменить", () => {
+    const html = renderToString(<FullAddForm {...props} transactions={[]} initial={{ type: "expense", editId: "x", amount: 5, receipt: true }} />);
+    expect(html).toContain("Фото чека");
+  });
+
+  it("у долга фото осталось (оно нужно для значка в «Фонде»)", () => {
+    expect(renderToString(<FullAddForm {...props} transactions={[]} initial={{ type: "loan" }} />)).toContain("Фото должника");
+  });
+
+  it("полоса «Частых мест» не пропускает касания наверх, чтобы не листались вкладки формы", () => {
+    const el = OpQuick({ label: "Частые места", items: ["Магнит"], onPick: () => {} });
+    const stripe = React.Children.toArray(el.props.children).find((c) => c && c.props && c.props.style && c.props.style.overflowX === "auto");
+    expect(stripe).toBeTruthy();
+    const e = { stopPropagation: vi.fn() };
+    stripe.props.onTouchStart(e);
+    stripe.props.onTouchEnd(e);
+    expect(e.stopPropagation).toHaveBeenCalledTimes(2);
+  });
+
+  it("приветствие: значки по центру колонок (картинки блочные и выровнены автоматически)", () => {
+    const html = renderToString(<WelcomeSheet settings={DEFAULT_SETTINGS} onFinish={() => {}} />);
+    expect(html).toContain("margin:0 auto");
+    expect(html).toContain("display:block");
+  });
+});

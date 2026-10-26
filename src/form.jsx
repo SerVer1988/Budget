@@ -731,8 +731,8 @@ export function FullAddForm({ settings, transactions, initial, onSubmit, onCance
         {type === "expense" && !isEdit && !note.trim() && quickPlaces.length > 0 && (
           <OpQuick label="Частые места" items={quickPlaces} onPick={(name) => setNote(name)} />
         )}
-        {type === "expense" && (
-          <ReceiptField had={!!initial?.receipt} txId={initial?.editId} receipt={receipt} onChange={setReceipt} />
+        {type === "expense" && isEdit && !!initial?.receipt && (
+          <ReceiptField had txId={initial?.editId} receipt={receipt} onChange={setReceipt} />
         )}
       </OpGroup>
 

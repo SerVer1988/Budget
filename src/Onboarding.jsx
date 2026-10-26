@@ -15,11 +15,12 @@ export function WelcomeSheet({ settings, allowSample = true, onFinish }) {
       title: "Три бюджета для ваших денег",
       body: (
         <>
-          <div style={{ display: "flex", justifyContent: "center", gap: 14, margin: "6px 0 14px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, margin: "6px 0 14px" }}>
             {["needs", "wants", "savings"].map((b) => (
-              <div key={b} style={{ textAlign: "center", width: 84 }}>
-                <img src={bucketIconSrc(settings, b)} alt="" style={{ width: 56, height: 56, borderRadius: "50%" }} />
-                <div style={{ fontSize: 12, fontWeight: 700, marginTop: 4 }}>{names[b]}</div>
+              <div key={b} style={{ textAlign: "center", minWidth: 0 }}>
+                {/* display:block и margin:auto: общий стиль сайта делает картинки блочными, и без этого значок прижимался к левому краю */}
+                <img src={bucketIconSrc(settings, b)} alt="" style={{ display: "block", margin: "0 auto", width: 56, height: 56, borderRadius: "50%" }} />
+                <div style={{ fontSize: 13, fontWeight: 700, marginTop: 6, overflowWrap: "anywhere" }}>{names[b]}</div>
               </div>
             ))}
           </div>

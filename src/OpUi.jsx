@@ -162,7 +162,12 @@ export function OpQuick({ label, items, onPick }) {
   return (
     <div className="op-chips-row" style={{ alignItems: "flex-start" }}>
       {label && <div className="op-label" style={{ paddingTop: 9 }}>{label}</div>}
-      <div style={{ flex: 1, display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}>
+      <div
+        style={{ flex: 1, display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}
+        // Движение пальцем по этой полосе только прокручивает её: форма не должна принимать его за «листание» вкладок.
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
+      >
         {items.map((name) => (
           <button key={name} type="button" className="op-chip" style={{ flex: "0 0 auto", maxWidth: 160, padding: "0 12px" }} onClick={() => onPick(name)}>
             {name}
